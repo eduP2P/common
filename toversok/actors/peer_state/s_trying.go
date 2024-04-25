@@ -1,8 +1,8 @@
 package peer_state
 
 import (
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
 	"time"
 )
@@ -28,7 +28,7 @@ func (t *Trying) OnTick() PeerState {
 	return nil
 }
 
-func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState {
+func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
 	if s := cascadeDirect(t, ap, clear); s != nil {
 		return s
 	}
@@ -36,7 +36,7 @@ func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState 
 	LogDirectMessage(t, ap, clear)
 
 	switch m := clear.Message.(type) {
-	case *msg.Ping:
+	case *msg2.Ping:
 		if !t.pingDirectValid(ap, clear.Session, m) {
 			return nil
 		}
@@ -44,7 +44,7 @@ func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState 
 		// TODO(jo): We could start establishing here, possibly.
 		t.replyWithPongDirect(ap, clear.Session, m)
 		return nil
-	case *msg.Pong:
+	case *msg2.Pong:
 		t.ackPongDirect(ap, clear.Session, m)
 		return nil
 	//case *msg.Rendezvous:
@@ -57,7 +57,7 @@ func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState 
 	}
 }
 
-func (t *Trying) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState {
+func (t *Trying) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
 	if s := cascadeRelay(t, relay, peer, clear); s != nil {
 		return s
 	}
@@ -65,13 +65,13 @@ func (t *Trying) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessa
 	LogRelayMessage(t, relay, peer, clear)
 
 	switch m := clear.Message.(type) {
-	case *msg.Ping:
+	case *msg2.Ping:
 		t.replyWithPongRelay(relay, peer, clear.Session, m)
 		return nil
-	case *msg.Pong:
+	case *msg2.Pong:
 		t.ackPongRelay(relay, peer, clear.Session, m)
 		return nil
-	case *msg.Rendezvous:
+	case *msg2.Rendezvous:
 		return LogTransition(t, &EstRendezGot{
 			EstablishingCommon: mkEstComm(t.StateCommon, 0),
 			m:                  m,

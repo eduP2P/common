@@ -1,8 +1,8 @@
 package peer_state
 
 import (
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
 )
 
@@ -22,7 +22,7 @@ func (e *EstHalf) OnTick() PeerState {
 	return nil
 }
 
-func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState {
+func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
 	if s := cascadeDirect(e, ap, clear); s != nil {
 		return s
 	}
@@ -30,7 +30,7 @@ func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState
 	LogDirectMessage(e, ap, clear)
 
 	switch m := clear.Message.(type) {
-	case *msg.Ping:
+	case *msg2.Ping:
 		if !e.pingDirectValid(ap, clear.Session, m) {
 			return nil
 		}
@@ -40,7 +40,7 @@ func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState
 		// Send one as a hail-mary, for if another got lost
 		e.tm.SendPingDirect(ap, e.peer, clear.Session)
 		return nil
-	case *msg.Pong:
+	case *msg2.Pong:
 		e.tm.Poke()
 		return LogTransition(e, &Finalizing{
 			EstablishingCommon: e.EstablishingCommon,
@@ -58,7 +58,7 @@ func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState
 	}
 }
 
-func (e *EstHalf) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState {
+func (e *EstHalf) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
 	if s := cascadeRelay(e, relay, peer, clear); s != nil {
 		return s
 	}
@@ -66,10 +66,10 @@ func (e *EstHalf) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMess
 	LogRelayMessage(e, relay, peer, clear)
 
 	switch m := clear.Message.(type) {
-	case *msg.Ping:
+	case *msg2.Ping:
 		e.replyWithPongRelay(relay, peer, clear.Session, m)
 		return nil
-	case *msg.Pong:
+	case *msg2.Pong:
 		e.ackPongRelay(relay, peer, clear.Session, m)
 		return nil
 	//case *msg.Rendezvous:

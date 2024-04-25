@@ -1,8 +1,8 @@
 package peer_state
 
 import (
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
 	"time"
 )
@@ -66,7 +66,7 @@ func (e *Established) OnTick() PeerState {
 	return nil
 }
 
-func (e *Established) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState {
+func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
 	if s := cascadeDirect(e, ap, clear); s != nil {
 		return s
 	}
@@ -77,7 +77,7 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerS
 	//  - switch? trusting it blindly is open to replay attacks
 
 	switch m := clear.Message.(type) {
-	case *msg.Ping:
+	case *msg2.Ping:
 		if !e.pingDirectValid(ap, clear.Session, m) {
 			return nil
 		}
@@ -86,7 +86,7 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerS
 		e.replyWithPongDirect(ap, clear.Session, m)
 		return nil
 
-	case *msg.Pong:
+	case *msg2.Pong:
 		e.lastPongRecv = time.Now()
 		e.ackPongDirect(ap, clear.Session, m)
 		return nil
@@ -101,7 +101,7 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerS
 	}
 }
 
-func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState {
+func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
 	if s := cascadeRelay(e, relay, peer, clear); s != nil {
 		return s
 	}
@@ -109,11 +109,11 @@ func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg.Clear
 	LogRelayMessage(e, relay, peer, clear)
 
 	switch m := clear.Message.(type) {
-	case *msg.Ping:
+	case *msg2.Ping:
 		e.replyWithPongRelay(relay, peer, clear.Session, m)
 		return nil
 
-	case *msg.Pong:
+	case *msg2.Pong:
 		e.ackPongRelay(relay, peer, clear.Session, m)
 		return nil
 

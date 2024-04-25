@@ -1,6 +1,9 @@
 package msg
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/shadowjonathan/edup2p/types/key"
+)
 
 // Session Wire header:
 //   Magic (8) + Source (32) + Nacl Box Nonce (24) + encrypted user message.
@@ -8,7 +11,7 @@ import "fmt"
 // Session User messages:
 //   Version (1) + Type (1) + Data
 
-const wireHeaderLen = len(Magic) + 32 + naclBoxNonceLen
+const wireHeaderLen = len(Magic) + key.Len + NaclBoxNonceLen
 
 func LooksLikeSessionWireMessage(pkt []byte) bool {
 	if len(pkt) < wireHeaderLen {

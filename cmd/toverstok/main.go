@@ -101,7 +101,7 @@ func main() {
 				if err != nil {
 					c.Err(err)
 					return
-				} else if len(privkeySlice) != 32 {
+				} else if len(privkeySlice) != key.Len {
 					c.Err(errors.New(fmt.Sprintf("unexpected key length, expected 32, got %d", len(privkeySlice))))
 					return
 				}

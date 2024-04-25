@@ -2,8 +2,8 @@ package actors
 
 import (
 	"github.com/shadowjonathan/edup2p/toversok/actors/peer_state"
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	maps2 "golang.org/x/exp/maps"
 	"net/netip"
 	"time"
@@ -21,7 +21,7 @@ type TrafficManager struct {
 
 	peerState map[key.NodePublic]peer_state.PeerState
 
-	Pings     map[msg.TxID]*sentPing
+	Pings     map[msg2.TxID]*sentPing
 	PeerInfo  map[key.NodePublic]*PeerInfo
 	OutActive map[key.NodePublic]bool
 	InActive  map[key.NodePublic]bool
@@ -563,9 +563,9 @@ func (tm *TrafficManager) ValidKeys(peer key.NodePublic, session key.SessionPubl
 //}
 
 func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic) {
-	txid := msg.NewTxID()
+	txid := msg2.NewTxID()
 
-	tm.SendMsgToDirect(endpoint, session, &msg.Ping{
+	tm.SendMsgToDirect(endpoint, session, &msg2.Ping{
 		TxID:    txid,
 		NodeKey: tm.S.localKey,
 	})
@@ -583,7 +583,7 @@ func (tm *TrafficManager) sendPingRelay(endpoint netip.AddrPort, peer key.NodePu
 	panic("Not implemented")
 }
 
-func (tm *TrafficManager) SendMsgToRelay(relay int64, peer key.NodePublic, sess key.SessionPublic, m msg.SessionMessage) {
+func (tm *TrafficManager) SendMsgToRelay(relay int64, peer key.NodePublic, sess key.SessionPublic, m msg2.SessionMessage) {
 	go SendMessage(tm.S.SMan.Inbox(), &SManSendSessionMessageToRelay{
 		relay:     relay,
 		peer:      peer,
@@ -592,7 +592,7 @@ func (tm *TrafficManager) SendMsgToRelay(relay int64, peer key.NodePublic, sess 
 	})
 }
 
-func (tm *TrafficManager) SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msg.SessionMessage) {
+func (tm *TrafficManager) SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msg2.SessionMessage) {
 	go SendMessage(tm.S.SMan.Inbox(), &SManSendSessionMessageToDirect{
 		addrPort:  ap,
 		toSession: sess,

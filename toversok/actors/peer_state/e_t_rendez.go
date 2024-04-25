@@ -1,8 +1,8 @@
 package peer_state
 
 import (
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
 )
 
@@ -10,7 +10,7 @@ import (
 type EstRendezGot struct {
 	*EstablishingCommon
 
-	m *msg.Rendezvous
+	m *msg2.Rendezvous
 }
 
 func (e *EstRendezGot) Name() string {
@@ -31,12 +31,12 @@ func (e *EstRendezGot) OnTick() PeerState {
 	return LogTransition(e, &EstRendezAck{EstablishingCommon: e.EstablishingCommon})
 }
 
-func (e *EstRendezGot) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState {
+func (e *EstRendezGot) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
 	return cascadeDirect(e, ap, clear)
 }
 
-func (e *EstRendezGot) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState {
+func (e *EstRendezGot) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
 	return cascadeRelay(e, relay, peer, clear)
 }

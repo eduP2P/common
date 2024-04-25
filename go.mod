@@ -5,6 +5,7 @@ go 1.22.0
 require (
 	github.com/LukaGiorgadze/gonull v1.2.0
 	github.com/abiosoft/ishell/v2 v2.0.2
+	go4.org/mem v0.0.0-20220726221520-4f986261bf13
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/crypto v0.8.0
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f

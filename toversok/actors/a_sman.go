@@ -2,8 +2,8 @@ package actors
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"slices"
 )
 
@@ -87,16 +87,16 @@ func (sm *SessionManager) Handle(msg ActorMessage) {
 	}
 }
 
-func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg.ClearMessage, error) {
-	if string(frameWithMagic[:len(msg.MagicBytes)]) != msg.Magic {
+func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, error) {
+	if string(frameWithMagic[:len(msg2.MagicBytes)]) != msg2.Magic {
 		panic("Somehow received non-session message in unpack")
 	}
 
-	b := frameWithMagic[len(msg.MagicBytes):]
+	b := frameWithMagic[len(msg2.MagicBytes):]
 
-	sessionKey := key.MakeSessionPublic([32]byte(b[:32]))
+	sessionKey := key.MakeSessionPublic([key.Len]byte(b[:32]))
 
-	b = b[32:]
+	b = b[key.Len:]
 
 	clearBytes, ok := sm.privateKey.Shared(sessionKey).Open(b)
 
@@ -104,24 +104,24 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg.ClearMessage, erro
 		return nil, fmt.Errorf("could not decrypt session message")
 	}
 
-	sMsg, err := msg.ParseSessionMessage(clearBytes)
+	sMsg, err := msg2.ParseSessionMessage(clearBytes)
 
 	if err != nil {
 		return nil, fmt.Errorf("could not parse session message: %s", err)
 	}
 
-	return &msg.ClearMessage{
+	return &msg2.ClearMessage{
 		Session: sessionKey,
 		Message: sMsg,
 	}, nil
 }
 
-func (sm *SessionManager) Pack(sMsg msg.SessionMessage, toSession key.SessionPublic) []byte {
+func (sm *SessionManager) Pack(sMsg msg2.SessionMessage, toSession key.SessionPublic) []byte {
 	clearBytes := sMsg.MarshalSessionMessage()
 
 	cipherBytes := sm.privateKey.Shared(toSession).Seal(clearBytes)
 
-	return slices.Concat(msg.MagicBytes, sm.publicKey.ToByteSlice(), cipherBytes)
+	return slices.Concat(msg2.MagicBytes, sm.publicKey.ToByteSlice(), cipherBytes)
 }
 
 func (sm *SessionManager) Close() {

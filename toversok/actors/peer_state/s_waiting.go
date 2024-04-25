@@ -2,8 +2,8 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/toversok/actors"
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
 )
 

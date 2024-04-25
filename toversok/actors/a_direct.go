@@ -1,8 +1,8 @@
 package actors
 
 import (
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/msg"
 	"golang.org/x/exp/maps"
 	"net/netip"
 )

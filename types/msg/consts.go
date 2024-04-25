@@ -19,4 +19,4 @@ const (
 	RendezvousMessage = MessageType(0xFF)
 )
 
-const naclBoxNonceLen = 24
+const NaclBoxNonceLen = 24

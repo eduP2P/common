@@ -2,8 +2,8 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/toversok/actors"
-	"github.com/shadowjonathan/edup2p/toversok/msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
 	"time"
 )
@@ -24,29 +24,29 @@ func (sc *StateCommon) Peer() key.NodePublic {
 	return sc.peer
 }
 
-func (sc *StateCommon) pingDirectValid(ap netip.AddrPort, sess key.SessionPublic, ping *msg.Ping) bool {
+func (sc *StateCommon) pingDirectValid(ap netip.AddrPort, sess key.SessionPublic, ping *msg2.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
-func (sc *StateCommon) replyWithPongDirect(ap netip.AddrPort, sess key.SessionPublic, ping *msg.Ping) {
-	sc.tm.SendMsgToDirect(ap, sess, &msg.Pong{
+func (sc *StateCommon) replyWithPongDirect(ap netip.AddrPort, sess key.SessionPublic, ping *msg2.Ping) {
+	sc.tm.SendMsgToDirect(ap, sess, &msg2.Pong{
 		TxID: ping.TxID,
 		Src:  ap,
 	})
 }
 
-func (sc *StateCommon) pingRelayValid(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msg.Ping) bool {
+func (sc *StateCommon) pingRelayValid(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msg2.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
-func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msg.Ping) {
-	sc.tm.SendMsgToRelay(relay, node, sess, &msg.Pong{
+func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msg2.Ping) {
+	sc.tm.SendMsgToRelay(relay, node, sess, &msg2.Pong{
 		TxID: ping.TxID,
 	})
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msg.Pong) {
+func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msg2.Pong) {
 	sent, ok := sc.tm.Pings[pong.TxID]
 	if !ok {
 		// TODO log: Got pong for unknown ping
@@ -71,7 +71,7 @@ func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, 
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, pong *msg.Pong) {
+func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, pong *msg2.Pong) {
 
 	// Relay pongs should come in response to relay pings, note if it is different.
 	sent, ok := sc.tm.Pings[pong.TxID]

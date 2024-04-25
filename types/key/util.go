@@ -2,8 +2,12 @@ package key
 
 import (
 	crand "crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"go4.org/mem"
 	"io"
+	"slices"
 )
 
 // rand fills b with cryptographically strong random bytes. Panics if
@@ -41,4 +45,51 @@ func rand(b []byte) {
 func clamp25519Private(b []byte) {
 	b[0] &= 248
 	b[31] = (b[31] & 127) | 64
+}
+
+func appendHexKey(dst []byte, prefix string, key []byte) []byte {
+	dst = slices.Grow(dst, len(prefix)+hex.EncodedLen(len(key)))
+	dst = append(dst, prefix...)
+	dst = hex.AppendEncode(dst, key)
+	return dst
+}
+
+// parseHex decodes a key string of the form "<prefix><hex string>"
+// into out. The prefix must match, and the decoded base64 must fit
+// exactly into out.
+//
+// Note the errors in this function deliberately do not echo the
+// contents of in, because it might be a private key or part of a
+// private key.
+func parseHex(out []byte, in, prefix mem.RO) error {
+	if !mem.HasPrefix(in, prefix) {
+		return fmt.Errorf("key hex string doesn't have expected type prefix %s", prefix.StringCopy())
+	}
+	in = in.SliceFrom(prefix.Len())
+	if want := len(out) * 2; in.Len() != want {
+		return fmt.Errorf("key hex has the wrong size, got %d want %d", in.Len(), want)
+	}
+	for i := range out {
+		a, ok1 := fromHexChar(in.At(i*2 + 0))
+		b, ok2 := fromHexChar(in.At(i*2 + 1))
+		if !ok1 || !ok2 {
+			return errors.New("invalid hex character in key")
+		}
+		out[i] = (a << 4) | b
+	}
+	return nil
+}
+
+// fromHexChar converts a hex character into its value and a success flag.
+func fromHexChar(c byte) (byte, bool) {
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0', true
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10, true
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10, true
+	}
+
+	return 0, false
 }
