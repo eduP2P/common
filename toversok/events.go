@@ -2,8 +2,8 @@ package toversok
 
 import (
 	"github.com/LukaGiorgadze/gonull"
-	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/relay"
 	"net/netip"
 )
 
@@ -15,7 +15,7 @@ type RelayUpdate struct {
 	// Updates relays referenced in this set.
 	//
 	// Note: Deliberately does not allow for unsetting relays.
-	set []types.RelayInformation
+	Set []relay.RelayInformation
 }
 
 func (r RelayUpdate) EventName() string {
@@ -23,33 +23,35 @@ func (r RelayUpdate) EventName() string {
 }
 
 type PeerAddition struct {
-	key key.NodePublic
+	Key key.NodePublic
 
-	homeRelayId int64
-	sessionKey  key.SessionPublic
-	ips         []netip.Addr
+	HomeRelayId int64
+	SessionKey  key.SessionPublic
+	Endpoints   []netip.AddrPort
+
+	VIPs VirtualIPs
 }
 
 func (p PeerAddition) EventName() string {
 	return "PeerAddition"
 }
 
-type PeerRemoval struct {
-	key key.NodePublic
-}
-
-func (p PeerRemoval) EventName() string {
-	return "PeerRemoval"
-}
-
 type PeerUpdate struct {
-	key key.NodePublic
+	Key key.NodePublic
 
-	homeRelayId gonull.Nullable[int64]
-	sessionKey  gonull.Nullable[key.SessionPublic]
-	ips         gonull.Nullable[[]netip.Addr]
+	HomeRelayId gonull.Nullable[int64]
+	SessionKey  gonull.Nullable[key.SessionPublic]
+	Endpoints   gonull.Nullable[[]netip.AddrPort]
 }
 
 func (p PeerUpdate) EventName() string {
 	return "PeerUpdate"
+}
+
+type PeerRemoval struct {
+	Key key.NodePublic
+}
+
+func (p PeerRemoval) EventName() string {
+	return "PeerRemoval"
 }

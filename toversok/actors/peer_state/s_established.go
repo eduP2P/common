@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const EstablishedPingInterval = time.Second * 2
+
 type Established struct {
 	*StateCommon
 
@@ -32,7 +34,7 @@ func (e *Established) Name() string {
 }
 
 func (e *Established) OnTick() PeerState {
-	if e.tm.InActive[e.peer] || e.tm.OutActive[e.peer] {
+	if e.tm.ActiveIn()[e.peer] || e.tm.ActiveOut()[e.peer] {
 		e.inactive = false
 	} else {
 		if !e.inactive {
@@ -61,6 +63,7 @@ func (e *Established) OnTick() PeerState {
 
 	if time.Now().After(e.nextPingDeadline) {
 		e.tm.SendPingDirect(e.currentEndpoint, e.peer, e.mustPeerInfo().Session)
+		e.nextPingDeadline = time.Now().Add(EstablishedPingInterval)
 	}
 
 	return nil

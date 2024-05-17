@@ -2,6 +2,7 @@ package actors
 
 import (
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/key"
 	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"slices"
@@ -16,8 +17,31 @@ type SessionManager struct {
 	*ActorCommon
 	s *Stage
 
-	publicKey  key.SessionPublic
-	privateKey key.SessionPrivate
+	session key.SessionPrivate
+}
+
+const SMInboxLen = 8
+
+var DebugSManTakeNodeAsSession = false
+
+func (s *Stage) makeSM() *SessionManager {
+	var priv key.SessionPrivate
+
+	if DebugSManTakeNodeAsSession {
+		priv = key.DevNewSessionFromPrivate(s.privKey)
+	} else {
+		priv = key.NewSession()
+	}
+
+	sm := &SessionManager{
+		ActorCommon: MakeCommon(s.Ctx, SMInboxLen),
+		s:           s,
+		session:     priv,
+	}
+
+	L(sm).Debug("sman with session key", "sess", priv.Public().Debug())
+
+	return sm
 }
 
 func (sm *SessionManager) Run() {
@@ -44,61 +68,61 @@ func (sm *SessionManager) Run() {
 	}
 }
 
-func (sm *SessionManager) Handle(msg ActorMessage) {
+func (sm *SessionManager) Handle(msg actor_msg.ActorMessage) {
 	switch m := msg.(type) {
-	case *SManSessionFrameFromRelay:
-		cm, err := sm.Unpack(m.frameWithMagic)
+	case *actor_msg.SManSessionFrameFromRelay:
+		cm, err := sm.Unpack(m.FrameWithMagic)
 		if err != nil {
 			L(sm).Error("error when unpacking session frame from relay",
 				"err", err,
-				"peer", m.peer,
-				"relay", m.relay,
-				"frame", m.frameWithMagic,
+				"peer", m.Peer,
+				"relay", m.Relay,
+				"frame", m.FrameWithMagic,
 			)
 			return
 		}
-		sm.s.TMan.Inbox() <- &TManSessionMessageFromRelay{
-			relay: m.relay,
-			peer:  m.peer,
-			msg:   cm,
+		sm.s.TMan.Inbox() <- &actor_msg.TManSessionMessageFromRelay{
+			Relay: m.Relay,
+			Peer:  m.Peer,
+			Msg:   cm,
 		}
-	case *SManSessionFrameFromAddrPort:
-		cm, err := sm.Unpack(m.frameWithMagic)
+	case *actor_msg.SManSessionFrameFromAddrPort:
+		cm, err := sm.Unpack(m.FrameWithMagic)
 		if err != nil {
 			L(sm).Error("error when unpacking session frame from direct",
 				"err", err,
-				"addrport", m.addrPort,
-				"frame", m.frameWithMagic,
+				"addrport", m.AddrPort,
+				"frame", m.FrameWithMagic,
 			)
 			return
 		}
-		sm.s.TMan.Inbox() <- &TManSessionMessageFromDirect{
-			addrPort: m.addrPort,
-			msg:      cm,
+		sm.s.TMan.Inbox() <- &actor_msg.TManSessionMessageFromDirect{
+			AddrPort: m.AddrPort,
+			Msg:      cm,
 		}
-	case *SManSendSessionMessageToRelay:
-		frame := sm.Pack(m.msg, m.toSession)
-		sm.s.RMan.WriteTo(frame, m.relay, m.peer)
-	case *SManSendSessionMessageToDirect:
-		frame := sm.Pack(m.msg, m.toSession)
-		sm.s.DMan.WriteTo(frame, m.addrPort)
+	case *actor_msg.SManSendSessionMessageToRelay:
+		frame := sm.Pack(m.Msg, m.ToSession)
+		sm.s.RMan.WriteTo(frame, m.Relay, m.Peer)
+	case *actor_msg.SManSendSessionMessageToDirect:
+		frame := sm.Pack(m.Msg, m.ToSession)
+		sm.s.DMan.WriteTo(frame, m.AddrPort)
 	default:
 		sm.logUnknownMessage(m)
 	}
 }
 
 func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, error) {
-	if string(frameWithMagic[:len(msg2.MagicBytes)]) != msg2.Magic {
+	if string(frameWithMagic[:len(msg2.Magic)]) != msg2.Magic {
 		panic("Somehow received non-session message in unpack")
 	}
 
-	b := frameWithMagic[len(msg2.MagicBytes):]
+	b := frameWithMagic[len(msg2.Magic):]
 
-	sessionKey := key.MakeSessionPublic([key.Len]byte(b[:32]))
+	sessionKey := key.MakeSessionPublic([key.Len]byte(b[:key.Len]))
 
 	b = b[key.Len:]
 
-	clearBytes, ok := sm.privateKey.Shared(sessionKey).Open(b)
+	clearBytes, ok := sm.session.Shared(sessionKey).Open(b)
 
 	if !ok {
 		return nil, fmt.Errorf("could not decrypt session message")
@@ -119,9 +143,13 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, err
 func (sm *SessionManager) Pack(sMsg msg2.SessionMessage, toSession key.SessionPublic) []byte {
 	clearBytes := sMsg.MarshalSessionMessage()
 
-	cipherBytes := sm.privateKey.Shared(toSession).Seal(clearBytes)
+	cipherBytes := sm.session.Shared(toSession).Seal(clearBytes)
 
-	return slices.Concat(msg2.MagicBytes, sm.publicKey.ToByteSlice(), cipherBytes)
+	return slices.Concat(msg2.MagicBytes, sm.session.Public().ToByteSlice(), cipherBytes)
+}
+
+func (sm *SessionManager) Session() key.SessionPublic {
+	return sm.session.Public()
 }
 
 func (sm *SessionManager) Close() {

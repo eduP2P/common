@@ -4,6 +4,7 @@ import (
 	crand "crypto/rand"
 	"fmt"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"slices"
 )
 
 type TxID [12]byte
@@ -22,12 +23,12 @@ type Ping struct {
 	// Allegedly the sender's nodekey address
 	NodeKey key.NodePublic
 
+	// TODO implement padding
 	Padding int
 }
 
 func (p *Ping) MarshalSessionMessage() []byte {
-	// TODO
-	panic("implement me")
+	return slices.Concat([]byte{byte(v1), byte(PingMessage)}, p.TxID[:], p.NodeKey[:])
 }
 
 func (p *Ping) Debug() string {

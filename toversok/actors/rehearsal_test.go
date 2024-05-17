@@ -2,6 +2,8 @@ package actors
 
 import (
 	"context"
+	"github.com/shadowjonathan/edup2p/types/actor_msg"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"net/netip"
 )
@@ -12,7 +14,7 @@ type MockActor struct {
 	s *Stage
 
 	run    func()
-	inbox  func() chan<- ActorMessage
+	inbox  func() chan<- actor_msg.ActorMessage
 	cancel func()
 	close  func()
 }
@@ -21,7 +23,7 @@ func (m *MockActor) Run() {
 	m.run()
 }
 
-func (m *MockActor) Inbox() chan<- ActorMessage {
+func (m *MockActor) Inbox() chan<- actor_msg.ActorMessage {
 	return m.inbox()
 }
 
@@ -46,10 +48,10 @@ func (m *MockDirectManager) WriteTo(pkt []byte, addr netip.AddrPort) {
 type MockDirectRouter struct {
 	*MockActor
 
-	push func(frame DirectedPeerFrame)
+	push func(frame ifaces.DirectedPeerFrame)
 }
 
-func (m *MockDirectRouter) Push(frame DirectedPeerFrame) {
+func (m *MockDirectRouter) Push(frame ifaces.DirectedPeerFrame) {
 	m.push(frame)
 }
 
@@ -66,9 +68,9 @@ func (m *MockRelayManager) WriteTo(pkt []byte, relay int64, dst key.NodePublic) 
 type MockRelayRouter struct {
 	*MockActor
 
-	push func(frame DirectedPeerFrame)
+	push func(frame ifaces.DirectedPeerFrame)
 }
 
-func (m *MockRelayRouter) Push(frame DirectedPeerFrame) {
+func (m *MockRelayRouter) Push(frame ifaces.DirectedPeerFrame) {
 	m.push(frame)
 }

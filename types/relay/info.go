@@ -1,4 +1,4 @@
-package types
+package relay
 
 import (
 	"github.com/LukaGiorgadze/gonull"
@@ -27,7 +27,18 @@ type RelayInformation struct {
 	STUNPort gonull.Nullable[uint16]
 
 	// Optional HTTPS/TLS port override. (Default 443)
+	HTTPSPort gonull.Nullable[uint16]
+
+	// Optional HTTP port override. (Default 80)
+	//
+	// Also used for captive portal checks.
 	HTTPPort gonull.Nullable[uint16]
 
-	// TODO CanPort80 for captive portal?
+	// Whether to connect to this relay via plain HTTP or not.
+	//
+	// Used for tests and development environments.
+	IsInsecure bool
+
+	// Whether to use this relay to detect captive portals.
+	IsCaptiveBuster gonull.Nullable[bool]
 }

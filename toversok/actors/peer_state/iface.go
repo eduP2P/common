@@ -6,7 +6,7 @@ import (
 	"net/netip"
 )
 
-// This peer_state pattern was inspired by https://refactoring.guru/design-patterns/state/go/example
+// This state pattern was inspired by https://refactoring.guru/design-patterns/state/go/example
 
 // PeerState defines an interface with which a PeerState can be driven.
 //

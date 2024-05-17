@@ -96,6 +96,8 @@ func (sc *ServerClient) Run() (err error) {
 	go sc.RunReceiver()
 	go sc.RunSender()
 
+	sc.L().Info("new client", "peer", sc.nodeKey.Debug())
+
 	<-sc.ctx.Done()
 
 	return sc.ctx.Err()
@@ -160,6 +162,8 @@ func (sc *ServerClient) handleSend(frLen uint32) error {
 		sc.L().Warn("handleSend dropping packet", "to-peer", dstKey.Debug(), "reason", "client-not-connected")
 		return nil
 	}
+
+	slog.Debug("sending packet", "src", sc.nodeKey.Debug(), "dst", dstClient.nodeKey.Debug())
 
 	dstClient.SendPacket(ServerPacket{
 		bytes: contents,

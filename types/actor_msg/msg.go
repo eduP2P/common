@@ -1,9 +1,9 @@
-package actors
+package actor_msg
 
 import (
-	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/relay"
 	"net/netip"
 )
 
@@ -13,109 +13,102 @@ import (
 // TrafficManager msgs
 
 type TManConnActivity struct {
-	peer key.NodePublic
+	Peer key.NodePublic
 
 	// else its out
-	isIn bool
+	IsIn bool
 
-	isActive bool
+	IsActive bool
 }
 
 type TManConnGoodBye struct {
-	peer key.NodePublic
+	Peer key.NodePublic
 
 	// else its out
-	isIn bool
+	IsIn bool
 }
 
 type TManSessionMessageFromRelay struct {
-	relay int64
+	Relay int64
 
-	peer key.NodePublic
+	Peer key.NodePublic
 
 	// session key from the session message
-	msg *msg.ClearMessage
+	Msg *msg.ClearMessage
 }
 
 type TManSessionMessageFromDirect struct {
-	addrPort netip.AddrPort
+	AddrPort netip.AddrPort
 
-	msg *msg.ClearMessage
-}
-
-type TManSetPeerInfo struct {
-	peer key.NodePublic
-
-	session   key.SessionPublic
-	homeRelay int64
-	endpoints []netip.AddrPort
+	Msg *msg.ClearMessage
 }
 
 // ======================================================================================================
 // SessionManager msgs
 
 type SManSessionFrameFromRelay struct {
-	relay int64
+	Relay int64
 
-	peer key.NodePublic
+	Peer key.NodePublic
 
-	frameWithMagic []byte
+	FrameWithMagic []byte
 }
 
 type SManSessionFrameFromAddrPort struct {
-	addrPort netip.AddrPort
+	AddrPort netip.AddrPort
 
-	frameWithMagic []byte
+	FrameWithMagic []byte
 }
 
 type SManSendSessionMessageToRelay struct {
-	relay int64
+	Relay int64
 
-	peer key.NodePublic
+	Peer key.NodePublic
 
-	toSession key.SessionPublic
+	ToSession key.SessionPublic
 
-	msg msg.SessionMessage
+	Msg msg.SessionMessage
 }
 
 type SManSendSessionMessageToDirect struct {
-	addrPort netip.AddrPort
+	AddrPort netip.AddrPort
 
-	toSession key.SessionPublic
+	ToSession key.SessionPublic
 
-	msg msg.SessionMessage
+	Msg msg.SessionMessage
 }
 
 // ======================================================================================================
 // OutConn msgs
 
 type OutConnUse struct {
-	useRelay bool
+	UseRelay  bool
+	TrackHome bool
 
-	relayToUse    int64
-	addrPortToUse netip.AddrPort
+	RelayToUse    int64
+	AddrPortToUse netip.AddrPort
 }
 
 // ======================================================================================================
 // DirectManager msgs
 
 //type DManSendSessionMessage struct {
-//	addrPort netip.AddrPort
+//	AddrPort netip.AddrPort
 //
 //	rawFrame []byte
 //}
 
 type DManSetMTU struct {
-	forAddrPort netip.AddrPort
+	ForAddrPort netip.AddrPort
 
-	mtu uint16
+	MTU uint16
 }
 
 // ======================================================================================================
 // RelayManager msgs
 
-type RManUpdateRelayConfiguration struct {
-	config []types.RelayInformation
+type RManRelayLatencyResults struct {
+	// TODO
 }
 
 //type RManSendSessionMessage struct {
@@ -130,11 +123,21 @@ type RManUpdateRelayConfiguration struct {
 // DirectRouter msgs
 
 type DRouterPeerClearKnownAs struct {
-	peer key.NodePublic
+	Peer key.NodePublic
 }
 
 type DRouterPeerAddKnownAs struct {
-	peer key.NodePublic
+	Peer key.NodePublic
 
-	addrPort netip.AddrPort
+	AddrPort netip.AddrPort
+}
+
+// ====
+
+type SyncPeerInfo struct {
+	Peer key.NodePublic
+}
+
+type UpdateRelayConfiguration struct {
+	Config []relay.RelayInformation
 }

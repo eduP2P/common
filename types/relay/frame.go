@@ -2,26 +2,27 @@ package relay
 
 import (
 	"bufio"
+	"github.com/shadowjonathan/edup2p/types/bin"
 )
 
 type FrameType byte
 
 // TODO consider if putting the byte explicitly will make sure they dont get misaligned in the future
 const (
-	frameServerKey FrameType = iota
-	frameClientInfo
-	frameServerInfo
+	frameServerKey  FrameType = iota // 32B public key
+	frameClientInfo                  // 32B pub key + naclbox(24B nonce + json)
+	frameServerInfo                  // naclbox(24B nonce + json)
 
 	// packets sent and received from the relay
-	frameSendPacket
-	frameRecvPacket
+	frameSendPacket // 32B dest pub key + packet bytes
+	frameRecvPacket // 32B src pub key + packet bytes
 
 	// Pings sent by the client and Ponged (acknowledged) by the server
-	framePing
-	framePong
+	framePing // 8B payload
+	framePong // 8B payload
 
 	// Keepalive frames sent by the server at an interval
-	frameKeepAlive
+	frameKeepAlive // 0B
 )
 
 func readFrameHeader(reader *bufio.Reader) (typ FrameType, frameLen uint32, err error) {
@@ -29,7 +30,7 @@ func readFrameHeader(reader *bufio.Reader) (typ FrameType, frameLen uint32, err 
 	if err != nil {
 		return 0, 0, err
 	}
-	frameLen, err = readUint32(reader)
+	frameLen, err = bin.ReadUint32(reader)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -40,5 +41,5 @@ func writeFrameHeader(bw *bufio.Writer, typ FrameType, frameLen uint32) error {
 	if err := bw.WriteByte(byte(typ)); err != nil {
 		return err
 	}
-	return writeUint32(bw, frameLen)
+	return bin.WriteUint32(bw, frameLen)
 }

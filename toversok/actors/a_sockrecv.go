@@ -4,24 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types"
 	"net"
 	"net/netip"
 	"slices"
 	"time"
 )
-
-type UDPConn interface {
-	SetReadDeadline(t time.Time) error
-
-	// Read(b []byte) (int, error)
-
-	ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPort, err error)
-
-	Write(b []byte) (int, error)
-	WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (int, error)
-
-	Close() error
-}
 
 type RecvFrame struct {
 	pkt []byte
@@ -32,12 +20,12 @@ type RecvFrame struct {
 type SockRecv struct {
 	*ActorCommon
 
-	Conn UDPConn
+	Conn types.UDPConn
 
 	outCh chan RecvFrame
 }
 
-func MakeSockRecv(udp UDPConn, pCtx context.Context) *SockRecv {
+func MakeSockRecv(udp types.UDPConn, pCtx context.Context) *SockRecv {
 
 	return &SockRecv{
 		Conn:  udp,
@@ -50,7 +38,7 @@ func MakeSockRecv(udp UDPConn, pCtx context.Context) *SockRecv {
 func (r *SockRecv) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			// TODO logging
+			L(r).Error("panicked", "err", v)
 			r.Cancel()
 		}
 	}()
@@ -79,13 +67,17 @@ func (r *SockRecv) Run() {
 		n, ap, err := r.Conn.ReadFromUDPAddrPort(buf)
 
 		var e net.Error
-		if !errors.As(err, &e) || !e.Timeout() {
+		if err != nil && (!errors.As(err, &e) || !e.Timeout()) {
 			// handle error, it'S not a timeout
 			// TODO
 			//  unsure what to do here, as this might be a permanent error of the socket?
 			//  would this result in the closing of the channel? if so, wouldnt the corresponding outconn also die?
 			//  if so, then who detects the death of the actor and recreates it like that?
 			panic(err)
+		}
+
+		if n == 0 {
+			continue
 		}
 
 		pkt := slices.Clone(buf[:n])
@@ -106,8 +98,4 @@ func (r *SockRecv) Run() {
 func (r *SockRecv) Close() {
 	r.Conn.Close()
 	close(r.outCh)
-}
-
-func (r *SockRecv) Cancel() {
-	r.ctxCan()
 }

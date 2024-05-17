@@ -2,20 +2,25 @@ package toversok
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	"net"
 	"net/netip"
 	"time"
 )
 
-// A peer config update struct, all values are nullable and thus pointers.
+// PeerCfg isa a peer config update struct, all values are nullable through being pointers.
 type PeerCfg struct {
+	Set bool
+
 	// The IPs the node is addressable by, allowedIPs in wireguard terms.
-	IPv4 netip.Addr
-	IPv6 netip.Addr
+	VIPs *VirtualIPs
 
 	KeepAliveInterval *time.Duration
 
-	Endpoint *net.UDPAddr
+	LocalEndpointPort *uint16
+}
+
+type VirtualIPs struct {
+	IPv4 netip.Addr
+	IPv6 netip.Addr
 }
 
 type WGStats struct {
@@ -26,7 +31,7 @@ type WGStats struct {
 
 type WireGuardConfigurator interface {
 	// Init the wireguard interface, and make it ready for configuration changes.
-	Init(privateKey key.NakedKey, addr4, add6 netip.Prefix) (port int, err error)
+	Init(privateKey key.NakedKey, addr4, add6 netip.Prefix) (port uint16, err error)
 
 	// UpdatePeer updates a peer with certain values, mapped by public key
 	UpdatePeer(publicKey key.NodePublic, cfg PeerCfg) error

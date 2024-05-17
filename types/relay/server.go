@@ -44,10 +44,15 @@ func (s *Server) L() *slog.Logger {
 }
 
 type AbstractConn interface {
-	io.WriteCloser
+	io.Closer
 	SetDeadline(time.Time) error
 	SetReadDeadline(time.Time) error
 	SetWriteDeadline(time.Time) error
+}
+
+func (s *Server) sendVersion(writer *bufio.Writer) error {
+	// Currently we only support v0
+	return writer.WriteByte(byte(relayProtocolV0))
 }
 
 func (s *Server) sendServerKey(writer *bufio.Writer) (err error) {
@@ -140,8 +145,13 @@ func (s *Server) Accept(ctx context.Context, nc AbstractConn, brw *bufio.ReadWri
 	writer := brw.Writer
 
 	nc.SetDeadline(time.Now().Add(10 * time.Second))
+
+	if err := s.sendVersion(writer); err != nil {
+		return fmt.Errorf("send version: %w", err)
+	}
+
 	if err := s.sendServerKey(writer); err != nil {
-		return fmt.Errorf("send server key: %v", err)
+		return fmt.Errorf("send server key: %w", err)
 	}
 
 	nc.SetDeadline(time.Now().Add(10 * time.Second))

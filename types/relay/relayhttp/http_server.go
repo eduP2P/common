@@ -1,18 +1,18 @@
-package main
+package relayhttp
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/server/relay"
+	"github.com/shadowjonathan/edup2p/types/relay"
 	"net/http"
 	"net/netip"
 	"strings"
 )
 
-func Handler(s *relay.Server) http.Handler {
+func ServerHandler(s *relay.Server) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		up := strings.ToLower(r.Header.Get("Upgrade"))
 
-		if up != relay.UpgradeProtocolV0 {
+		if up != relay.UpgradeProtocol {
 			if up != "" {
 				s.L().Warn("odd upgrade requested", "upgrade", up, "peer", r.RemoteAddr)
 			}
@@ -33,13 +33,14 @@ func Handler(s *relay.Server) http.Handler {
 			return
 		}
 
-		pubKey := s.PublicKey()
+		// TODO re-add publickey frontloading?
+		//pubKey := s.PublicKey()
+		// "Relay-Public-Key: %s\r\n\r\n",pubKey.HexString()
+
 		fmt.Fprintf(conn, "HTTP/1.1 101 Switching Protocols\r\n"+
 			"Upgrade: %s\r\n"+
-			"Connection: Upgrade\r\n"+
-			"Relay-Public-Key: %s\r\n\r\n",
-			up,
-			pubKey.HexString())
+			"Connection: Upgrade\r\n\r\n",
+			up)
 
 		remoteIPPort, _ := netip.ParseAddrPort(netConn.RemoteAddr().String())
 

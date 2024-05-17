@@ -3,11 +3,13 @@ package key
 import (
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/shadowjonathan/edup2p/types"
 	"go4.org/mem"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
+	"strings"
 )
 
 type NodePublic NakedKey
@@ -36,6 +38,10 @@ func NewNode() NodePrivate {
 	rand(ret.key[:])
 	clamp25519Private(ret.key[:])
 	return ret
+}
+
+func NodePrivateFrom(key NakedKey) NodePrivate {
+	return NodePrivate{key: key}
 }
 
 // Equal reports whether k and other are the same key.
@@ -102,7 +108,7 @@ const (
 	//
 	// This prefix is used in the control protocol, so cannot be
 	// changed.
-	nodePublicHexPrefix = "nodekey:"
+	nodePublicHexPrefix = "pubkey:"
 )
 
 // AppendText implements encoding.TextAppender.
@@ -136,4 +142,48 @@ func (k NodePublic) MarshalText() ([]byte, error) {
 // followed by a hex encoded representation of k.
 func (k *NodePublic) UnmarshalText(b []byte) error {
 	return parseHex(k[:], mem.B(b), mem.S(nodePublicHexPrefix))
+}
+
+// UnveilPrivate is a function to get a NakedKey from a NodePrivate.
+//
+// Deprecated: nobody should be using this
+func UnveilPrivate(private NodePrivate) NakedKey {
+	return private.key
+}
+
+func UnmarshalPublic(s string) (*NodePublic, error) {
+	if !strings.HasSuffix(s, "\"") && !strings.HasPrefix(s, "\"") {
+		s = fmt.Sprintf("\"%s\"", s)
+	}
+
+	pub := new(NodePublic)
+
+	if err := json.Unmarshal([]byte(s), pub); err != nil {
+		return nil, err
+	} else {
+		return pub, nil
+	}
+}
+
+func (k NodePublic) Marshal() string {
+	b, _ := json.Marshal(k)
+	return string(b)
+}
+func UnmarshalPrivate(s string) (*NodePrivate, error) {
+	if !strings.HasSuffix(s, "\"") && !strings.HasPrefix(s, "\"") {
+		s = fmt.Sprintf("\"%s\"", s)
+	}
+
+	pub := new(NodePrivate)
+
+	if err := json.Unmarshal([]byte(s), pub); err != nil {
+		return nil, err
+	} else {
+		return pub, nil
+	}
+}
+
+func (k NodePrivate) Marshal() string {
+	b, _ := json.Marshal(k)
+	return string(b)
 }

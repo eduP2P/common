@@ -1,7 +1,7 @@
 package peer_state
 
 import (
-	"github.com/shadowjonathan/edup2p/toversok/actors"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
@@ -16,7 +16,7 @@ func (w *WaitingForInfo) Name() string {
 }
 
 func (w *WaitingForInfo) OnTick() PeerState {
-	if pi, ok := w.tm.PeerInfo[w.peer]; ok && !pi.Session.IsZero() {
+	if pi := w.tm.Stage().GetPeerInfo(w.peer); pi != nil && !pi.Session.IsZero() {
 		return LogTransition(w, &Inactive{StateCommon: w.StateCommon})
 	} else {
 		return nil
@@ -45,7 +45,7 @@ func (w *WaitingForInfo) OnRelay(relay int64, peer key.NodePublic, clear *msg.Cl
 	return s
 }
 
-func MakeWaiting(tm *actors.TrafficManager, peer key.NodePublic) PeerState {
+func MakeWaiting(tm ifaces.TrafficManagerActor, peer key.NodePublic) PeerState {
 	w := &WaitingForInfo{
 		StateCommon: &StateCommon{peer: peer, tm: tm},
 	}

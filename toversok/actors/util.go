@@ -3,6 +3,8 @@ package actors
 import (
 	"context"
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/actor_msg"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"log/slog"
 	"sync/atomic"
 )
@@ -34,10 +36,10 @@ func IsContextDone(ctx context.Context) bool {
 }
 
 // SendMessage is a convenience function to allow for "go SendMessage()"
-func SendMessage(ch chan<- ActorMessage, msg ActorMessage) {
+func SendMessage(ch chan<- actor_msg.ActorMessage, msg actor_msg.ActorMessage) {
 	ch <- msg
 }
 
-func L(a Actor) *slog.Logger {
+func L(a ifaces.Actor) *slog.Logger {
 	return slog.With("actor", fmt.Sprintf("%T", a))
 }

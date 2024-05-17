@@ -1,28 +1,146 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
+	"flag"
 	"fmt"
+	"github.com/LukaGiorgadze/gonull"
 	"github.com/abiosoft/ishell/v2"
+	"github.com/shadowjonathan/edup2p/toversok"
+	"github.com/shadowjonathan/edup2p/toversok/actors"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/relay"
 	"golang.zx2c4.com/wireguard/wgctrl"
+	"log/slog"
+	"math"
 	"net/netip"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 )
 
+var (
+	wg           *WGCtrl
+	privKey      *key.NodePrivate
+	programLevel = new(slog.LevelVar) // Info by default
+	ip4          *netip.Prefix
+	ip6          *netip.Prefix
+	extPort      uint16
+	engine       *toversok.Engine
+	eccc         context.CancelCauseFunc
+)
+
 func main() {
+	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: programLevel, AddSource: true})
+	slog.SetDefault(slog.New(h))
+	programLevel.Set(slog.LevelDebug)
+
+	actors.DebugSManTakeNodeAsSession = true
+
 	shell := ishell.New()
 
 	shell.SetHomeHistoryPath(".tssh_history")
 
-	var wg *WGCtrl
-
 	shell.Println("ToverStok Interactive Shell")
 
-	wgCmd := &ishell.Cmd{
+	traceCmd := &ishell.Cmd{
+		Name: "trace",
+		Help: "set log level to e",
+		Func: func(c *ishell.Context) {
+			programLevel.Set(-8)
+		},
+	}
+
+	debugCmd := &ishell.Cmd{
+		Name: "debug",
+		Help: "set log level to debug",
+		Func: func(c *ishell.Context) {
+			programLevel.Set(slog.LevelDebug)
+		},
+	}
+
+	infoCmd := &ishell.Cmd{
+		Name: "info",
+		Help: "set log level to debug",
+		Func: func(c *ishell.Context) {
+			programLevel.Set(slog.LevelInfo)
+		},
+	}
+
+	shell.AddCmd(traceCmd)
+	shell.AddCmd(debugCmd)
+	shell.AddCmd(infoCmd)
+
+	shell.AddCmd(wgCmd())
+	shell.AddCmd(tsCmd())
+	shell.AddCmd(keyCmd())
+
+	shell.Run()
+}
+
+func keyCmd() *ishell.Cmd {
+	c := &ishell.Cmd{
+		Name: "key",
+		Help: "private key setting, generating, and reading",
+		Func: func(c *ishell.Context) {
+			if privKey == nil {
+				c.Println("key: nil")
+			} else {
+				c.Println("key:", privKey.Marshal())
+			}
+		},
+	}
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "gen",
+		Help: "generate a new key",
+		Func: func(c *ishell.Context) {
+			k := key.NewNode()
+			privKey = &k
+
+			c.Println("key generated:", privKey.Marshal())
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "set",
+		Help: "set a key",
+		Func: func(c *ishell.Context) {
+			var line string
+			if len(c.Args) == 0 {
+				c.Println("enter the key, with 'privkey:' prefix")
+				line = c.ReadLine()
+			} else {
+				line = c.Args[0]
+			}
+
+			if p, err := key.UnmarshalPrivate(line); err != nil {
+				c.Err(err)
+				return
+			} else {
+				privKey = p
+			}
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{Name: "pub", Help: "show the pubkey", Func: func(c *ishell.Context) {
+		if privKey != nil {
+			c.Println("pub:", privKey.Public().Marshal())
+		} else {
+			c.Err(errors.New("private key not set"))
+		}
+	}})
+
+	return c
+}
+
+func wgCmd() *ishell.Cmd {
+	c := &ishell.Cmd{
 		Name: "wg",
-		Help: "wireguard configurator peer_state and subcommands",
+		Help: "wireguard configurator state and subcommands",
 		Func: func(c *ishell.Context) {
 			if wg == nil {
 				c.Println("wg: nil")
@@ -32,7 +150,7 @@ func main() {
 		},
 	}
 
-	wgCmd.AddCmd(&ishell.Cmd{
+	c.AddCmd(&ishell.Cmd{
 		Name: "use",
 		Help: "Setup wg configurator and use a specific interface",
 		Func: func(c *ishell.Context) {
@@ -80,10 +198,12 @@ func main() {
 				name:   device,
 				mu:     sync.Mutex{},
 			}
+
+			c.Println("now using wg device", device)
 		},
 	})
 
-	wgCmd.AddCmd(&ishell.Cmd{
+	c.AddCmd(&ishell.Cmd{
 		Name: "init",
 		Help: "Perform Init() on the wg configurator. wg init <privkey addr4/cidr addr6/cidr>",
 		Func: func(c *ishell.Context) {
@@ -137,17 +257,379 @@ func main() {
 		},
 	})
 
-	tsCmd := &ishell.Cmd{
+	return c
+}
+
+func tsCmd() *ishell.Cmd {
+
+	c := &ishell.Cmd{
 		Name: "ts",
-		Help: "toverstok peer_state and subcommands",
+		Help: "toverstok engine and subcommands",
 		Func: func(c *ishell.Context) {
-			// TODO implement
-			panic("to implement")
+			// TODO show status
 		},
 	}
 
-	shell.AddCmd(wgCmd)
-	shell.AddCmd(tsCmd)
+	c.AddCmd(&ishell.Cmd{
+		Name: "create",
+		Help: "create a new engine, stopping the previous one if it already existed",
+		Func: func(c *ishell.Context) {
+			var err error
+			if ip4 == nil {
+				err = errors.New("ip4 is not set")
+			} else if ip6 == nil {
+				err = errors.New("ip6 is not set")
+			} else if wg == nil {
+				err = errors.New("wg is not set")
+			} else if privKey == nil {
+				err = errors.New("key is not set")
+			}
+			if err != nil {
+				c.Err(err)
+				return
+			}
 
-	shell.Run()
+			if engine != nil {
+				slog.Info("previous engine exists, stopping...")
+				eccc(errors.New("stop"))
+
+				engine = nil
+				eccc = nil
+			}
+
+			ctx, ccc := context.WithCancelCause(context.Background())
+			opts := toversok.EngineOptions{
+				Ctx:         ctx,
+				Ccc:         ccc,
+				PrivKey:     key.UnveilPrivate(*privKey),
+				ExtBindPort: extPort,
+				IP4:         *ip4,
+				IP6:         *ip6,
+				WG:          wg,
+				FW:          nil,
+			}
+
+			e, err := toversok.NewEngine(opts)
+			if err != nil {
+				c.Err(err)
+				return
+			}
+
+			engine = e
+			eccc = ccc
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{Name: "start", Help: "start the engine", Func: func(c *ishell.Context) {
+		if engine != nil {
+			err := engine.Start()
+			if err != nil {
+				c.Err(err)
+			}
+		} else {
+			c.Err(errors.New("engine does not exist"))
+		}
+	}})
+
+	c.AddCmd(&ishell.Cmd{Name: "ip4", Help: "set and get the ip4 prefix", Func: func(c *ishell.Context) {
+		if len(c.Args) == 0 {
+			c.Println("ip4:", ip4)
+		} else {
+			p, err := netip.ParsePrefix(c.Args[0])
+			if err != nil {
+				c.Err(err)
+				return
+			}
+			if !p.Addr().Is4() {
+				c.Err(errors.New("address is not ip4"))
+				return
+			}
+			ip4 = &p
+			c.Println("set ip4:", ip4)
+		}
+	}})
+	c.AddCmd(&ishell.Cmd{Name: "ip6", Help: "set and get the ip6 prefix", Func: func(c *ishell.Context) {
+		if len(c.Args) == 0 {
+			c.Println("ip6:", ip6)
+		} else {
+			p, err := netip.ParsePrefix(c.Args[0])
+			if err != nil {
+				c.Err(err)
+				return
+			}
+			if !p.Addr().Is6() {
+				c.Err(errors.New("address is not ip6"))
+				return
+			}
+			ip6 = &p
+			c.Println("set ip6:", ip6)
+		}
+	}})
+	c.AddCmd(&ishell.Cmd{
+		Name: "port",
+		Help: "set the external port",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) == 0 {
+				c.Println("port:", extPort)
+			} else {
+				if i, err := strconv.ParseInt(c.Args[0], 10, 16); err != nil {
+					c.Err(err)
+				} else {
+					extPort = uint16(i)
+					c.Println("set port:", extPort)
+				}
+			}
+		},
+	})
+
+	peerCmd := &ishell.Cmd{Name: "peer", Help: "peer subcommands"}
+
+	peerCmd.AddCmd(&ishell.Cmd{
+		Name:    "add",
+		Aliases: []string{"a"},
+		Help:    "add a peer: <pubkey:hex> <relay> <ip4> <ip6> <endpoints...>",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) < 4 {
+				c.Err(errors.New("not enough arguments, expected at least 5"))
+				return
+			}
+
+			var (
+				err     error
+				peerKey *key.NodePublic
+				relay   int64
+				session key.SessionPublic
+				ip4     netip.Addr
+				ip6     netip.Addr
+
+				endpoints = make([]netip.AddrPort, 0)
+			)
+
+			if peerKey, err = key.UnmarshalPublic(c.Args[0]); err != nil {
+				c.Err(err)
+				return
+			}
+			if relay, err = strconv.ParseInt(c.Args[1], 10, 64); err != nil {
+				c.Err(err)
+				return
+			}
+
+			// We assume the public key of the session is the same as the node for this development environment.
+			//
+			// We (semi-intentionally) break compatibility with any main network because of this.
+			session = [32]byte(*peerKey)
+
+			if ip4, err = netip.ParseAddr(c.Args[2]); err != nil {
+				c.Err(err)
+				return
+			} else {
+				if !ip4.Is4() {
+					c.Err(errors.New("ip4 isnt ipv4"))
+					return
+				}
+			}
+
+			if ip6, err = netip.ParseAddr(c.Args[3]); err != nil {
+				c.Err(err)
+				return
+			} else {
+				if !ip6.Is6() {
+					c.Err(errors.New("ip6 isnt ipv6"))
+					return
+				}
+			}
+
+			for _, e := range c.Args[4:] {
+				ap, err := netip.ParseAddrPort(e)
+				if err != nil {
+					c.Err(err)
+					return
+				}
+
+				endpoints = append(endpoints, ap)
+			}
+
+			if err = engine.Handle(toversok.PeerAddition{
+				Key:         *peerKey,
+				HomeRelayId: relay,
+				SessionKey:  session,
+				Endpoints:   endpoints,
+				VIPs: toversok.VirtualIPs{
+					IPv4: ip4,
+					IPv6: ip6,
+				},
+			}); err != nil {
+				c.Err(err)
+			}
+		},
+	})
+
+	peerCmd.AddCmd(&ishell.Cmd{
+		Name:    "update",
+		Aliases: []string{"u"},
+		Help:    "update a peer: <pubkey:hex> -r [relay] -e [endpoint,...]",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) == 0 {
+				c.Err(errors.New("did not define peer key"))
+				return
+			}
+
+			peerKey, err := key.UnmarshalPublic(c.Args[0])
+
+			if err != nil {
+				c.Err(fmt.Errorf("error parsing peer key: %w", err))
+				return
+			}
+
+			fs := flag.NewFlagSet("peer-update", flag.ContinueOnError)
+
+			r := fs.Int64("r", math.MaxInt64, "relay (int64)")
+			endpoints := fs.String("e", "", "endpoints (comma-seperated IPs)")
+
+			if err := fs.Parse(c.Args[1:]); err != nil {
+				c.Err(fmt.Errorf("could not parse flags: %w", err))
+				return
+			}
+
+			pu := toversok.PeerUpdate{
+				Key: *peerKey,
+			}
+
+			if *r != math.MaxInt64 {
+				pu.HomeRelayId = gonull.NewNullable(*r)
+			}
+
+			if *endpoints != "" {
+				as := *endpoints
+
+				aps := make([]netip.AddrPort, 0)
+
+				for _, addr := range strings.Split(as, ",") {
+					a, err := netip.ParseAddrPort(addr)
+					if err != nil {
+						c.Err(err)
+						return
+					}
+
+					aps = append(aps, a)
+				}
+
+				pu.Endpoints = gonull.NewNullable(aps)
+			}
+
+			if err = engine.Handle(pu); err != nil {
+				c.Err(err)
+			}
+		},
+	})
+
+	peerCmd.AddCmd(&ishell.Cmd{
+		Name:    "delete",
+		Aliases: []string{"del", "d"},
+		Help:    "remove a peer: <pubkey:hex>",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) == 0 {
+				c.Err(errors.New("did not define peer key"))
+				return
+			}
+
+			if peerKey, err := key.UnmarshalPublic(c.Args[0]); err != nil {
+				c.Err(err)
+			} else {
+				if err = engine.Handle(toversok.PeerRemoval{Key: *peerKey}); err != nil {
+					c.Err(err)
+				}
+			}
+		},
+	})
+
+	c.AddCmd(peerCmd)
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "relay",
+		Help: "define or update relays: <id> <pubkey:hex> -d [domain] -a [ip,...] -s [stunPort] -t [httpsPort] -h [httpPort] -i (insecure flag)",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) < 2 {
+				c.Err(errors.New("not enough arguments, expected at least 2"))
+				return
+			}
+
+			var (
+				err      error
+				id       int64
+				relayKey *key.NodePublic
+			)
+
+			if id, err = strconv.ParseInt(c.Args[0], 10, 64); err != nil {
+				c.Err(err)
+				return
+			}
+
+			if relayKey, err = key.UnmarshalPublic(c.Args[1]); err != nil {
+				c.Err(err)
+				return
+			}
+
+			fs := flag.NewFlagSet("relay", flag.ContinueOnError)
+
+			domain := fs.String("d", "", "domain")
+			addrs := fs.String("a", "", "addrs (comma-seperated)")
+			stunPort := fs.Int("s", math.MaxInt, "stunPort")
+			httpsPort := fs.Int("t", math.MaxInt, "httpsPort")
+			httpPort := fs.Int("h", math.MaxInt, "httpPort")
+			insecure := fs.Bool("i", false, "insecure")
+
+			if err := fs.Parse(c.Args[2:]); err != nil {
+				c.Err(fmt.Errorf("could not parse flags: %w", err))
+				return
+			}
+
+			ri := relay.RelayInformation{
+				ID:     id,
+				Key:    *relayKey,
+				Domain: *domain,
+				//IPs:             gonull.Nullable[[]netip.Addr]{},
+				//STUNPort:        gonull.Nullable[uint16]{},
+				//HTTPSPort:       gonull.Nullable[uint16]{},
+				//HTTPPort:        gonull.Nullable[uint16]{},
+				IsInsecure: *insecure,
+			}
+
+			if *addrs != "" {
+				as := *addrs
+
+				addrs := make([]netip.Addr, 0)
+
+				for _, addr := range strings.Split(as, ",") {
+					a, err := netip.ParseAddr(addr)
+					if err != nil {
+						c.Err(err)
+						return
+					}
+
+					addrs = append(addrs, a)
+				}
+
+				ri.IPs = gonull.NewNullable(addrs)
+			}
+
+			if *stunPort != math.MaxInt {
+				ri.STUNPort = gonull.NewNullable((uint16)(*stunPort))
+			}
+
+			if *httpPort != math.MaxInt {
+				ri.HTTPPort = gonull.NewNullable((uint16)(*httpPort))
+			}
+
+			if *httpsPort != math.MaxInt {
+				ri.HTTPSPort = gonull.NewNullable((uint16)(*httpsPort))
+			}
+
+			if err = engine.Handle(toversok.RelayUpdate{Set: []relay.RelayInformation{ri}}); err != nil {
+				c.Err(err)
+			}
+		},
+	})
+
+	return c
 }

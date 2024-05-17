@@ -52,7 +52,7 @@ func LogTransition(from PeerState, to PeerState) PeerState {
 }
 
 func LogDirectMessage(s PeerState, ap netip.AddrPort, clear *msg.ClearMessage) {
-	L(s).Log(context.Background(), LevelTrace, "received relay message",
+	L(s).Log(context.Background(), LevelTrace, "received direct message",
 		slog.Group("from",
 			"addrport", ap,
 			"session", clear.Session),
@@ -61,7 +61,7 @@ func LogDirectMessage(s PeerState, ap netip.AddrPort, clear *msg.ClearMessage) {
 }
 
 func LogRelayMessage(s PeerState, relay int64, peer key.NodePublic, clear *msg.ClearMessage) {
-	L(s).Log(context.Background(), LevelTrace, "received direct message",
+	L(s).Log(context.Background(), LevelTrace, "received relay message",
 		slog.Group("from",
 			"relay", relay,
 			"peer", peer.Debug(),

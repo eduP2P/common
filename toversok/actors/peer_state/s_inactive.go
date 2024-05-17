@@ -15,7 +15,9 @@ func (i *Inactive) Name() string {
 }
 
 func (i *Inactive) OnTick() PeerState {
-	if i.tm.InActive[i.peer] || i.tm.OutActive[i.peer] {
+	if pi := i.tm.Stage().GetPeerInfo(i.peer); (i.tm.ActiveIn()[i.peer] || i.tm.ActiveOut()[i.peer]) &&
+		// We should wait for endpoints before we try to transition to active trying.
+		(len(pi.Endpoints) > 0 || len(pi.RendezvousEndpoints) > 0) {
 		return LogTransition(i, &Trying{StateCommon: i.StateCommon})
 	}
 

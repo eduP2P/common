@@ -1,6 +1,7 @@
 package peer_state
 
 import (
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	msg2 "github.com/shadowjonathan/edup2p/types/msg"
 	"net/netip"
@@ -17,14 +18,19 @@ func (e *EstPreTransmit) Name() string {
 func (e *EstPreTransmit) OnTick() PeerState {
 	pi := e.mustPeerInfo()
 
-	for _, ep := range pi.Endpoints {
+	for _, ep := range types.SetUnion(pi.Endpoints, pi.RendezvousEndpoints) {
 		e.tm.SendPingDirect(ep, e.peer, pi.Session)
 	}
 
-	e.tm.SendMsgToRelay(
-		pi.HomeRelay, e.peer, pi.Session,
-		&msg2.Rendezvous{MyAddresses: e.tm.S.GetLocalEndpoints()},
-	)
+	localEndpoints := e.tm.Stage().GetLocalEndpoints()
+
+	// Don't send a rendezvous if we don't have any endpoints.
+	if len(localEndpoints) > 0 {
+		e.tm.SendMsgToRelay(
+			pi.HomeRelay, e.peer, pi.Session,
+			&msg2.Rendezvous{MyAddresses: localEndpoints},
+		)
+	}
 
 	return LogTransition(e, &EstTransmitting{EstablishingCommon: e.EstablishingCommon})
 }

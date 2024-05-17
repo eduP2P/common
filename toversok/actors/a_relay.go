@@ -1,9 +1,22 @@
 package actors
 
 import (
-	"github.com/shadowjonathan/edup2p/types"
+	"fmt"
+	"github.com/shadowjonathan/edup2p/types/actor_msg"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/shadowjonathan/edup2p/types/relay/relayhttp"
+	"log/slog"
+	"time"
+)
+
+const (
+	RelayConnectionRetryInterval = time.Second * 5
+
+	RelayConnectionIdleAfter  = time.Minute * 1
+	RelayConnectionBufferSize = 32
 )
 
 // RestartableRelayConn is a Relay connection that will automatically reconnect,
@@ -11,35 +24,204 @@ import (
 type RestartableRelayConn struct {
 	*ActorCommon
 
-	config types.RelayInformation
-	// TODO
+	man *RelayManager
+
+	config relay.RelayInformation
+
+	client *relay.Client
+
+	stay bool
+
+	lastActivity time.Time
+
+	// Buffered packet channel
+	bufferCh chan relay.SendPacket
+
+	// an internal poke channel
+	pokeCh chan interface{}
 }
 
-func (rrc *RestartableRelayConn) Run() {
-	//TODO implement me
-	panic("implement me")
+func (c *RestartableRelayConn) noteActivity() {
+	c.lastActivity = time.Now()
 }
 
-func (rrc *RestartableRelayConn) Close() {
-	//TODO implement me
-	panic("implement me")
+func (c *RestartableRelayConn) Run() {
+	for {
+		if c.shouldIdle() {
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-c.pokeCh:
+			case p := <-c.bufferCh:
+				c.noteActivity()
+				go func() {
+					c.bufferCh <- p
+				}()
+			}
+		}
+
+		if !c.establish() {
+			// Failed to establish, retry.
+			select {
+			case <-time.After(RelayConnectionRetryInterval):
+				continue
+			case <-c.ctx.Done():
+				return
+			}
+		}
+
+		// Established
+
+		err := c.loop()
+
+		// Possibly the client exited because the relayConn is being closed, check for that first
+		select {
+		case <-c.ctx.Done():
+			return
+		default:
+			// fallthrough
+		}
+		if err != nil {
+			c.L().Warn("relay client exited", "error", err)
+		}
+	}
 }
 
-func (rrc *RestartableRelayConn) Queue(pkt []byte, peer key.NodePublic) {
-	// TODO
-	panic("not implemented")
+func (c *RestartableRelayConn) shouldIdle() bool {
+	if c.stay {
+		return false
+	}
+
+	return time.Now().After(c.lastActivity.Add(RelayConnectionIdleAfter))
 }
 
-func (rrc *RestartableRelayConn) Update(info types.RelayInformation) {
-	// TODO
-	panic("not implemented")
+// establish tests, and/or starts the client, returns when this has timed out, or accomplished.
+//
+// the boolean success value determines if the establishment has completed.
+func (c *RestartableRelayConn) establish() (success bool) {
+	var port uint16
+
+	if c.config.IsInsecure {
+		port = c.config.HTTPPort.OrElse(0)
+	} else {
+		port = c.config.HTTPSPort.OrElse(0)
+	}
+
+	var err error
+	c.client, err = relayhttp.Dial(c.ctx, relayhttp.DialOpts{
+		Domain:       c.config.Domain,
+		Addrs:        c.config.IPs.OrElse(nil),
+		Port:         port,
+		TLS:          !c.config.IsInsecure,
+		ExpectKey:    c.config.Key,
+		ExpectCertCN: c.config.CertCN.OrElse(""),
+		// Connect and establishment timeouts are default
+		// TODO maybe allow Control to tweak this setting?
+	}, func() *key.NodePrivate {
+		return &c.man.s.privKey
+	})
+
+	if err != nil {
+		c.L().Warn("failed to establish connection to relay", "error", err)
+		return false
+	} else if c.client == nil {
+		c.L().Error("Dial returned no error, but client stayed nil, this is very likely a bug")
+		return false
+	}
+
+	go c.client.RunSend()
+	go c.client.RunReceive()
+
+	c.L().Debug("established")
+
+	return true
+}
+
+// loop runs the established connection loop, handling packets.
+//
+// it returns when the client is dead.
+func (c *RestartableRelayConn) loop() error {
+	checker := time.NewTicker(time.Second)
+	defer checker.Stop()
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return nil
+		case <-c.client.Done():
+			return fmt.Errorf("relay client exited: %w", c.client.Err())
+
+		case <-checker.C:
+			if c.shouldIdle() {
+				c.client.Close()
+				return nil
+			}
+
+		case p := <-c.bufferCh:
+			c.noteActivity()
+			select {
+			case <-c.ctx.Done():
+				return nil
+			case <-c.client.Done():
+				return fmt.Errorf("relay client exited: %w", c.client.Err())
+			case c.client.Send() <- p:
+			}
+		case p := <-c.client.Recv():
+			c.noteActivity()
+			c.man.inCh <- ifaces.RelayedPeerFrame{
+				SrcRelay: c.config.ID,
+				SrcPeer:  p.Src,
+				Pkt:      p.Data,
+			}
+		}
+	}
+}
+
+func (c *RestartableRelayConn) Close() {
+	c.ctxCan()
+}
+
+// Queue queues the pkt for dst in a non-blocking fashion
+func (c *RestartableRelayConn) Queue(pkt []byte, dst key.NodePublic) {
+	p := relay.SendPacket{Dst: dst, Data: pkt}
+
+	select {
+	case c.bufferCh <- p:
+	default:
+		// Buffer full, take from the head and drop it
+		<-c.bufferCh
+		// Try again
+		select {
+		case c.bufferCh <- p:
+		default:
+			// Buffer seems full and congested, fail.
+		}
+	}
+}
+
+func (c *RestartableRelayConn) Update(info relay.RelayInformation) {
+	c.config = info
+
+	// Close the client to trigger a reconnect
+	if c.client != nil {
+		c.client.Close()
+	}
+}
+
+func (c *RestartableRelayConn) StayConnected(stay bool) {
+	c.stay = stay
+}
+
+func (c *RestartableRelayConn) L() *slog.Logger {
+	return L(c).With("relay", c.config.ID)
 }
 
 type RelayConnActor interface {
-	Actor
+	ifaces.Actor
 
 	Queue(pkt []byte, peer key.NodePublic)
-	Update(info types.RelayInformation)
+	Update(info relay.RelayInformation)
+	StayConnected(bool)
 }
 
 type relayWriteRequest struct {
@@ -53,13 +235,31 @@ type RelayManager struct {
 
 	s *Stage
 
-	// TODO
+	homeRelay int64
 
 	relays map[int64]RelayConnActor
 
-	inCh chan RelayedPeerFrame
+	inCh chan ifaces.RelayedPeerFrame
 
 	writeCh chan relayWriteRequest
+}
+
+const (
+	RMInboxLen   = 4
+	RMInChLen    = 8
+	RMWriteChLen = 8
+)
+
+func (s *Stage) makeRM() *RelayManager {
+	return &RelayManager{
+		ActorCommon: MakeCommon(s.Ctx, RMInboxLen),
+		s:           s,
+		homeRelay:   0,
+
+		relays:  make(map[int64]RelayConnActor),
+		inCh:    make(chan ifaces.RelayedPeerFrame, RMInChLen),
+		writeCh: make(chan relayWriteRequest, RMWriteChLen),
+	}
 }
 
 func (rm *RelayManager) Run() {
@@ -81,9 +281,9 @@ func (rm *RelayManager) Run() {
 			rm.Close()
 			return
 		case m := <-rm.inbox:
-			if update, ok := m.(*RManUpdateRelayConfiguration); ok {
-				for _, c := range update.config {
-					rm.upsert(c)
+			if update, ok := m.(*actor_msg.UpdateRelayConfiguration); ok {
+				for _, c := range update.Config {
+					rm.update(c)
 				}
 			} else {
 				rm.logUnknownMessage(m)
@@ -117,19 +317,31 @@ func (rm *RelayManager) Run() {
 }
 
 func (rm *RelayManager) Close() {
-	// TODO
-	//  - close relay connections
-	panic("not implemented")
+	rm.ctxCan()
 }
 
-func (rm *RelayManager) getConn(int int64) RelayConnActor {
-	// TODO needs relay mapping and such
-	panic("not implemented")
+func (rm *RelayManager) getConn(id int64) RelayConnActor {
+	return rm.relays[id]
 }
 
-func (rm *RelayManager) upsert(info types.RelayInformation) {
-	// TODO
-	panic("not implemented")
+func (rm *RelayManager) update(info relay.RelayInformation) {
+	if r, ok := rm.relays[info.ID]; ok {
+		r.Update(info)
+	}
+
+	r := &RestartableRelayConn{
+		ActorCommon: MakeCommon(rm.ctx, -1),
+		man:         rm,
+		config:      info,
+
+		stay:     info.ID == rm.homeRelay,
+		bufferCh: make(chan relay.SendPacket, RelayConnectionBufferSize),
+		pokeCh:   make(chan interface{}, 1),
+	}
+
+	go r.Run()
+
+	rm.relays[info.ID] = r
 }
 
 // WriteTo queues a packet relay request to a relay ID, for a certain public key.
@@ -150,10 +362,20 @@ type RelayRouter struct {
 
 	s *Stage
 
-	frameCh chan RelayedPeerFrame
+	frameCh chan ifaces.RelayedPeerFrame
 }
 
-func (rr *RelayRouter) Push(frame RelayedPeerFrame) {
+const RRFrameChLen = 4
+
+func (s *Stage) makeRR() *RelayRouter {
+	return &RelayRouter{
+		ActorCommon: MakeCommon(s.Ctx, -1),
+		s:           s,
+		frameCh:     make(chan ifaces.RelayedPeerFrame, RRFrameChLen),
+	}
+}
+
+func (rr *RelayRouter) Push(frame ifaces.RelayedPeerFrame) {
 	go func() {
 		rr.frameCh <- frame
 	}()
@@ -162,7 +384,7 @@ func (rr *RelayRouter) Push(frame RelayedPeerFrame) {
 func (rr *RelayRouter) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			// TODO logging
+			L(rr).Warn("panicked", "error", v)
 			rr.Cancel()
 		}
 	}()
@@ -178,29 +400,28 @@ func (rr *RelayRouter) Run() {
 			rr.Close()
 			return
 		case frame := <-rr.frameCh:
-			if msg.LooksLikeSessionWireMessage(frame.pkt) {
-				SendMessage(rr.s.SMan.Inbox(), &SManSessionFrameFromRelay{
-					relay:          frame.srcRelay,
-					peer:           frame.srcPeer,
-					frameWithMagic: frame.pkt,
+			if msg.LooksLikeSessionWireMessage(frame.Pkt) {
+				SendMessage(rr.s.SMan.Inbox(), &actor_msg.SManSessionFrameFromRelay{
+					Relay:          frame.SrcRelay,
+					Peer:           frame.SrcPeer,
+					FrameWithMagic: frame.Pkt,
 				})
 
 				continue
 			}
 
-			in := rr.s.InConnFor(frame.srcPeer)
+			in := rr.s.InConnFor(frame.SrcPeer)
 
 			if in == nil {
 				// todo log? metric?
 				continue
 			}
 
-			in.ForwardPacket(frame.pkt)
+			in.ForwardPacket(frame.Pkt)
 		}
 	}
 }
 
 func (rr *RelayRouter) Close() {
-	//TODO implement me
-	panic("implement me")
+	// TODO nothing much to close?
 }

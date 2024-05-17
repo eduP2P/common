@@ -1,6 +1,9 @@
 package actors
 
 import (
+	"github.com/shadowjonathan/edup2p/types"
+	"github.com/shadowjonathan/edup2p/types/actor_msg"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msg"
 	"golang.org/x/exp/maps"
@@ -21,6 +24,18 @@ type DirectManager struct {
 	writeCh chan directWriteRequest
 }
 
+const DMChanWriteRequestLen = 4
+
+func (s *Stage) makeDM(udpSocket types.UDPConn) *DirectManager {
+	c := MakeCommon(s.Ctx, -1)
+	return &DirectManager{
+		ActorCommon: c,
+		sock:        MakeSockRecv(udpSocket, c.ctx),
+		s:           s,
+		writeCh:     make(chan directWriteRequest, DMChanWriteRequestLen),
+	}
+}
+
 func (dm *DirectManager) Run() {
 	defer func() {
 		if v := recover(); v != nil {
@@ -33,6 +48,8 @@ func (dm *DirectManager) Run() {
 		L(dm).Warn("tried to run agent, while already running")
 		return
 	}
+
+	go dm.sock.Run()
 
 	for {
 		select {
@@ -53,17 +70,16 @@ func (dm *DirectManager) Run() {
 			}
 
 		case frame := <-dm.sock.outCh:
-			dm.s.DRouter.Push(DirectedPeerFrame{
-				srcAddrPort: frame.src,
-				pkt:         frame.pkt,
+			dm.s.DRouter.Push(ifaces.DirectedPeerFrame{
+				SrcAddrPort: frame.src,
+				Pkt:         frame.pkt,
 			})
 		}
 	}
 }
 
 func (dm *DirectManager) Close() {
-	//TODO implement me
-	panic("implement me")
+	close(dm.writeCh)
 }
 
 // WriteTo queues a UDP write request to a certain addr-port pair.
@@ -109,10 +125,22 @@ type DirectRouter struct {
 
 	aka map[netip.AddrPort]key.NodePublic
 
-	frameCh chan DirectedPeerFrame
+	frameCh chan ifaces.DirectedPeerFrame
 }
 
-func (dr *DirectRouter) Push(frame DirectedPeerFrame) {
+const DRInboxLen = 4
+const DRFrameChLen = 4
+
+func (s *Stage) makeDR() *DirectRouter {
+	return &DirectRouter{
+		ActorCommon: MakeCommon(s.Ctx, DRInboxLen),
+		s:           s,
+		aka:         make(map[netip.AddrPort]key.NodePublic),
+		frameCh:     make(chan ifaces.DirectedPeerFrame, DRFrameChLen),
+	}
+}
+
+func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
 	go func() {
 		dr.frameCh <- frame
 	}()
@@ -138,26 +166,27 @@ func (dr *DirectRouter) Run() {
 			return
 		case m := <-dr.inbox:
 			switch m := m.(type) {
-			case *DRouterPeerAddKnownAs:
-				dr.aka[m.addrPort] = m.peer
-			case *DRouterPeerClearKnownAs:
+			case *actor_msg.DRouterPeerAddKnownAs:
+				dr.aka[m.AddrPort] = m.Peer
+			case *actor_msg.DRouterPeerClearKnownAs:
 				maps.DeleteFunc(dr.aka,
 					func(_ netip.AddrPort, peer key.NodePublic) bool {
-						return peer == m.peer
+						return peer == m.Peer
 					},
 				)
 			default:
 				dr.logUnknownMessage(m)
 			}
 		case frame := <-dr.frameCh:
-			if msg.LooksLikeSessionWireMessage(frame.pkt) {
-				SendMessage(dr.s.SMan.Inbox(), &SManSessionFrameFromAddrPort{
-					addrPort:       frame.srcAddrPort,
-					frameWithMagic: frame.pkt,
+			if msg.LooksLikeSessionWireMessage(frame.Pkt) {
+				go SendMessage(dr.s.SMan.Inbox(), &actor_msg.SManSessionFrameFromAddrPort{
+					AddrPort:       frame.SrcAddrPort,
+					FrameWithMagic: frame.Pkt,
 				})
+				continue
 			}
 
-			peer, ok := dr.aka[frame.srcAddrPort]
+			peer, ok := dr.aka[frame.SrcAddrPort]
 
 			if !ok {
 				// todo log? metric?
@@ -171,12 +200,11 @@ func (dr *DirectRouter) Run() {
 				continue
 			}
 
-			in.ForwardPacket(frame.pkt)
+			in.ForwardPacket(frame.Pkt)
 		}
 	}
 }
 
 func (dr *DirectRouter) Close() {
-	//TODO implement me
-	panic("implement me")
+	close(dr.frameCh)
 }

@@ -2,7 +2,9 @@ package msg
 
 import (
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/bin"
 	"net/netip"
+	"slices"
 )
 
 type Pong struct {
@@ -12,8 +14,7 @@ type Pong struct {
 }
 
 func (p *Pong) MarshalSessionMessage() []byte {
-	// TODO
-	panic("implement me")
+	return slices.Concat([]byte{byte(v1), byte(PongMessage)}, p.TxID[:], bin.PutAddrPort(p.Src))
 }
 
 func (p *Pong) Debug() string {

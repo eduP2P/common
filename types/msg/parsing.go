@@ -1,8 +1,11 @@
 package msg
 
 import (
+	"errors"
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/bin"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"net/netip"
 )
 
 // Session Wire header:
@@ -19,7 +22,7 @@ func LooksLikeSessionWireMessage(pkt []byte) bool {
 		return false
 	}
 
-	return string(pkt[len(Magic)]) == Magic
+	return string(pkt[:len(Magic)]) == Magic
 }
 
 func ParseSessionMessage(usrMsg []byte) (SessionMessage, error) {
@@ -44,17 +47,52 @@ func ParseSessionMessage(usrMsg []byte) (SessionMessage, error) {
 	}
 }
 
+var errTooSmall = errors.New("session message too small")
+
 func parsePing(b []byte) (*Ping, error) {
-	// TODO
-	panic("implement me")
+	if len(b) < key.Len+12 {
+		return nil, errTooSmall
+	}
+
+	txid := [12]byte(b[:12])
+	b = b[12:]
+	nKey := key.NodePublic(b[:key.Len])
+
+	return &Ping{
+		TxID:    txid,
+		NodeKey: nKey,
+	}, nil
 }
 
 func parsePong(b []byte) (*Pong, error) {
-	// TODO
-	panic("implement me")
+	if len(b) < 12+16+2 {
+		return nil, errTooSmall
+	}
+
+	txid := [12]byte(b[:12])
+	b = b[12:]
+
+	ap := bin.ParseAddrPort([18]byte(b[:18]))
+
+	return &Pong{TxID: txid, Src: ap}, nil
 }
 
 func parseRendezvous(b []byte) (*Rendezvous, error) {
-	// TODO
-	panic("implement me")
+	if len(b)%18 != 0 {
+		return nil, errors.New("malformed rendezvous addresses")
+	}
+
+	aps := make([]netip.AddrPort, 0)
+
+	for {
+		ap := bin.ParseAddrPort([18]byte(b[:18]))
+		aps = append(aps, ap)
+		b = b[18:]
+
+		if len(b) == 0 {
+			break
+		}
+	}
+
+	return &Rendezvous{MyAddresses: aps}, nil
 }

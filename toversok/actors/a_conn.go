@@ -2,6 +2,8 @@ package actors
 
 import (
 	"context"
+	"github.com/shadowjonathan/edup2p/types"
+	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"net/netip"
 	"time"
@@ -15,7 +17,8 @@ type OutConn struct {
 
 	// If true, conn will send packets to the relay manager with toRelay,
 	// else, conn will send packets to the direct manager with toAddrPort.
-	useRelay bool
+	useRelay  bool
+	trackHome bool
 
 	toRelay    int64
 	toAddrPort netip.AddrPort
@@ -26,11 +29,11 @@ type OutConn struct {
 	isActive      bool
 }
 
-func MakeOutConn(udp UDPConn, peer key.NodePublic, homeRelay int64, s *Stage) *OutConn {
+func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Stage) *OutConn {
 	t := time.NewTimer(60 * time.Second)
 	t.Stop()
 
-	common := MakeCommon(s.ctx, OutConnInboxChanBuffer)
+	common := MakeCommon(s.Ctx, OutConnInboxChanBuffer)
 
 	return &OutConn{
 		ActorCommon: common,
@@ -72,16 +75,19 @@ func (oc *OutConn) Run() {
 		case <-oc.activityTimer.C:
 			oc.UnBump()
 		case msg := <-oc.inbox:
-			use, ok := msg.(*OutConnUse)
+			switch m := msg.(type) {
+			case *actor_msg.OutConnUse:
+				oc.useRelay = m.UseRelay
+				oc.trackHome = m.TrackHome
+				oc.toRelay = m.RelayToUse
+				oc.toAddrPort = m.AddrPortToUse
 
-			if !ok {
-				oc.logUnknownMessage(msg)
-				continue
+				oc.doTrackHome()
+			case *actor_msg.SyncPeerInfo:
+				oc.doTrackHome()
+			default:
+				oc.logUnknownMessage(m)
 			}
-
-			oc.useRelay = use.useRelay
-			oc.toRelay = use.relayToUse
-			oc.toAddrPort = use.addrPortToUse
 		case frame, ok := <-oc.sock.outCh:
 			if !ok {
 				// sock closed, the peer is dead
@@ -104,7 +110,10 @@ func (oc *OutConn) Run() {
 // Bump the activity timer.
 func (oc *OutConn) Bump() {
 	if !oc.activityTimer.Stop() {
-		<-oc.activityTimer.C
+		select {
+		case <-oc.activityTimer.C:
+		default:
+		}
 	}
 	oc.activityTimer.Reset(ConnActivityInterval)
 
@@ -123,19 +132,27 @@ func (oc *OutConn) UnBump() {
 }
 
 func (oc *OutConn) SendActivity(isActive bool) {
-	oc.s.TMan.Inbox() <- &TManConnActivity{
-		peer:     oc.peer,
-		isIn:     false,
-		isActive: isActive,
+	oc.s.TMan.Inbox() <- &actor_msg.TManConnActivity{
+		Peer:     oc.peer,
+		IsIn:     false,
+		IsActive: isActive,
 	}
 }
 
-func (oc *OutConn) Inbox() chan<- ActorMessage {
-	return oc.inbox
+func (oc *OutConn) doTrackHome() {
+	if oc.trackHome {
+		pi := oc.s.GetPeerInfo(oc.peer)
+
+		if pi == nil {
+			L(oc).Warn("tried to update home relay, peerinfo is gone", "peer", oc.peer.Debug())
+		}
+
+		oc.toRelay = pi.HomeRelay
+	}
 }
 
-func (oc *OutConn) Cancel() {
-	oc.ctxCan()
+func (oc *OutConn) Inbox() chan<- actor_msg.ActorMessage {
+	return oc.inbox
 }
 
 func (oc *OutConn) Close() {
@@ -144,10 +161,12 @@ func (oc *OutConn) Close() {
 
 	oc.activityTimer.Stop()
 
-	oc.s.TMan.Inbox() <- &TManConnGoodBye{
-		peer: oc.peer,
-		isIn: false,
+	oc.s.TMan.Inbox() <- &actor_msg.TManConnGoodBye{
+		Peer: oc.peer,
+		IsIn: false,
 	}
+
+	L(oc).Debug("closed outconn", "peer", oc.peer)
 }
 
 func (oc *OutConn) Ctx() context.Context {
@@ -161,7 +180,7 @@ type InConn struct {
 
 	s *Stage
 
-	udp UDPConn
+	udp types.UDPConn
 
 	pktCh chan []byte
 
@@ -171,12 +190,12 @@ type InConn struct {
 	isActive      bool
 }
 
-func MakeInConn(udp UDPConn, peer key.NodePublic, s *Stage) *InConn {
+func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 	t := time.NewTimer(60 * time.Second)
 	t.Stop()
 
 	return &InConn{
-		ActorCommon: MakeCommon(s.ctx, -1),
+		ActorCommon: MakeCommon(s.Ctx, -1),
 
 		s: s,
 
@@ -230,9 +249,9 @@ func (ic *InConn) Run() {
 func (ic *InConn) Close() {
 	ic.activityTimer.Stop()
 
-	ic.s.TMan.Inbox() <- &TManConnGoodBye{
-		peer: ic.peer,
-		isIn: false,
+	ic.s.TMan.Inbox() <- &actor_msg.TManConnGoodBye{
+		Peer: ic.peer,
+		IsIn: false,
 	}
 }
 
@@ -257,7 +276,10 @@ func (ic *InConn) ForwardPacket(pkt []byte) {
 // Bump the activity timer.
 func (ic *InConn) Bump() {
 	if !ic.activityTimer.Stop() {
-		<-ic.activityTimer.C
+		select {
+		case <-ic.activityTimer.C:
+		default:
+		}
 	}
 	ic.activityTimer.Reset(ConnActivityInterval)
 
@@ -276,9 +298,9 @@ func (ic *InConn) UnBump() {
 }
 
 func (ic *InConn) SendActivity(isActive bool) {
-	ic.s.TMan.Inbox() <- &TManConnActivity{
-		peer:     ic.peer,
-		isIn:     true,
-		isActive: isActive,
+	ic.s.TMan.Inbox() <- &actor_msg.TManConnActivity{
+		Peer:     ic.peer,
+		IsIn:     true,
+		IsActive: isActive,
 	}
 }

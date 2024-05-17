@@ -2,7 +2,9 @@ package msg
 
 import (
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/bin"
 	"net/netip"
+	"slices"
 )
 
 type Rendezvous struct {
@@ -10,8 +12,13 @@ type Rendezvous struct {
 }
 
 func (r *Rendezvous) MarshalSessionMessage() []byte {
-	// TODO
-	panic("implement me")
+	b := make([]byte, 0)
+
+	for _, ap := range r.MyAddresses {
+		b = append(b, bin.PutAddrPort(ap)...)
+	}
+
+	return slices.Concat([]byte{byte(v1), byte(RendezvousMessage)}, b)
 }
 
 func (r *Rendezvous) Debug() string {

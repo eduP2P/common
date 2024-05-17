@@ -2,12 +2,17 @@ package key
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"github.com/shadowjonathan/edup2p/types"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
 )
 
 type SessionPublic NakedKey
+
+func (n SessionPublic) Debug() string {
+	return fmt.Sprintf("%x", n)
+}
 
 // MakeSessionPublic parses a 32-byte raw value as a SessionPublic.
 //
@@ -38,6 +43,13 @@ func NewSession() SessionPrivate {
 	// Key used for nacl seal/open, so needs to be clamped.
 	clamp25519Private(ret.key[:])
 	return ret
+}
+
+// DevNewSessionFromPrivate creates a new SessionPrivate by copying a NodePrivate
+//
+// Deprecated: Must only be used for development.
+func DevNewSessionFromPrivate(priv NodePrivate) SessionPrivate {
+	return SessionPrivate{key: priv.key}
 }
 
 // IsZero reports whether k is the zero value.

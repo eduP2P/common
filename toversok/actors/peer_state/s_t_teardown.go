@@ -23,7 +23,7 @@ func (t *Teardown) Name() string {
 
 func (t *Teardown) OnTick() PeerState {
 	t.tm.DManClearAKA(t.peer)
-	t.tm.OutConnUseRelay(t.peer, t.mustPeerInfo().HomeRelay)
+	t.tm.OutConnTrackHome(t.peer)
 
 	if t.inactive {
 		return LogTransition(t, &Inactive{

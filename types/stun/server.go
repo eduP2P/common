@@ -1,9 +1,8 @@
-package stunserver
+package stun
 
 import (
 	"context"
 	"errors"
-	"github.com/shadowjonathan/edup2p/types/stun"
 	"io"
 	"log"
 	"log/slog"
@@ -63,19 +62,19 @@ func (s *Server) Serve() error {
 		}
 
 		pkt := buf[:n]
-		if !stun.Is(pkt) {
+		if !Is(pkt) {
 			// Just drop it (like its hot)
 			continue
 		}
 
-		txid, err := stun.ParseBindingRequest(pkt)
+		txid, err := ParseBindingRequest(pkt)
 		if err != nil {
 			slog.Debug("ParseBindingRequest failed", "error", err)
 			continue
 		}
 
 		addr, _ := netip.AddrFromSlice(ua.IP)
-		res := stun.Response(txid, netip.AddrPortFrom(addr, uint16(ua.Port)))
+		res := Response(txid, netip.AddrPortFrom(addr, uint16(ua.Port)))
 
 		if _, err = s.pc.WriteTo(res, ua); err != nil {
 			slog.Info("writing back STUN response failed", "error", err)

@@ -6,11 +6,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/server/relay"
-	stunserver "github.com/shadowjonathan/edup2p/server/stun"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/shadowjonathan/edup2p/types/relay/relayhttp"
+	stunserver "github.com/shadowjonathan/edup2p/types/stun"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -47,8 +49,16 @@ func main() {
 	defer cancel()
 
 	if *dev {
-		*addr = ":3340"
+		*addr = "127.0.0.1:3340"
 		log.Printf("Running in dev mode.")
+	}
+
+	// TODO remove. fuck it, we ball
+	{
+		programLevel := new(slog.LevelVar) // Info by default
+		h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: programLevel})
+		slog.SetDefault(slog.New(h))
+		programLevel.Set(slog.LevelDebug)
 	}
 
 	listenHost, _, err := net.SplitHostPort(*addr)
@@ -76,7 +86,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/relay", Handler(server))
+	mux.Handle("/relay", relayhttp.ServerHandler(server))
 
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		browserHeaders(w)
@@ -111,7 +121,7 @@ func main() {
 
 	// TODO setup TLS with autocert
 
-	log.Printf("relay: serving on %s", *addr)
+	slog.Info("relay: serving", "addr", *addr)
 	err = httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
