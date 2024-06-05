@@ -2,7 +2,6 @@ package ifaces
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/relay"
 	"github.com/shadowjonathan/edup2p/types/stage"
 	"net/netip"
 )
@@ -11,14 +10,12 @@ import (
 type Stage interface {
 	Start()
 
-	AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic) error
+	ControlCallbacks
+
 	UpdateHomeRelay(peer key.NodePublic, relay int64) error
 	UpdateSessionKey(peer key.NodePublic, session key.SessionPublic) error
 	SetEndpoints(peer key.NodePublic, endpoints []netip.AddrPort) error
-	RemovePeer(peer key.NodePublic)
-
-	UpdateRelays(relays []relay.RelayInformation)
 
 	GetPeerInfo(peer key.NodePublic) *stage.PeerInfo
-	GetLocalEndpoints() []netip.AddrPort
+	GetEndpoints() []netip.AddrPort
 }

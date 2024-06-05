@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"github.com/shadowjonathan/edup2p/toversok/actors"
 	"github.com/shadowjonathan/edup2p/types"
+	"github.com/shadowjonathan/edup2p/types/dial"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/relay"
+	"log"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -20,8 +23,13 @@ type EngineOptions struct {
 
 	PrivKey key.NakedKey
 
-	IP4 netip.Prefix
-	IP6 netip.Prefix
+	Control    dial.Opts
+	ControlKey key.ControlPublic
+
+	// Do not contact control
+	OverrideControl bool
+	OverrideIPv4    netip.Prefix
+	OverrideIPv6    netip.Prefix
 
 	ExtBindPort uint16
 
@@ -45,6 +53,9 @@ func mappingFromUDPConn(udp *net.UDPConn) *mapping {
 	}
 }
 
+// TODO add stall support;
+//   make sure control logon rejects (with retry) are handled by restarting the entire engine
+
 type Engine struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
@@ -54,6 +65,9 @@ type Engine struct {
 	// Mapping of peers to local ports
 	localMapping map[key.NodePublic]*mapping
 	extBind      *types.UDPConnCloseCatcher
+
+	nodePriv key.NodePrivate
+	sessPriv key.SessionPrivate
 
 	extPort uint16
 
@@ -114,6 +128,18 @@ func NewEngine(opts EngineOptions) (*Engine, error) {
 		slog.Warn("initialising toversok with nil FirewallConfigurator")
 	}
 
+	var nodePriv = key.NodePrivateFrom(opts.PrivKey)
+
+	var sessPriv key.SessionPrivate
+
+	const DEBUG = true
+
+	if DEBUG {
+		sessPriv = key.DevNewSessionFromPrivate(nodePriv)
+	} else {
+		sessPriv = key.NewSession()
+	}
+
 	e := &Engine{
 		ctx: opts.Ctx,
 		ccc: opts.Ccc,
@@ -122,19 +148,55 @@ func NewEngine(opts EngineOptions) (*Engine, error) {
 
 		extPort: opts.ExtBindPort,
 
+		nodePriv: nodePriv,
+		sessPriv: sessPriv,
+
 		wg: opts.WG,
 		fw: opts.FW,
 	}
 
+	var c ifaces.FullControlInterface
 	var err error
-	e.wgPort, err = e.wg.Init(opts.PrivKey, opts.IP4, opts.IP6)
+
+	if opts.OverrideControl {
+		c = &FakeControl{
+			controlKey: opts.ControlKey,
+			ipv4:       opts.OverrideIPv4,
+			ipv6:       opts.OverrideIPv6,
+		}
+	} else {
+		c, err = e.login(opts.Control, opts.ControlKey)
+		if err != nil {
+			return nil, fmt.Errorf("could not create control client: %w", err)
+		}
+	}
+
+	e.wgPort, err = e.wg.Init(opts.PrivKey, c.IPv4(), c.IPv6())
 	if err != nil {
 		return nil, err
 	}
 
-	e.stage = actors.MakeStage(opts.Ctx, key.NodePrivateFrom(opts.PrivKey), e.getExtConn, e.ensuredConnFor)
+	e.stage = actors.MakeStage(opts.Ctx, nodePriv, sessPriv, e.getExtConn, e.ensuredConnFor, c)
+
+	if err := c.InstallCallbacks(e); err != nil {
+		log.Fatalf("could not install callbacks: %s", err)
+	}
 
 	return e, nil
+}
+
+// Login to control
+func (e *Engine) login(control dial.Opts, controlKey key.ControlPublic) (ifaces.FullControlInterface, error) {
+	slog.Info("engine: control login")
+
+	return CreateControlSession(e.ctx, control, controlKey,
+		func() *key.NodePrivate {
+			return &e.nodePriv
+		},
+		func() *key.SessionPrivate {
+			return &e.sessPriv
+		},
+	)
 }
 
 func (e *Engine) ensuredConnFor(key key.NodePublic) types.UDPConn {
@@ -236,53 +298,111 @@ const WGKeepAlive = time.Second * 20
 func (e *Engine) Handle(ev Event) error {
 	switch ev := ev.(type) {
 	case PeerAddition:
-		m := e.bindLocal()
-		e.localMapping[ev.Key] = m
-
-		//keepAlive := WGKeepAlive
-
-		if err := e.wg.UpdatePeer(ev.Key, PeerCfg{
-			Set:               true,
-			VIPs:              &ev.VIPs,
-			KeepAliveInterval: nil,
-			LocalEndpointPort: &m.port,
-		}); err != nil {
-			return fmt.Errorf("failed to update wireguard: %w", err)
-		}
-
-		if err := e.stage.AddPeer(ev.Key, ev.HomeRelayId, ev.Endpoints, ev.SessionKey); err != nil {
-			return fmt.Errorf("failed to update stage: %w", err)
-		}
+		return e.AddPeer(ev.Key, ev.HomeRelayId, ev.Endpoints, ev.SessionKey, ev.VIPs.IPv4, ev.VIPs.IPv6)
 	case PeerUpdate:
-		if ev.Endpoints.Present {
-			if err := e.stage.SetEndpoints(ev.Key, ev.Endpoints.Val); err != nil {
-				return fmt.Errorf("failed to update endpoints: %w", err)
-			}
-		}
+		// FIXME the reason for the panic below is because this function is essentially deprecated, and it still uses
+		//  gonull, which is a pain
+		panic("cannot handle PeerUpdate via handle")
 
-		if ev.SessionKey.Present {
-			if err := e.stage.UpdateSessionKey(ev.Key, ev.SessionKey.Val); err != nil {
-				return fmt.Errorf("failed to update session key: %w", err)
-			}
-		}
-
-		if ev.HomeRelayId.Present {
-			if err := e.stage.UpdateHomeRelay(ev.Key, ev.HomeRelayId.Val); err != nil {
-				return fmt.Errorf("failed to update home relay: %w", err)
-			}
-		}
+		//if ev.Endpoints.Present {
+		//	if err := e.stage.SetEndpoints(ev.Key, ev.Endpoints.Val); err != nil {
+		//		return fmt.Errorf("failed to update endpoints: %w", err)
+		//	}
+		//}
+		//
+		//if ev.SessionKey.Present {
+		//	if err := e.stage.UpdateSessionKey(ev.Key, ev.SessionKey.Val); err != nil {
+		//		return fmt.Errorf("failed to update session key: %w", err)
+		//	}
+		//}
+		//
+		//if ev.HomeRelayId.Present {
+		//	if err := e.stage.UpdateHomeRelay(ev.Key, ev.HomeRelayId.Val); err != nil {
+		//		return fmt.Errorf("failed to update home relay: %w", err)
+		//	}
+		//}
 	case PeerRemoval:
-		e.stage.RemovePeer(ev.Key)
-
-		if err := e.wg.RemovePeer(ev.Key); err != nil {
-			return fmt.Errorf("failed to remove peer from wireguard: %w", err)
-		}
+		return e.RemovePeer(ev.Key)
 	case RelayUpdate:
-		e.stage.UpdateRelays(ev.Set)
+		return e.UpdateRelays(ev.Set)
 	default:
 		// TODO warn-log about unknown type instead of panic
 		panic("Unknown type!")
 	}
 
+	return nil
+}
+
+func (e *Engine) ClearPeers() {
+	e.stage.ClearPeers()
+}
+
+func (e *Engine) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr) error {
+	m := e.bindLocal()
+	e.localMapping[peer] = m
+
+	if err := e.wg.UpdatePeer(peer, PeerCfg{
+		Set: true,
+		VIPs: &VirtualIPs{
+			IPv4: ip4,
+			IPv6: ip6,
+		},
+		KeepAliveInterval: nil,
+		LocalEndpointPort: &m.port,
+	}); err != nil {
+		return fmt.Errorf("failed to update wireguard: %w", err)
+	}
+
+	if err := e.stage.AddPeer(peer, homeRelay, endpoints, session, ip4, ip6); err != nil {
+		return fmt.Errorf("failed to update stage: %w", err)
+	}
+	return nil
+}
+
+func (e *Engine) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error {
+	return e.stage.UpdatePeer(peer, homeRelay, endpoints, session)
+}
+
+func (e *Engine) RemovePeer(peer key.NodePublic) error {
+	if err := e.stage.RemovePeer(peer); err != nil {
+		return err
+	}
+
+	if err := e.wg.RemovePeer(peer); err != nil {
+		return fmt.Errorf("failed to remove peer from wireguard: %w", err)
+	}
+
+	return nil
+}
+
+func (e *Engine) UpdateRelays(relay []relay.Information) error {
+	return e.stage.UpdateRelays(relay)
+}
+
+type FakeControl struct {
+	controlKey key.ControlPublic
+	ipv4       netip.Prefix
+	ipv6       netip.Prefix
+}
+
+func (f *FakeControl) ControlKey() key.ControlPublic {
+	return f.controlKey
+}
+
+func (f *FakeControl) IPv4() netip.Prefix {
+	return f.ipv4
+}
+
+func (f *FakeControl) IPv6() netip.Prefix {
+	return f.ipv6
+}
+
+func (f *FakeControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) error {
+	// NOP
+	return nil
+}
+
+func (f *FakeControl) UpdateEndpoints(ports []netip.AddrPort) error {
+	// NOP
 	return nil
 }

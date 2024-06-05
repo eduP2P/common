@@ -1,4 +1,4 @@
-package actor_msg
+package msgactor
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"

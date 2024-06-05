@@ -3,7 +3,7 @@ package peer_state
 import (
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 )
 
@@ -23,7 +23,7 @@ func (w *WaitingForInfo) OnTick() PeerState {
 	}
 }
 
-func (w *WaitingForInfo) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState {
+func (w *WaitingForInfo) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {
 	s := cascadeDirect(w, ap, clear)
 
 	if s == nil {
@@ -34,7 +34,7 @@ func (w *WaitingForInfo) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) Pe
 	return s
 }
 
-func (w *WaitingForInfo) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState {
+func (w *WaitingForInfo) OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState {
 	s := cascadeRelay(w, relay, peer, clear)
 
 	if s == nil {

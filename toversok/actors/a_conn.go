@@ -3,8 +3,8 @@ package actors
 import (
 	"context"
 	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
 	"net/netip"
 	"time"
 )
@@ -76,14 +76,14 @@ func (oc *OutConn) Run() {
 			oc.UnBump()
 		case msg := <-oc.inbox:
 			switch m := msg.(type) {
-			case *actor_msg.OutConnUse:
+			case *msgactor.OutConnUse:
 				oc.useRelay = m.UseRelay
 				oc.trackHome = m.TrackHome
 				oc.toRelay = m.RelayToUse
 				oc.toAddrPort = m.AddrPortToUse
 
 				oc.doTrackHome()
-			case *actor_msg.SyncPeerInfo:
+			case *msgactor.SyncPeerInfo:
 				oc.doTrackHome()
 			default:
 				oc.logUnknownMessage(m)
@@ -132,7 +132,7 @@ func (oc *OutConn) UnBump() {
 }
 
 func (oc *OutConn) SendActivity(isActive bool) {
-	oc.s.TMan.Inbox() <- &actor_msg.TManConnActivity{
+	oc.s.TMan.Inbox() <- &msgactor.TManConnActivity{
 		Peer:     oc.peer,
 		IsIn:     false,
 		IsActive: isActive,
@@ -151,7 +151,7 @@ func (oc *OutConn) doTrackHome() {
 	}
 }
 
-func (oc *OutConn) Inbox() chan<- actor_msg.ActorMessage {
+func (oc *OutConn) Inbox() chan<- msgactor.ActorMessage {
 	return oc.inbox
 }
 
@@ -161,7 +161,7 @@ func (oc *OutConn) Close() {
 
 	oc.activityTimer.Stop()
 
-	oc.s.TMan.Inbox() <- &actor_msg.TManConnGoodBye{
+	oc.s.TMan.Inbox() <- &msgactor.TManConnGoodBye{
 		Peer: oc.peer,
 		IsIn: false,
 	}
@@ -249,7 +249,7 @@ func (ic *InConn) Run() {
 func (ic *InConn) Close() {
 	ic.activityTimer.Stop()
 
-	ic.s.TMan.Inbox() <- &actor_msg.TManConnGoodBye{
+	ic.s.TMan.Inbox() <- &msgactor.TManConnGoodBye{
 		Peer: ic.peer,
 		IsIn: false,
 	}
@@ -298,7 +298,7 @@ func (ic *InConn) UnBump() {
 }
 
 func (ic *InConn) SendActivity(isActive bool) {
-	ic.s.TMan.Inbox() <- &actor_msg.TManConnActivity{
+	ic.s.TMan.Inbox() <- &msgactor.TManConnActivity{
 		Peer:     ic.peer,
 		IsIn:     true,
 		IsActive: isActive,

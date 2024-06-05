@@ -10,6 +10,7 @@ import (
 	"github.com/abiosoft/ishell/v2"
 	"github.com/shadowjonathan/edup2p/toversok"
 	"github.com/shadowjonathan/edup2p/toversok/actors"
+	"github.com/shadowjonathan/edup2p/types/dial"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/relay"
 	"golang.zx2c4.com/wireguard/wgctrl"
@@ -29,6 +30,8 @@ var (
 	ip4          *netip.Prefix
 	ip6          *netip.Prefix
 	extPort      uint16
+	controlOpts  *dial.Opts
+	controlKey   *key.ControlPublic
 	engine       *toversok.Engine
 	eccc         context.CancelCauseFunc
 )
@@ -77,6 +80,7 @@ func main() {
 	shell.AddCmd(wgCmd())
 	shell.AddCmd(tsCmd())
 	shell.AddCmd(keyCmd())
+	shell.AddCmd(ctrlCmd())
 
 	shell.Run()
 }
@@ -137,6 +141,122 @@ func keyCmd() *ishell.Cmd {
 	return c
 }
 
+func ctrlCmd() *ishell.Cmd {
+	c := &ishell.Cmd{
+		Name:    "control",
+		Help:    "manipulate control variables",
+		Aliases: []string{"ctrl"},
+		Func: func(c *ishell.Context) {
+			if controlOpts == nil {
+				c.Println("control dial opts: nil")
+			} else {
+				c.Println("control dial opts:", *controlOpts)
+			}
+
+			if controlKey == nil {
+				c.Println("control key: nil")
+			} else {
+				c.Println("control key:", controlKey.Debug())
+			}
+		},
+	}
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "key",
+		Help: "set a key",
+		Func: func(c *ishell.Context) {
+			var line string
+			if len(c.Args) == 0 {
+				c.Println("enter the key, with 'control:' prefix")
+				line = c.ReadLine()
+			} else {
+				line = c.Args[0]
+			}
+
+			if p, err := key.UnmarshalControlPublic(line); err != nil {
+				c.Err(err)
+				return
+			} else {
+				controlKey = p
+			}
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "domain",
+		Help: "set domain of control opts",
+		Func: func(c *ishell.Context) {
+			var line string
+			if len(c.Args) == 0 {
+				c.Println("enter domain")
+				line = c.ReadLine()
+			} else {
+				line = c.Args[0]
+			}
+
+			if controlOpts == nil {
+				controlOpts = new(dial.Opts)
+			}
+
+			controlOpts.Domain = line
+
+			c.Println("set domain")
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "ip",
+		Help: "set ip of control opts",
+		Func: func(c *ishell.Context) {
+			var line string
+			if len(c.Args) == 0 {
+				c.Println("enter ip")
+				line = c.ReadLine()
+			} else {
+				line = c.Args[0]
+			}
+
+			if controlOpts == nil {
+				controlOpts = new(dial.Opts)
+			}
+
+			var ip netip.Addr
+			var err error
+
+			if ip, err = netip.ParseAddr(line); err != nil {
+				c.Err(err)
+				return
+			}
+
+			controlOpts.Addrs = []netip.Addr{ip}
+
+			c.Println("set ip")
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "port",
+		Help: "set port of control opts",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) == 0 {
+				c.Err(errors.New("set port in args"))
+			}
+
+			if controlOpts == nil {
+				controlOpts = new(dial.Opts)
+			}
+
+			if i, err := strconv.ParseInt(c.Args[0], 10, 16); err != nil {
+				c.Err(err)
+			} else {
+				controlOpts.Port = uint16(i)
+				c.Println("set port:", controlOpts.Port)
+			}
+		},
+	})
+
+	return c
+}
 func wgCmd() *ishell.Cmd {
 	c := &ishell.Cmd{
 		Name: "wg",
@@ -164,6 +284,11 @@ func wgCmd() *ishell.Cmd {
 
 			if len(c.Args) != 0 {
 				device = c.Args[0]
+
+				if _, err := client.Device(device); err != nil {
+					c.Err(err)
+					return
+				}
 			} else {
 				devices, err := client.Devices()
 				if err != nil {
@@ -275,10 +400,13 @@ func tsCmd() *ishell.Cmd {
 		Help: "create a new engine, stopping the previous one if it already existed",
 		Func: func(c *ishell.Context) {
 			var err error
-			if ip4 == nil {
-				err = errors.New("ip4 is not set")
-			} else if ip6 == nil {
-				err = errors.New("ip6 is not set")
+
+			if controlOpts == nil && controlKey == nil && ip4 == nil && ip6 == nil {
+				err = errors.New("ip or control options not set")
+			} else if (controlOpts != nil || controlKey != nil) && (controlOpts == nil || controlKey == nil) {
+				err = errors.New("control partially set")
+			} else if (ip4 != nil || ip6 != nil) && (ip4 == nil || ip6 == nil) {
+				err = errors.New("ip partially set")
 			} else if wg == nil {
 				err = errors.New("wg is not set")
 			} else if privKey == nil {
@@ -303,10 +431,17 @@ func tsCmd() *ishell.Cmd {
 				Ccc:         ccc,
 				PrivKey:     key.UnveilPrivate(*privKey),
 				ExtBindPort: extPort,
-				IP4:         *ip4,
-				IP6:         *ip6,
 				WG:          wg,
 				FW:          nil,
+			}
+
+			if controlKey != nil {
+				opts.Control = *controlOpts
+				opts.ControlKey = *controlKey
+			} else {
+				opts.OverrideControl = true
+				opts.OverrideIPv4 = *ip4
+				opts.OverrideIPv6 = *ip6
 			}
 
 			e, err := toversok.NewEngine(opts)
@@ -584,7 +719,7 @@ func tsCmd() *ishell.Cmd {
 				return
 			}
 
-			ri := relay.RelayInformation{
+			ri := relay.Information{
 				ID:     id,
 				Key:    *relayKey,
 				Domain: *domain,
@@ -610,22 +745,25 @@ func tsCmd() *ishell.Cmd {
 					addrs = append(addrs, a)
 				}
 
-				ri.IPs = gonull.NewNullable(addrs)
+				ri.IPs = addrs
 			}
 
 			if *stunPort != math.MaxInt {
-				ri.STUNPort = gonull.NewNullable((uint16)(*stunPort))
+				stunPort := uint16(*stunPort)
+				ri.STUNPort = &stunPort
 			}
 
 			if *httpPort != math.MaxInt {
-				ri.HTTPPort = gonull.NewNullable((uint16)(*httpPort))
+				httpPort := uint16(*httpPort)
+				ri.HTTPPort = &httpPort
 			}
 
 			if *httpsPort != math.MaxInt {
-				ri.HTTPSPort = gonull.NewNullable((uint16)(*httpsPort))
+				httpsPort := uint16(*httpsPort)
+				ri.HTTPSPort = &httpsPort
 			}
 
-			if err = engine.Handle(toversok.RelayUpdate{Set: []relay.RelayInformation{ri}}); err != nil {
+			if err = engine.Handle(toversok.RelayUpdate{Set: []relay.Information{ri}}); err != nil {
 				c.Err(err)
 			}
 		},

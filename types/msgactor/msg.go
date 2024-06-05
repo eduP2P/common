@@ -1,8 +1,8 @@
-package actor_msg
+package msgactor
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"github.com/shadowjonathan/edup2p/types/relay"
 	"net/netip"
 )
@@ -34,13 +34,13 @@ type TManSessionMessageFromRelay struct {
 	Peer key.NodePublic
 
 	// session key from the session message
-	Msg *msg.ClearMessage
+	Msg *msgsess.ClearMessage
 }
 
 type TManSessionMessageFromDirect struct {
 	AddrPort netip.AddrPort
 
-	Msg *msg.ClearMessage
+	Msg *msgsess.ClearMessage
 }
 
 // ======================================================================================================
@@ -67,7 +67,7 @@ type SManSendSessionMessageToRelay struct {
 
 	ToSession key.SessionPublic
 
-	Msg msg.SessionMessage
+	Msg msgsess.SessionMessage
 }
 
 type SManSendSessionMessageToDirect struct {
@@ -75,7 +75,7 @@ type SManSendSessionMessageToDirect struct {
 
 	ToSession key.SessionPublic
 
-	Msg msg.SessionMessage
+	Msg msgsess.SessionMessage
 }
 
 // ======================================================================================================
@@ -132,6 +132,18 @@ type DRouterPeerAddKnownAs struct {
 	AddrPort netip.AddrPort
 }
 
+type DRouterPushSTUN struct {
+	Packets map[netip.AddrPort][]byte
+}
+
+// ====
+
+type EManSTUNResponse struct {
+	Endpoint netip.AddrPort
+
+	Packet []byte
+}
+
 // ====
 
 type SyncPeerInfo struct {
@@ -139,5 +151,5 @@ type SyncPeerInfo struct {
 }
 
 type UpdateRelayConfiguration struct {
-	Config []relay.RelayInformation
+	Config []relay.Information
 }

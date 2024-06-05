@@ -1,4 +1,4 @@
-package msg
+package msgsess
 
 import "github.com/shadowjonathan/edup2p/types/key"
 

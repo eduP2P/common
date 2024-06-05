@@ -2,7 +2,7 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msg"
+	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 )
 
@@ -18,7 +18,11 @@ func (e *EstRendezGot) Name() string {
 }
 
 func (e *EstRendezGot) OnTick() PeerState {
-	pi := e.mustPeerInfo()
+	pi := e.getPeerInfo()
+	if pi == nil {
+		// Peer info unavailable
+		return nil
+	}
 
 	pi.RendezvousEndpoints = e.m.MyAddresses
 

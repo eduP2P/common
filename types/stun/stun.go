@@ -26,6 +26,8 @@ const (
 	lenFingerprint = 8 // 2+byte header + 2-byte length + 4-byte crc32
 
 	thisSoftware = "toversok" // 8 bytes
+
+	DefaultPort = 3478
 )
 
 // Is reports whether b is a STUN message.

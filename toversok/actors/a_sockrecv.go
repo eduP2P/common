@@ -97,5 +97,11 @@ func (r *SockRecv) Run() {
 
 func (r *SockRecv) Close() {
 	r.Conn.Close()
-	close(r.outCh)
+	select {
+	case <-r.ctx.Done():
+		return
+	default:
+		close(r.outCh)
+	}
+
 }

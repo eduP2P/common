@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/conn"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"io"
 	"log/slog"
 	"net/netip"
@@ -43,11 +44,8 @@ func (s *Server) L() *slog.Logger {
 	return slog.With("relay-server", s.pubKey.Debug())
 }
 
-type AbstractConn interface {
-	io.Closer
-	SetDeadline(time.Time) error
-	SetReadDeadline(time.Time) error
-	SetWriteDeadline(time.Time) error
+func (s *Server) Logger() *slog.Logger {
+	return s.L()
 }
 
 func (s *Server) sendVersion(writer *bufio.Writer) error {
@@ -88,7 +86,7 @@ func (s *Server) receiveClientKeyAndInfo(reader *bufio.Reader) (clientKey key.No
 		return
 	}
 
-	const minLen = key.Len + msg.NaclBoxNonceLen
+	const minLen = key.Len + msgsess.NaclBoxNonceLen
 	if frLen < minLen {
 		err = errors.New("short client info")
 		return
@@ -136,7 +134,7 @@ func (s *Server) sendServerInfo(client *ServerClient) error {
 	return client.buffWriter.Flush()
 }
 
-func (s *Server) Accept(ctx context.Context, nc AbstractConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
+func (s *Server) Accept(ctx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
 	reader := brw.Reader
 	// TODO: Tailscale mentions that bufio writer buffers take up a large portion of their memory,
 	//  and so they've made an implementation that lazily grabs memory from a pool,
@@ -144,7 +142,7 @@ func (s *Server) Accept(ctx context.Context, nc AbstractConn, brw *bufio.ReadWri
 	//  We could do the same, but this is simpler for now.
 	writer := brw.Writer
 
-	nc.SetDeadline(time.Now().Add(10 * time.Second))
+	mc.SetDeadline(time.Now().Add(10 * time.Second))
 
 	if err := s.sendVersion(writer); err != nil {
 		return fmt.Errorf("send version: %w", err)
@@ -154,7 +152,7 @@ func (s *Server) Accept(ctx context.Context, nc AbstractConn, brw *bufio.ReadWri
 		return fmt.Errorf("send server key: %w", err)
 	}
 
-	nc.SetDeadline(time.Now().Add(10 * time.Second))
+	mc.SetDeadline(time.Now().Add(10 * time.Second))
 	clientKey, clientInfo, err := s.receiveClientKeyAndInfo(reader)
 	if err != nil {
 		return err
@@ -163,7 +161,7 @@ func (s *Server) Accept(ctx context.Context, nc AbstractConn, brw *bufio.ReadWri
 	// TODO add verification here?
 
 	// We now trust the client, clear deadline.
-	nc.SetDeadline(time.Time{})
+	mc.SetDeadline(time.Time{})
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -176,7 +174,7 @@ func (s *Server) Accept(ctx context.Context, nc AbstractConn, brw *bufio.ReadWri
 
 		server:  s,
 		nodeKey: clientKey,
-		netConn: nc,
+		netConn: mc,
 
 		buffReader: reader,
 		buffWriter: writer,

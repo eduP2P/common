@@ -3,7 +3,7 @@ package peer_state
 import (
 	"context"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"log/slog"
 	"net/netip"
 )
@@ -11,7 +11,7 @@ import (
 // cascadeDirect makes it so that first we call the default "tick" function of a peer's state,
 // and if that requests a state transition, call a PeerState.OnDirect with the original arguments,
 // and return the requested state change with that one if it returns one.
-func cascadeDirect(so PeerState, ap netip.AddrPort, clear *msg.ClearMessage) (s PeerState) {
+func cascadeDirect(so PeerState, ap netip.AddrPort, clear *msgsess.ClearMessage) (s PeerState) {
 	if s1 := so.OnTick(); s1 != nil {
 		if s2 := s1.OnDirect(ap, clear); s2 != nil {
 			s = s2
@@ -26,7 +26,7 @@ func cascadeDirect(so PeerState, ap netip.AddrPort, clear *msg.ClearMessage) (s 
 // cascadeRelay makes it so that first we call the default "tick" function of a peer's state,
 // and if that requests a state transition, call a PeerState.OnRelay with the original arguments,
 // and return the requested state change with that one if it returns one.
-func cascadeRelay(so PeerState, relay int64, peer key.NodePublic, clear *msg.ClearMessage) (s PeerState) {
+func cascadeRelay(so PeerState, relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) (s PeerState) {
 	if s1 := so.OnTick(); s1 != nil {
 		if s2 := s1.OnRelay(relay, peer, clear); s2 != nil {
 			s = s2
@@ -51,16 +51,16 @@ func LogTransition(from PeerState, to PeerState) PeerState {
 	return to
 }
 
-func LogDirectMessage(s PeerState, ap netip.AddrPort, clear *msg.ClearMessage) {
+func LogDirectMessage(s PeerState, ap netip.AddrPort, clear *msgsess.ClearMessage) {
 	L(s).Log(context.Background(), LevelTrace, "received direct message",
 		slog.Group("from",
 			"addrport", ap,
-			"session", clear.Session),
+			"session", clear.Session.Debug()),
 		"msg", clear.Message.Debug(),
 	)
 }
 
-func LogRelayMessage(s PeerState, relay int64, peer key.NodePublic, clear *msg.ClearMessage) {
+func LogRelayMessage(s PeerState, relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) {
 	L(s).Log(context.Background(), LevelTrace, "received relay message",
 		slog.Group("from",
 			"relay", relay,

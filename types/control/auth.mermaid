@@ -1,0 +1,39 @@
+sequenceDiagram
+    actor User
+
+    create participant Client
+    User --> Client: Turn On
+
+    Client -->+ Control: <handshake snip>
+
+    Client ->> Control: Logon
+
+    Note over Control: Client's first logon
+
+    Control ->> Auth: Generate Auth Session
+
+    participant Auth as Auth Provider
+
+    activate Auth
+
+    Auth ->> Control: Return Token
+    activate Control
+
+    Control ->> Client: LogonAuthenticate (with URL+token)
+
+    Client ->> User: Authentication URL Prompt
+
+    User -->> Control: Go to URL
+    Control -->> User: Redirect to Auth
+
+    User -->> Auth: Go to Auth URL
+
+    Note over Auth: Provider-specific Authentication
+
+    Auth -->>- Control: Redirect with callback token
+
+    deactivate Control
+
+    Control ->> Client: LogonAccept
+
+    deactivate Control

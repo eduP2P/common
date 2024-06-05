@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"go4.org/mem"
+	"golang.org/x/crypto/nacl/box"
 	"io"
 	"slices"
 )
@@ -92,4 +93,20 @@ func fromHexChar(c byte) (byte, bool) {
 	}
 
 	return 0, false
+}
+
+// Assumed are that priv and pub are not zero
+func openFrom(priv, pub NakedKey, ciphertext []byte) (cleartext []byte, ok bool) {
+	if len(ciphertext) < 24 {
+		return nil, false
+	}
+	nonce := (*[24]byte)(ciphertext)
+	return box.Open(nil, ciphertext[len(nonce):], nonce, (*[32]byte)(&pub), (*[32]byte)(&priv))
+}
+
+// Assumed are that priv and pub are not zero
+func sealTo(priv, pub NakedKey, cleartext []byte) (ciphertext []byte) {
+	var nonce [24]byte
+	rand(nonce[:])
+	return box.Seal(nonce[:], cleartext, &nonce, (*[32]byte)(&pub), (*[32]byte)(&priv))
 }

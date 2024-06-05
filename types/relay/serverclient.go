@@ -5,8 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/conn"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -42,7 +43,7 @@ type ServerClient struct {
 	// An asynchronous pong return channel, hopping a pong between RunReceiver and RunSender
 	sendPongCh chan PingData
 
-	netConn AbstractConn
+	netConn conn.MetaConn
 
 	remoteAddrPort netip.AddrPort
 
@@ -57,7 +58,7 @@ type ServerClient struct {
 // SendPacket will be called by other goroutines than the ServerClient-owning Run goroutine.
 func (sc *ServerClient) SendPacket(pkt ServerPacket) {
 	queue := sc.sendCh
-	if msg.LooksLikeSessionWireMessage(pkt.bytes) {
+	if msgsess.LooksLikeSessionWireMessage(pkt.bytes) {
 		queue = sc.sendSessionCh
 	}
 

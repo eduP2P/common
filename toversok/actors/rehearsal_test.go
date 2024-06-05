@@ -2,9 +2,9 @@ package actors
 
 import (
 	"context"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
 	"net/netip"
 )
 
@@ -14,7 +14,7 @@ type MockActor struct {
 	s *Stage
 
 	run    func()
-	inbox  func() chan<- actor_msg.ActorMessage
+	inbox  func() chan<- msgactor.ActorMessage
 	cancel func()
 	close  func()
 }
@@ -23,7 +23,7 @@ func (m *MockActor) Run() {
 	m.run()
 }
 
-func (m *MockActor) Inbox() chan<- actor_msg.ActorMessage {
+func (m *MockActor) Inbox() chan<- msgactor.ActorMessage {
 	return m.inbox()
 }
 

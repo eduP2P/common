@@ -2,7 +2,7 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 	"time"
 )
@@ -37,12 +37,12 @@ func (t *Teardown) OnTick() PeerState {
 	}
 }
 
-func (t *Teardown) OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState {
+func (t *Teardown) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
 	return cascadeDirect(t, ap, clear)
 }
 
-func (t *Teardown) OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState {
+func (t *Teardown) OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
 	return cascadeRelay(t, relay, peer, clear)
 }

@@ -1,6 +1,11 @@
 package types
 
-import "golang.org/x/exp/maps"
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"golang.org/x/exp/maps"
+)
 
 // Incomparable is a zero-width incomparable type. If added as the
 // first field in a struct, it marks that struct as not comparable
@@ -43,4 +48,50 @@ func SetUnion[T comparable](a, b []T) []T {
 	}
 
 	return maps.Keys(set)
+}
+
+func PtrOr[T any](v *T, def T) T {
+	if v == nil {
+		return def
+	} else {
+		return *v
+	}
+}
+
+func SliceOrEmpty[T any](v []T) []T {
+	if v == nil {
+		return []T{}
+	} else {
+		return v
+	}
+}
+
+func SliceOrNil[T any](v []T) []T {
+	if v == nil || (v != nil && len(v) > 0) {
+		return v
+	} else {
+		// len(v) == 0
+		return nil
+	}
+}
+
+// IsContextDone does a quick check on a context to see if its dead.
+func IsContextDone(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// RandStringBytesMaskImprSrc returns a random hexadecimal string of length n.
+func RandStringBytesMaskImprSrc(n int) string {
+	b := make([]byte, (n+1)/2) // can be simplified to n/2 if n is always even
+
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+
+	return hex.EncodeToString(b)[:n]
 }

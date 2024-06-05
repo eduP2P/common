@@ -2,7 +2,7 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msg"
+	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 	"time"
 )

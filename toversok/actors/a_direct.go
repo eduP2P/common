@@ -2,10 +2,10 @@ package actors
 
 import (
 	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"golang.org/x/exp/maps"
 	"net/netip"
 )
@@ -125,6 +125,8 @@ type DirectRouter struct {
 
 	aka map[netip.AddrPort]key.NodePublic
 
+	stunEndpoints map[netip.AddrPort]bool
+
 	frameCh chan ifaces.DirectedPeerFrame
 }
 
@@ -133,10 +135,11 @@ const DRFrameChLen = 4
 
 func (s *Stage) makeDR() *DirectRouter {
 	return &DirectRouter{
-		ActorCommon: MakeCommon(s.Ctx, DRInboxLen),
-		s:           s,
-		aka:         make(map[netip.AddrPort]key.NodePublic),
-		frameCh:     make(chan ifaces.DirectedPeerFrame, DRFrameChLen),
+		ActorCommon:   MakeCommon(s.Ctx, DRInboxLen),
+		s:             s,
+		aka:           make(map[netip.AddrPort]key.NodePublic),
+		stunEndpoints: make(map[netip.AddrPort]bool),
+		frameCh:       make(chan ifaces.DirectedPeerFrame, DRFrameChLen),
 	}
 }
 
@@ -166,20 +169,30 @@ func (dr *DirectRouter) Run() {
 			return
 		case m := <-dr.inbox:
 			switch m := m.(type) {
-			case *actor_msg.DRouterPeerAddKnownAs:
+			case *msgactor.DRouterPeerAddKnownAs:
 				dr.aka[m.AddrPort] = m.Peer
-			case *actor_msg.DRouterPeerClearKnownAs:
+			case *msgactor.DRouterPeerClearKnownAs:
 				maps.DeleteFunc(dr.aka,
 					func(_ netip.AddrPort, peer key.NodePublic) bool {
 						return peer == m.Peer
 					},
 				)
+			case *msgactor.DRouterPushSTUN:
+				dr.doSTUN(m.Packets)
 			default:
 				dr.logUnknownMessage(m)
 			}
 		case frame := <-dr.frameCh:
-			if msg.LooksLikeSessionWireMessage(frame.Pkt) {
-				go SendMessage(dr.s.SMan.Inbox(), &actor_msg.SManSessionFrameFromAddrPort{
+			if _, ok := dr.stunEndpoints[frame.SrcAddrPort]; ok {
+				go SendMessage(dr.s.EMan.Inbox(), &msgactor.EManSTUNResponse{
+					Endpoint: frame.SrcAddrPort,
+					Packet:   frame.Pkt,
+				})
+				continue
+			}
+
+			if msgsess.LooksLikeSessionWireMessage(frame.Pkt) {
+				go SendMessage(dr.s.SMan.Inbox(), &msgactor.SManSessionFrameFromAddrPort{
 					AddrPort:       frame.SrcAddrPort,
 					FrameWithMagic: frame.Pkt,
 				})
@@ -202,6 +215,17 @@ func (dr *DirectRouter) Run() {
 
 			in.ForwardPacket(frame.Pkt)
 		}
+	}
+}
+
+func (dr *DirectRouter) doSTUN(p map[netip.AddrPort][]byte) {
+	maps.Clear(dr.stunEndpoints)
+
+	for ep, pkt := range p {
+		ep = netip.AddrPortFrom(netip.AddrFrom16(ep.Addr().As16()), ep.Port())
+		dr.stunEndpoints[ep] = true
+
+		dr.s.DMan.WriteTo(pkt, ep)
 	}
 }
 

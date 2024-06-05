@@ -3,7 +3,7 @@ package peer_state
 import (
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"github.com/shadowjonathan/edup2p/types/stage"
 	"net/netip"
 	"time"
@@ -25,29 +25,29 @@ func (sc *StateCommon) Peer() key.NodePublic {
 	return sc.peer
 }
 
-func (sc *StateCommon) pingDirectValid(ap netip.AddrPort, sess key.SessionPublic, ping *msg.Ping) bool {
+func (sc *StateCommon) pingDirectValid(ap netip.AddrPort, sess key.SessionPublic, ping *msgsess.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
-func (sc *StateCommon) replyWithPongDirect(ap netip.AddrPort, sess key.SessionPublic, ping *msg.Ping) {
-	sc.tm.SendMsgToDirect(ap, sess, &msg.Pong{
+func (sc *StateCommon) replyWithPongDirect(ap netip.AddrPort, sess key.SessionPublic, ping *msgsess.Ping) {
+	sc.tm.SendMsgToDirect(ap, sess, &msgsess.Pong{
 		TxID: ping.TxID,
 		Src:  ap,
 	})
 }
 
-func (sc *StateCommon) pingRelayValid(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msg.Ping) bool {
+func (sc *StateCommon) pingRelayValid(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msgsess.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
-func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msg.Ping) {
-	sc.tm.SendMsgToRelay(relay, node, sess, &msg.Pong{
+func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msgsess.Ping) {
+	sc.tm.SendMsgToRelay(relay, node, sess, &msgsess.Pong{
 		TxID: ping.TxID,
 	})
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msg.Pong) {
+func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
 	sent, ok := sc.tm.Pings()[pong.TxID]
 	if !ok {
 		// TODO log: Got pong for unknown ping
@@ -72,7 +72,7 @@ func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, 
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, pong *msg.Pong) {
+func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
 
 	// Relay pongs should come in response to relay pings, note if it is different.
 	sent, ok := sc.tm.Pings()[pong.TxID]
@@ -105,12 +105,8 @@ func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.S
 
 }
 
-func (sc *StateCommon) mustPeerInfo() *stage.PeerInfo {
-	pi := sc.tm.Stage().GetPeerInfo(sc.peer)
-	if pi == nil {
-		panic("Expected peerinfo at state, but got no peerinfo")
-	}
-	return pi
+func (sc *StateCommon) getPeerInfo() *stage.PeerInfo {
+	return sc.tm.Stage().GetPeerInfo(sc.peer)
 }
 
 type EstablishingCommon struct {

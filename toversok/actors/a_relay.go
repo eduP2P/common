@@ -2,10 +2,12 @@ package actors
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
+	"github.com/shadowjonathan/edup2p/types"
+	"github.com/shadowjonathan/edup2p/types/dial"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"github.com/shadowjonathan/edup2p/types/relay"
 	"github.com/shadowjonathan/edup2p/types/relay/relayhttp"
 	"log/slog"
@@ -26,7 +28,7 @@ type RestartableRelayConn struct {
 
 	man *RelayManager
 
-	config relay.RelayInformation
+	config relay.Information
 
 	client *relay.Client
 
@@ -102,24 +104,23 @@ func (c *RestartableRelayConn) establish() (success bool) {
 	var port uint16
 
 	if c.config.IsInsecure {
-		port = c.config.HTTPPort.OrElse(0)
+		port = types.PtrOr(c.config.HTTPPort, 0)
 	} else {
-		port = c.config.HTTPSPort.OrElse(0)
+		port = types.PtrOr(c.config.HTTPSPort, 0)
 	}
 
 	var err error
-	c.client, err = relayhttp.Dial(c.ctx, relayhttp.DialOpts{
+	c.client, err = relayhttp.Dial(c.ctx, dial.Opts{
 		Domain:       c.config.Domain,
-		Addrs:        c.config.IPs.OrElse(nil),
+		Addrs:        types.SliceOrNil(c.config.IPs),
 		Port:         port,
 		TLS:          !c.config.IsInsecure,
-		ExpectKey:    c.config.Key,
-		ExpectCertCN: c.config.CertCN.OrElse(""),
+		ExpectCertCN: types.PtrOr(c.config.CertCN, ""),
 		// Connect and establishment timeouts are default
 		// TODO maybe allow Control to tweak this setting?
 	}, func() *key.NodePrivate {
 		return &c.man.s.privKey
-	})
+	}, c.config.Key)
 
 	if err != nil {
 		c.L().Warn("failed to establish connection to relay", "error", err)
@@ -199,7 +200,7 @@ func (c *RestartableRelayConn) Queue(pkt []byte, dst key.NodePublic) {
 	}
 }
 
-func (c *RestartableRelayConn) Update(info relay.RelayInformation) {
+func (c *RestartableRelayConn) Update(info relay.Information) {
 	c.config = info
 
 	// Close the client to trigger a reconnect
@@ -220,7 +221,7 @@ type RelayConnActor interface {
 	ifaces.Actor
 
 	Queue(pkt []byte, peer key.NodePublic)
-	Update(info relay.RelayInformation)
+	Update(info relay.Information)
 	StayConnected(bool)
 }
 
@@ -281,7 +282,7 @@ func (rm *RelayManager) Run() {
 			rm.Close()
 			return
 		case m := <-rm.inbox:
-			if update, ok := m.(*actor_msg.UpdateRelayConfiguration); ok {
+			if update, ok := m.(*msgactor.UpdateRelayConfiguration); ok {
 				for _, c := range update.Config {
 					rm.update(c)
 				}
@@ -324,7 +325,7 @@ func (rm *RelayManager) getConn(id int64) RelayConnActor {
 	return rm.relays[id]
 }
 
-func (rm *RelayManager) update(info relay.RelayInformation) {
+func (rm *RelayManager) update(info relay.Information) {
 	if r, ok := rm.relays[info.ID]; ok {
 		r.Update(info)
 	}
@@ -400,8 +401,8 @@ func (rr *RelayRouter) Run() {
 			rr.Close()
 			return
 		case frame := <-rr.frameCh:
-			if msg.LooksLikeSessionWireMessage(frame.Pkt) {
-				SendMessage(rr.s.SMan.Inbox(), &actor_msg.SManSessionFrameFromRelay{
+			if msgsess.LooksLikeSessionWireMessage(frame.Pkt) {
+				SendMessage(rr.s.SMan.Inbox(), &msgactor.SManSessionFrameFromRelay{
 					Relay:          frame.SrcRelay,
 					Peer:           frame.SrcPeer,
 					FrameWithMagic: frame.Pkt,

@@ -1,0 +1,15 @@
+sequenceDiagram
+    Client ->> Control: ClientHello
+    Control ->> Client: ServerHello
+    Client ->> Control: Logon
+    opt authenticate
+        Control ->> Client: LogonAuthenticate
+        opt device key
+            Client ->> Control: LogonDeviceKey
+        end
+    end
+    alt accepted
+        Control ->> Client: LogonAccept
+    else rejected
+        Control ->> Client: LogonReject
+    end

@@ -15,7 +15,7 @@ type RelayUpdate struct {
 	// Updates relays referenced in this set.
 	//
 	// Note: Deliberately does not allow for unsetting relays.
-	Set []relay.RelayInformation
+	Set []relay.Information
 }
 
 func (r RelayUpdate) EventName() string {

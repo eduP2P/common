@@ -2,7 +2,7 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 )
 
@@ -14,8 +14,8 @@ import (
 // If it's non-nil, replace the state for the peer with the state returned.
 type PeerState interface {
 	OnTick() PeerState
-	OnDirect(ap netip.AddrPort, clear *msg.ClearMessage) PeerState
-	OnRelay(relay int64, peer key.NodePublic, clear *msg.ClearMessage) PeerState
+	OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState
+	OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState
 
 	// Name returns a lower-case name to be used in logging.
 	Name() string

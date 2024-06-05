@@ -2,9 +2,9 @@ package actors
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
+	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"slices"
 )
 
@@ -24,15 +24,7 @@ const SMInboxLen = 8
 
 var DebugSManTakeNodeAsSession = false
 
-func (s *Stage) makeSM() *SessionManager {
-	var priv key.SessionPrivate
-
-	if DebugSManTakeNodeAsSession {
-		priv = key.DevNewSessionFromPrivate(s.privKey)
-	} else {
-		priv = key.NewSession()
-	}
-
+func (s *Stage) makeSM(priv key.SessionPrivate) *SessionManager {
 	sm := &SessionManager{
 		ActorCommon: MakeCommon(s.Ctx, SMInboxLen),
 		s:           s,
@@ -68,9 +60,9 @@ func (sm *SessionManager) Run() {
 	}
 }
 
-func (sm *SessionManager) Handle(msg actor_msg.ActorMessage) {
+func (sm *SessionManager) Handle(msg msgactor.ActorMessage) {
 	switch m := msg.(type) {
-	case *actor_msg.SManSessionFrameFromRelay:
+	case *msgactor.SManSessionFrameFromRelay:
 		cm, err := sm.Unpack(m.FrameWithMagic)
 		if err != nil {
 			L(sm).Error("error when unpacking session frame from relay",
@@ -81,12 +73,12 @@ func (sm *SessionManager) Handle(msg actor_msg.ActorMessage) {
 			)
 			return
 		}
-		sm.s.TMan.Inbox() <- &actor_msg.TManSessionMessageFromRelay{
+		sm.s.TMan.Inbox() <- &msgactor.TManSessionMessageFromRelay{
 			Relay: m.Relay,
 			Peer:  m.Peer,
 			Msg:   cm,
 		}
-	case *actor_msg.SManSessionFrameFromAddrPort:
+	case *msgactor.SManSessionFrameFromAddrPort:
 		cm, err := sm.Unpack(m.FrameWithMagic)
 		if err != nil {
 			L(sm).Error("error when unpacking session frame from direct",
@@ -96,14 +88,14 @@ func (sm *SessionManager) Handle(msg actor_msg.ActorMessage) {
 			)
 			return
 		}
-		sm.s.TMan.Inbox() <- &actor_msg.TManSessionMessageFromDirect{
+		sm.s.TMan.Inbox() <- &msgactor.TManSessionMessageFromDirect{
 			AddrPort: m.AddrPort,
 			Msg:      cm,
 		}
-	case *actor_msg.SManSendSessionMessageToRelay:
+	case *msgactor.SManSendSessionMessageToRelay:
 		frame := sm.Pack(m.Msg, m.ToSession)
 		sm.s.RMan.WriteTo(frame, m.Relay, m.Peer)
-	case *actor_msg.SManSendSessionMessageToDirect:
+	case *msgactor.SManSendSessionMessageToDirect:
 		frame := sm.Pack(m.Msg, m.ToSession)
 		sm.s.DMan.WriteTo(frame, m.AddrPort)
 	default:

@@ -1,4 +1,4 @@
-package actor_msg
+package msgactor
 
 // This file contains the ActorMessage interface, and dud bindings
 
@@ -22,6 +22,9 @@ func (o *RManRelayLatencyResults) amsg() {}
 func (o *DManSetMTU) amsg()              {}
 func (o *DRouterPeerClearKnownAs) amsg() {}
 func (o *DRouterPeerAddKnownAs) amsg()   {}
+func (o *DRouterPushSTUN) amsg()         {}
+
+func (o *EManSTUNResponse) amsg() {}
 
 func (o *SyncPeerInfo) amsg()             {}
 func (o *UpdateRelayConfiguration) amsg() {}

@@ -1,4 +1,4 @@
-package actor_msg
+package msgactor
 
 type StageNotification interface {
 	snotif()

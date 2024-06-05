@@ -1,4 +1,4 @@
-package msg
+package msgsess
 
 // Magic is the 8 byte header of all session messages
 // F0 9F AA 84

@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
 	"github.com/shadowjonathan/edup2p/types/relay"
 	"github.com/shadowjonathan/edup2p/types/stage"
 	"golang.org/x/exp/maps"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 )
@@ -37,10 +38,13 @@ type InConnActor interface {
 
 func MakeStage(
 	pCtx context.Context,
-	privKey key.NodePrivate,
+
+	nodePriv key.NodePrivate,
+	sessPriv key.SessionPrivate,
 
 	bindExt func() types.UDPConn,
 	bindLocal func(peer key.NodePublic) types.UDPConn,
+	controlSession ifaces.ControlInterface,
 ) ifaces.Stage {
 	ctx := context.WithoutCancel(pCtx)
 
@@ -51,7 +55,7 @@ func MakeStage(
 		inConn:    make(map[key.NodePublic]InConnActor),
 		outConn:   make(map[key.NodePublic]OutConnActor),
 
-		privKey:        privKey,
+		privKey:        nodePriv,
 		localEndpoints: make([]netip.AddrPort, 0),
 
 		peerInfo: make(map[key.NodePublic]*stage.PeerInfo),
@@ -60,6 +64,7 @@ func MakeStage(
 
 		bindExt:   bindExt,
 		bindLocal: bindLocal,
+		control:   controlSession,
 	}
 
 	s.DMan = s.makeDM(bindExt())
@@ -69,7 +74,8 @@ func MakeStage(
 	s.RRouter = s.makeRR()
 
 	s.TMan = s.makeTM()
-	s.SMan = s.makeSM()
+	s.SMan = s.makeSM(sessPriv)
+	s.EMan = s.makeEM()
 
 	return s
 }
@@ -93,6 +99,8 @@ type Stage struct {
 	TMan ifaces.TrafficManagerActor
 	// The SessionManager
 	SMan ifaces.SessionManagerActor
+	// The EndpointManager
+	EMan ifaces.EndpointManagerActor
 
 	connMutex sync.RWMutex
 	inConn    map[key.NodePublic]InConnActor
@@ -100,11 +108,14 @@ type Stage struct {
 
 	privKey        key.NodePrivate
 	localEndpoints []netip.AddrPort
+	stunEndpoints  []netip.AddrPort
 
 	started bool
 
 	peerInfoMutex sync.RWMutex
 	peerInfo      map[key.NodePublic]*stage.PeerInfo
+
+	control ifaces.ControlInterface
 
 	//// A repeatable function to an outside context to acquire a new UDPconn,
 	//// once a peer conn has died for whatever reason.
@@ -127,6 +138,7 @@ func (s *Stage) Start() {
 
 	go s.TMan.Run()
 	go s.SMan.Run()
+	go s.EMan.Run()
 
 	go s.DMan.Run()
 	go s.DRouter.Run()
@@ -162,7 +174,7 @@ func (s *Stage) reapConns() {
 	peers := make([]key.NodePublic, 0)
 
 	for peer, inconn := range s.inConn {
-		if IsContextDone(inconn.Ctx()) {
+		if types.IsContextDone(inconn.Ctx()) {
 			// Its dead, cancel the outconn and regenerate it
 
 			out, ok := s.outConn[peer]
@@ -179,7 +191,7 @@ func (s *Stage) reapConns() {
 	}
 
 	for peer, outconn := range s.outConn {
-		if IsContextDone(outconn.Ctx()) {
+		if types.IsContextDone(outconn.Ctx()) {
 			// Conn is dead, add to reaping
 			peers = append(peers, peer)
 		} else {
@@ -191,7 +203,7 @@ func (s *Stage) reapConns() {
 	}
 
 	for peer, inconn := range s.inConn {
-		if IsContextDone(inconn.Ctx()) {
+		if types.IsContextDone(inconn.Ctx()) {
 			// Conn is dead, add to reaping
 			peers = append(peers, peer)
 		} else {
@@ -220,7 +232,7 @@ func (s *Stage) reapConns() {
 }
 
 func (s *Stage) informPeerInfoUpdate(peer key.NodePublic) {
-	go SendMessage(s.TMan.Inbox(), &actor_msg.SyncPeerInfo{Peer: peer})
+	go SendMessage(s.TMan.Inbox(), &msgactor.SyncPeerInfo{Peer: peer})
 }
 
 // OutConnFor Looks up the OutConn for a peer. Returns nil if it doesn't exist.
@@ -265,11 +277,45 @@ func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 	go inConn.Run()
 }
 
-func (s *Stage) GetLocalEndpoints() []netip.AddrPort {
+func (s *Stage) GetEndpoints() []netip.AddrPort {
 	s.connMutex.RLock()
 	defer s.connMutex.RUnlock()
 
-	return s.localEndpoints
+	return slices.Concat(s.localEndpoints, s.stunEndpoints)
+}
+
+func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
+	s.connMutex.RLock()
+	defer s.connMutex.RUnlock()
+
+	if slices.Equal(s.stunEndpoints, endpoints) {
+		// no change
+		return
+	}
+
+	s.stunEndpoints = endpoints
+
+	s.notifyEndpointChanged()
+}
+
+func (s *Stage) setLocalEndpoints(endpoints []netip.AddrPort) {
+	s.connMutex.RLock()
+	defer s.connMutex.RUnlock()
+
+	if slices.Equal(s.localEndpoints, endpoints) {
+		// no change
+		return
+	}
+
+	s.localEndpoints = endpoints
+
+	s.notifyEndpointChanged()
+}
+
+func (s *Stage) notifyEndpointChanged() {
+	if err := s.control.UpdateEndpoints(slices.Concat(s.stunEndpoints, s.localEndpoints)); err != nil {
+		slog.Warn("could not update endpoints", "err", err)
+	}
 }
 
 // syncConns repairs any discrepancies between peerinfo and conns
@@ -319,7 +365,7 @@ func (s *Stage) syncConns() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {
@@ -344,6 +390,20 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 }
 
 var errNoPeerInfo = errors.New("could not find peer info to update")
+
+func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error {
+	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
+		if homeRelay != nil {
+			info.HomeRelay = *homeRelay
+		}
+		if endpoints != nil {
+			info.Endpoints = endpoints
+		}
+		if session != nil {
+			info.Session = *session
+		}
+	})
+}
 
 func (s *Stage) UpdateHomeRelay(peer key.NodePublic, relay int64) error {
 	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
@@ -391,17 +451,38 @@ func (s *Stage) GetPeerInfo(peer key.NodePublic) *stage.PeerInfo {
 	return s.peerInfo[peer]
 }
 
-func (s *Stage) RemovePeer(peer key.NodePublic) {
+func (s *Stage) ClearPeers() {
+	s.peerInfoMutex.RLock()
+	peers := maps.Keys(s.peerInfo)
+	s.peerInfoMutex.RUnlock()
+
+	for _, peer := range peers {
+		s.RemovePeer(peer)
+	}
+}
+
+func (s *Stage) RemovePeer(peer key.NodePublic) error {
 	s.peerInfoMutex.Lock()
 	delete(s.peerInfo, peer)
 	s.peerInfoMutex.Unlock()
 
 	s.syncConns()
 	s.informPeerInfoUpdate(peer)
+
+	return nil
 }
 
-func (s *Stage) UpdateRelays(relays []relay.RelayInformation) {
-	go SendMessage(s.RMan.Inbox(), &actor_msg.UpdateRelayConfiguration{Config: relays})
+func (s *Stage) UpdateRelays(relays []relay.Information) error {
+	go SendMessage(s.RMan.Inbox(), &msgactor.UpdateRelayConfiguration{Config: relays})
+	go SendMessage(s.EMan.Inbox(), &msgactor.UpdateRelayConfiguration{Config: relays})
+
+	return nil
+}
+
+// ControlSTUN returns a set of endpoints pertaining to Control's STUN addrpairs
+func (s *Stage) ControlSTUN() []netip.AddrPort {
+	// TODO
+	return []netip.AddrPort{}
 }
 
 //func (s *Stage) RemoveConn(peer key.NodePublic) {

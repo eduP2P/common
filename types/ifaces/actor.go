@@ -1,9 +1,9 @@
 package ifaces
 
 import (
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"github.com/shadowjonathan/edup2p/types/stage"
 	"net/netip"
 )
@@ -11,7 +11,7 @@ import (
 type Actor interface {
 	Run()
 
-	Inbox() chan<- actor_msg.ActorMessage
+	Inbox() chan<- msgactor.ActorMessage
 
 	// Cancel this actor's context.
 	Cancel()
@@ -70,8 +70,8 @@ type TrafficManagerActor interface {
 	Poke()
 
 	ValidKeys(nodeKey key.NodePublic, sess key.SessionPublic) bool
-	SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msg.SessionMessage)
-	SendMsgToRelay(relay int64, node key.NodePublic, sess key.SessionPublic, m msg.SessionMessage)
+	SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msgsess.SessionMessage)
+	SendMsgToRelay(relay int64, node key.NodePublic, sess key.SessionPublic, m msgsess.SessionMessage)
 	SendPingDirect(ap netip.AddrPort, peer key.NodePublic, session key.SessionPublic)
 
 	OutConnUseAddrPort(peer key.NodePublic, ap netip.AddrPort)
@@ -81,7 +81,7 @@ type TrafficManagerActor interface {
 	DManClearAKA(peer key.NodePublic)
 
 	Stage() Stage
-	Pings() map[msg.TxID]*stage.SentPing
+	Pings() map[msgsess.TxID]*stage.SentPing
 
 	ActiveIn() map[key.NodePublic]bool
 	ActiveOut() map[key.NodePublic]bool
@@ -93,4 +93,10 @@ type SessionManagerActor interface {
 	Actor
 
 	Session() key.SessionPublic
+}
+
+// ===
+
+type EndpointManagerActor interface {
+	Actor
 }

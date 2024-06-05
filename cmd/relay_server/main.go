@@ -28,10 +28,10 @@ var (
 	dev        = flag.Bool("dev", false, "run in localhost development mode (overrides -a)")
 	addr       = flag.String("a", ":443", "server HTTP/HTTPS listen address, in form \":port\", \"ip:port\", or for IPv6 \"[ip]:port\". If the IP is omitted, it defaults to all interfaces. Serves HTTPS if the port is 443 and/or -certmode is manual, otherwise HTTP.")
 	configPath = flag.String("c", "", "config file path")
-	stunPort   = flag.Int("stun-port", 3478, "The UDP port on which to serve STUN. The listener is bound to the same IP (if any) as specified in the -a flag.")
+	stunPort   = flag.Int("stun-port", stunserver.DefaultPort, "The UDP port on which to serve STUN. The listener is bound to the same IP (if any) as specified in the -a flag.")
 )
 
-const ToverSokDefaultHTML = `
+const ToverSokRelayDefaultHTML = `
 <html>
 	<body>
 		<h1>ToverSok Relay</h1>
@@ -95,7 +95,7 @@ func main() {
 
 		w.WriteHeader(200)
 
-		io.WriteString(w, ToverSokDefaultHTML)
+		io.WriteString(w, ToverSokRelayDefaultHTML)
 	}))
 
 	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

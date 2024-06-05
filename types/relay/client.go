@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/shadowjonathan/edup2p/types/conn"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"io"
 	"log/slog"
 	"slices"
@@ -32,7 +33,7 @@ type Client struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
 
-	conn AbstractConn
+	mc conn.MetaConn
 
 	recvMutex sync.Mutex
 	reader    *bufio.Reader
@@ -80,18 +81,18 @@ type RecvPacket struct {
 	Data []byte
 }
 
-// EstablishClient creates a new relay.Client on a given AbstractConn with associated bufio.ReadWriter.
+// EstablishClient creates a new relay.Client on a given MetaConn with associated bufio.ReadWriter.
 //
 // It logs in and authenticates the server before returning a Client object.
 // If any error occurs, or no client can be established before timeout, it returns.
-func EstablishClient(parentCtx context.Context, ac AbstractConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate) (*Client, error) {
+func EstablishClient(parentCtx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate) (*Client, error) {
 	ctx, ccc := context.WithCancelCause(parentCtx)
 
 	c := &Client{
 		ctx: ctx,
 		ccc: ccc,
 
-		conn: ac,
+		mc: mc,
 
 		recvMutex: sync.Mutex{},
 		reader:    brw.Reader,
@@ -106,7 +107,7 @@ func EstablishClient(parentCtx context.Context, ac AbstractConn, brw *bufio.Read
 	}
 
 	// Make sure any reads that don't complete before the deadline return with an error.
-	if err := ac.SetDeadline(time.Now().Add(timeout)); err != nil {
+	if err := mc.SetDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, fmt.Errorf("could not set deadline: %w", err)
 	}
 
@@ -134,7 +135,7 @@ func EstablishClient(parentCtx context.Context, ac AbstractConn, brw *bufio.Read
 	}
 
 	// Reset the deadline mechanism
-	if err = ac.SetDeadline(time.Time{}); err != nil {
+	if err = mc.SetDeadline(time.Time{}); err != nil {
 		return nil, fmt.Errorf("could not reset deadline: %w", err)
 	}
 
@@ -231,7 +232,7 @@ func (c *Client) recvServerInfo() (*ServerInfo, error) {
 		return nil, errInvalidFrameType
 	}
 
-	if frLen < msg.NaclBoxNonceLen {
+	if frLen < msgsess.NaclBoxNonceLen {
 		return nil, errors.New("frame too small for naclbox nonce")
 	} else if frLen > MaxPacketSize {
 		return nil, errPacketTooLarge
@@ -260,7 +261,7 @@ func (c *Client) recvServerInfo() (*ServerInfo, error) {
 
 func (c *Client) Cancel(err error) {
 	c.ccc(err)
-	c.conn.SetDeadline(time.Now().Add(10 * time.Millisecond))
+	c.mc.SetDeadline(time.Now().Add(10 * time.Millisecond))
 }
 
 func (c *Client) Close() {
@@ -268,7 +269,7 @@ func (c *Client) Close() {
 		return
 	}
 
-	c.conn.Close()
+	c.mc.Close()
 	close(c.sendCh)
 	close(c.recvCh)
 

@@ -2,7 +2,7 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msg"
+	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 	"time"
 )
@@ -34,6 +34,12 @@ func (e *Established) Name() string {
 }
 
 func (e *Established) OnTick() PeerState {
+	pi := e.getPeerInfo()
+	if pi == nil {
+		// Peer info unavailable
+		return nil
+	}
+
 	if e.tm.ActiveIn()[e.peer] || e.tm.ActiveOut()[e.peer] {
 		e.inactive = false
 	} else {
@@ -62,7 +68,7 @@ func (e *Established) OnTick() PeerState {
 	}
 
 	if time.Now().After(e.nextPingDeadline) {
-		e.tm.SendPingDirect(e.currentEndpoint, e.peer, e.mustPeerInfo().Session)
+		e.tm.SendPingDirect(e.currentEndpoint, e.peer, pi.Session)
 		e.nextPingDeadline = time.Now().Add(EstablishedPingInterval)
 	}
 

@@ -1,4 +1,4 @@
-package msg
+package msgsess
 
 import (
 	crand "crypto/rand"

@@ -1,0 +1,13 @@
+stateDiagram-v2
+    [*] --> Authenticate: After Logon
+    Authenticate --> [*]: Aborted / Failure / Reject
+
+    Authenticate --> Greet: Accept
+    Greet --> Established: {Server, Add Peer}
+    Established --> Dangling: Disconnect without logout
+    Dangling --> ReEstablishing: After logon with (right)\n/without resume
+    ReEstablishing --> Dangling: Aborted / Failure / Reject
+    ReEstablishing --> Greet: Accept
+    Established --> Deconstructing: Disconnect with logout
+    Dangling --> Deconstructing: Timeout
+    Deconstructing --> [*]: {Server, Remove peer}

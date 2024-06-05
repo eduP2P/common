@@ -2,7 +2,7 @@ package peer_state
 
 import (
 	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msg"
+	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
 )
 
@@ -16,8 +16,9 @@ func (i *Inactive) Name() string {
 
 func (i *Inactive) OnTick() PeerState {
 	if pi := i.tm.Stage().GetPeerInfo(i.peer); (i.tm.ActiveIn()[i.peer] || i.tm.ActiveOut()[i.peer]) &&
-		// We should wait for endpoints before we try to transition to active trying.
-		(len(pi.Endpoints) > 0 || len(pi.RendezvousEndpoints) > 0) {
+		// We should wait for endpoints if we have none ourselves.
+		((len(pi.Endpoints) > 0 || len(pi.RendezvousEndpoints) > 0) ||
+			len(i.tm.Stage().GetEndpoints()) != 0) {
 		return LogTransition(i, &Trying{StateCommon: i.StateCommon})
 	}
 

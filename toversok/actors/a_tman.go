@@ -2,10 +2,10 @@ package actors
 
 import (
 	"github.com/shadowjonathan/edup2p/toversok/actors/peer_state"
-	"github.com/shadowjonathan/edup2p/types/actor_msg"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msg"
+	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"github.com/shadowjonathan/edup2p/types/stage"
 	maps2 "golang.org/x/exp/maps"
 	"maps"
@@ -22,7 +22,7 @@ type TrafficManager struct {
 
 	peerState map[key.NodePublic]peer_state.PeerState
 
-	pings     map[msg.TxID]*stage.SentPing
+	pings     map[msgsess.TxID]*stage.SentPing
 	activeOut map[key.NodePublic]bool
 	activeIn  map[key.NodePublic]bool
 
@@ -42,7 +42,7 @@ func (s *Stage) makeTM() *TrafficManager {
 		poke:      make(chan interface{}, 1),
 		peerState: make(map[key.NodePublic]peer_state.PeerState),
 
-		pings:     make(map[msg.TxID]*stage.SentPing),
+		pings:     make(map[msgsess.TxID]*stage.SentPing),
 		activeOut: make(map[key.NodePublic]bool),
 		activeIn:  make(map[key.NodePublic]bool),
 		sessMap:   make(map[key.SessionPublic]key.NodePublic),
@@ -81,9 +81,9 @@ func (tm *TrafficManager) Run() {
 	}
 }
 
-func (tm *TrafficManager) Handle(m actor_msg.ActorMessage) {
+func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 	switch m := m.(type) {
-	case *actor_msg.TManConnActivity:
+	case *msgactor.TManConnActivity:
 		var aMap map[key.NodePublic]bool
 		if m.IsIn {
 			aMap = tm.activeIn
@@ -94,7 +94,7 @@ func (tm *TrafficManager) Handle(m actor_msg.ActorMessage) {
 
 		tm.onConnActivity(m.Peer)
 
-	case *actor_msg.TManConnGoodBye:
+	case *msgactor.TManConnGoodBye:
 		var aMap map[key.NodePublic]bool
 		if m.IsIn {
 			aMap = tm.activeIn
@@ -107,7 +107,7 @@ func (tm *TrafficManager) Handle(m actor_msg.ActorMessage) {
 
 		tm.onConnRemoval(m.Peer)
 
-	case *actor_msg.TManSessionMessageFromDirect:
+	case *msgactor.TManSessionMessageFromDirect:
 		n := tm.NodeForSess(m.Msg.Session)
 
 		if n != nil {
@@ -117,7 +117,7 @@ func (tm *TrafficManager) Handle(m actor_msg.ActorMessage) {
 		} else {
 			L(tm).Warn("got message from direct for unknown session", "session", m.Msg.Session.Debug())
 		}
-	case *actor_msg.TManSessionMessageFromRelay:
+	case *msgactor.TManSessionMessageFromRelay:
 		if !tm.ValidKeys(m.Peer, m.Msg.Session) {
 			L(tm).Warn("got message from relay for peer with incorrect session",
 				"session", m.Msg.Session.Debug(), "peer", m.Peer.Debug(), "relay", m.Relay)
@@ -127,7 +127,7 @@ func (tm *TrafficManager) Handle(m actor_msg.ActorMessage) {
 		tm.forState(m.Peer, func(s peer_state.PeerState) peer_state.PeerState {
 			return s.OnRelay(m.Relay, m.Peer, m.Msg)
 		})
-	case *actor_msg.SyncPeerInfo:
+	case *msgactor.SyncPeerInfo:
 		oc := tm.s.OutConnFor(m.Peer)
 
 		if oc != nil {
@@ -280,13 +280,13 @@ func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 //const EstablishedPingTimeout = time.Second * 5
 
 func (tm *TrafficManager) DManClearAKA(peer key.NodePublic) {
-	go SendMessage(tm.s.DRouter.Inbox(), &actor_msg.DRouterPeerClearKnownAs{
+	go SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerClearKnownAs{
 		Peer: peer,
 	})
 }
 
 func (tm *TrafficManager) DManSetAKA(peer key.NodePublic, ap netip.AddrPort) {
-	go SendMessage(tm.s.DRouter.Inbox(), &actor_msg.DRouterPeerAddKnownAs{
+	go SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerAddKnownAs{
 		Peer:     peer,
 		AddrPort: ap,
 	})
@@ -300,7 +300,7 @@ func (tm *TrafficManager) OutConnUseRelay(peer key.NodePublic, relay int64) {
 		return
 	}
 
-	go SendMessage(out.Inbox(), &actor_msg.OutConnUse{
+	go SendMessage(out.Inbox(), &msgactor.OutConnUse{
 		UseRelay:   true,
 		RelayToUse: relay,
 	})
@@ -314,7 +314,7 @@ func (tm *TrafficManager) OutConnTrackHome(peer key.NodePublic) {
 		return
 	}
 
-	go SendMessage(out.Inbox(), &actor_msg.OutConnUse{
+	go SendMessage(out.Inbox(), &msgactor.OutConnUse{
 		UseRelay:  true,
 		TrackHome: true,
 	})
@@ -328,7 +328,7 @@ func (tm *TrafficManager) OutConnUseAddrPort(peer key.NodePublic, ap netip.AddrP
 		return
 	}
 
-	go SendMessage(out.Inbox(), &actor_msg.OutConnUse{
+	go SendMessage(out.Inbox(), &msgactor.OutConnUse{
 		UseRelay:      false,
 		AddrPortToUse: ap,
 	})
@@ -340,9 +340,9 @@ func (tm *TrafficManager) ValidKeys(peer key.NodePublic, session key.SessionPubl
 }
 
 func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic) {
-	txid := msg.NewTxID()
+	txid := msgsess.NewTxID()
 
-	tm.SendMsgToDirect(endpoint, session, &msg.Ping{
+	tm.SendMsgToDirect(endpoint, session, &msgsess.Ping{
 		TxID:    txid,
 		NodeKey: tm.s.privKey.Public(),
 	})
@@ -356,9 +356,9 @@ func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodeP
 }
 
 func (tm *TrafficManager) SendPingRelay(relay int64, peer key.NodePublic, session key.SessionPublic) {
-	txid := msg.NewTxID()
+	txid := msgsess.NewTxID()
 
-	tm.SendMsgToRelay(relay, peer, session, &msg.Ping{
+	tm.SendMsgToRelay(relay, peer, session, &msgsess.Ping{
 		TxID:    txid,
 		NodeKey: tm.s.privKey.Public(),
 	})
@@ -371,8 +371,8 @@ func (tm *TrafficManager) SendPingRelay(relay int64, peer key.NodePublic, sessio
 	}
 }
 
-func (tm *TrafficManager) SendMsgToRelay(relay int64, peer key.NodePublic, sess key.SessionPublic, m msg.SessionMessage) {
-	go SendMessage(tm.s.SMan.Inbox(), &actor_msg.SManSendSessionMessageToRelay{
+func (tm *TrafficManager) SendMsgToRelay(relay int64, peer key.NodePublic, sess key.SessionPublic, m msgsess.SessionMessage) {
+	go SendMessage(tm.s.SMan.Inbox(), &msgactor.SManSendSessionMessageToRelay{
 		Relay:     relay,
 		Peer:      peer,
 		ToSession: sess,
@@ -380,15 +380,15 @@ func (tm *TrafficManager) SendMsgToRelay(relay int64, peer key.NodePublic, sess 
 	})
 }
 
-func (tm *TrafficManager) SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msg.SessionMessage) {
-	go SendMessage(tm.s.SMan.Inbox(), &actor_msg.SManSendSessionMessageToDirect{
+func (tm *TrafficManager) SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msgsess.SessionMessage) {
+	go SendMessage(tm.s.SMan.Inbox(), &msgactor.SManSendSessionMessageToDirect{
 		AddrPort:  ap,
 		ToSession: sess,
 		Msg:       m,
 	})
 }
 
-func (tm *TrafficManager) Pings() map[msg.TxID]*stage.SentPing {
+func (tm *TrafficManager) Pings() map[msgsess.TxID]*stage.SentPing {
 	return tm.pings
 }
 
