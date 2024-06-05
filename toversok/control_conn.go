@@ -11,11 +11,28 @@ import (
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgcontrol"
+	"golang.org/x/exp/maps"
 	"log/slog"
 	"net/netip"
 	"sync"
 	"time"
 )
+
+type DefaultControlHost struct {
+	// TODO maybe move this struct somewhere else?
+
+	Opts dial.Opts
+	Key  key.ControlPublic
+}
+
+func (d *DefaultControlHost) CreateClient(
+	pCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate,
+) (ifaces.FullControlInterface, error) {
+	return CreateControlSession(pCtx, d.Opts, d.Key,
+		getNode,
+		getSess,
+	)
+}
 
 const MaxAbsence = 10 * time.Minute
 
@@ -23,7 +40,7 @@ const MaxAbsence = 10 * time.Minute
 // when it breaks.
 //
 // It'll only permanently fail when a connection cannot be established for an "absence" duration, Control rejects
-// a logon with NoRetryStrategy or RegenerateSessionKey, or authentication is required.
+// a logon with NoRetryStrategy or RegenerateSessionKey, or when authentication is required.
 type ResumableControlSession struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
@@ -39,6 +56,8 @@ type ResumableControlSession struct {
 	clientOpts dial.Opts
 	getPriv    func() *key.NodePrivate
 	getSess    func() *key.SessionPrivate
+
+	knownPeers map[key.NodePublic]bool
 
 	queueMutex sync.Mutex
 	// Out to control
@@ -72,6 +91,8 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 
 		session: *c.SessionID,
 		client:  c,
+
+		knownPeers: make(map[key.NodePublic]bool),
 
 		clientOpts: opts,
 		getPriv:    getPriv,
@@ -194,6 +215,8 @@ func (rcs *ResumableControlSession) Run() {
 			break
 		}
 
+		rcs.ClearPeers()
+
 		rcs.client = client
 
 		// wrap around
@@ -205,6 +228,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 
 	switch m := msg.(type) {
 	case *msgcontrol.PeerAddition:
+		rcs.knownPeers[m.PubKey] = true
 		return rcs.callbacks.AddPeer(
 			m.PubKey,
 			m.HomeRelay,
@@ -226,6 +250,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 			m.SessKey,
 		)
 	case *msgcontrol.PeerRemove:
+		delete(rcs.knownPeers, m.PubKey)
 		return rcs.callbacks.RemovePeer(m.PubKey)
 	case *msgcontrol.RelayUpdate:
 		return rcs.callbacks.UpdateRelays(m.Relays)
@@ -275,6 +300,16 @@ func (rcs *ResumableControlSession) FlushOut() error {
 	return nil
 }
 
+func (rcs *ResumableControlSession) ClearPeers() {
+	for pub := range rcs.knownPeers {
+		if err := rcs.callbacks.RemovePeer(pub); err != nil {
+			slog.Warn("error when removing peer", "err", err)
+		}
+	}
+
+	maps.Clear(rcs.knownPeers)
+}
+
 func (rcs *ResumableControlSession) ControlKey() key.ControlPublic {
 	return rcs.controlKey
 }
@@ -287,14 +322,8 @@ func (rcs *ResumableControlSession) IPv6() netip.Prefix {
 	return rcs.ipv6
 }
 
-func (rcs *ResumableControlSession) InstallCallbacks(callbacks ifaces.ControlCallbacks) error {
-	if rcs.callbacks == nil {
-		rcs.callbacks = callbacks
-	} else {
-		return errors.New("callbacks already installed")
-	}
-
-	return nil
+func (rcs *ResumableControlSession) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
+	rcs.callbacks = callbacks
 }
 
 func (rcs *ResumableControlSession) send(msg msgcontrol.ControlMessage) error {

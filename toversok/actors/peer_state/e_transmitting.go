@@ -52,7 +52,7 @@ func (e *EstTransmitting) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) 
 		})
 	//case *msg.Rendezvous:
 	default:
-		L(e).Info("ignoring direct session message",
+		L(e).Warn("ignoring direct session message",
 			"ap", ap,
 			"session", clear.Session,
 			"msg", m.Debug())
@@ -98,7 +98,7 @@ func (e *EstTransmitting) OnRelay(relay int64, peer key.NodePublic, clear *msg2.
 		e.tm.Poke()
 		return LogTransition(e, &EstRendezGot{EstablishingCommon: e.EstablishingCommon, m: m})
 	default:
-		L(e).Info("ignoring direct session message",
+		L(e).Warn("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
 			"session", clear.Session,

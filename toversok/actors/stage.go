@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"slices"
+	"sort"
 	"sync"
 	"time"
 )
@@ -39,8 +40,8 @@ type InConnActor interface {
 func MakeStage(
 	pCtx context.Context,
 
-	nodePriv key.NodePrivate,
-	sessPriv key.SessionPrivate,
+	nodePriv func() *key.NodePrivate,
+	sessPriv func() *key.SessionPrivate,
 
 	bindExt func() types.UDPConn,
 	bindLocal func(peer key.NodePublic) types.UDPConn,
@@ -55,7 +56,8 @@ func MakeStage(
 		inConn:    make(map[key.NodePublic]InConnActor),
 		outConn:   make(map[key.NodePublic]OutConnActor),
 
-		privKey:        nodePriv,
+		getNodePriv:    nodePriv,
+		getSessPriv:    sessPriv,
 		localEndpoints: make([]netip.AddrPort, 0),
 
 		peerInfo: make(map[key.NodePublic]*stage.PeerInfo),
@@ -106,7 +108,8 @@ type Stage struct {
 	inConn    map[key.NodePublic]InConnActor
 	outConn   map[key.NodePublic]OutConnActor
 
-	privKey        key.NodePrivate
+	getNodePriv    func() *key.NodePrivate
+	getSessPriv    func() *key.SessionPrivate
 	localEndpoints []netip.AddrPort
 	stunEndpoints  []netip.AddrPort
 
@@ -288,6 +291,10 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 	s.connMutex.RLock()
 	defer s.connMutex.RUnlock()
 
+	sort.SliceStable(endpoints, func(i, j int) bool {
+		return endpoints[i].Addr().Less(endpoints[j].Addr())
+	})
+
 	if slices.Equal(s.stunEndpoints, endpoints) {
 		// no change
 		return
@@ -301,6 +308,10 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 func (s *Stage) setLocalEndpoints(endpoints []netip.AddrPort) {
 	s.connMutex.RLock()
 	defer s.connMutex.RUnlock()
+
+	sort.SliceStable(endpoints, func(i, j int) bool {
+		return endpoints[i].Addr().Less(endpoints[j].Addr())
+	})
 
 	if slices.Equal(s.localEndpoints, endpoints) {
 		// no change
@@ -449,16 +460,6 @@ func (s *Stage) GetPeerInfo(peer key.NodePublic) *stage.PeerInfo {
 	defer s.peerInfoMutex.RUnlock()
 
 	return s.peerInfo[peer]
-}
-
-func (s *Stage) ClearPeers() {
-	s.peerInfoMutex.RLock()
-	peers := maps.Keys(s.peerInfo)
-	s.peerInfoMutex.RUnlock()
-
-	for _, peer := range peers {
-		s.RemovePeer(peer)
-	}
 }
 
 func (s *Stage) RemovePeer(peer key.NodePublic) error {

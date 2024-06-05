@@ -50,7 +50,7 @@ func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerStat
 		})
 	//case *msg.Rendezvous:
 	default:
-		L(e).Info("ignoring direct session message",
+		L(e).Warn("ignoring direct session message",
 			"ap", ap,
 			"session", clear.Session,
 			"msg", m.Debug())
@@ -74,7 +74,7 @@ func (e *EstHalf) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMes
 		return nil
 	//case *msg.Rendezvous:
 	default:
-		L(e).Info("ignoring direct session message",
+		L(e).Warn("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
 			"session", clear.Session,

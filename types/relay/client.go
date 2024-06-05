@@ -265,7 +265,7 @@ func (c *Client) Cancel(err error) {
 }
 
 func (c *Client) Close() {
-	if c.closed {
+	if c.closed || context.Cause(c.ctx) != nil {
 		return
 	}
 

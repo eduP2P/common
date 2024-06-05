@@ -7,6 +7,8 @@ import (
 	"net/netip"
 )
 
+// TODO DEPRECATED, should be refactored into using fake control client and such
+
 type Event interface {
 	EventName() string
 }

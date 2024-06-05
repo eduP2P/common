@@ -344,7 +344,7 @@ func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodeP
 
 	tm.SendMsgToDirect(endpoint, session, &msgsess.Ping{
 		TxID:    txid,
-		NodeKey: tm.s.privKey.Public(),
+		NodeKey: tm.s.getNodePriv().Public(),
 	})
 
 	tm.pings[txid] = &stage.SentPing{
@@ -360,7 +360,7 @@ func (tm *TrafficManager) SendPingRelay(relay int64, peer key.NodePublic, sessio
 
 	tm.SendMsgToRelay(relay, peer, session, &msgsess.Ping{
 		TxID:    txid,
-		NodeKey: tm.s.privKey.Public(),
+		NodeKey: tm.s.getNodePriv().Public(),
 	})
 
 	tm.pings[txid] = &stage.SentPing{

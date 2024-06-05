@@ -7,8 +7,6 @@ import (
 )
 
 type ControlCallbacks interface {
-	ClearPeers()
-
 	AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr) error
 	UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error
 	RemovePeer(peer key.NodePublic) error
@@ -27,5 +25,5 @@ type ControlInterface interface {
 type FullControlInterface interface {
 	ControlInterface
 
-	InstallCallbacks(ControlCallbacks) error
+	InstallCallbacks(ControlCallbacks)
 }

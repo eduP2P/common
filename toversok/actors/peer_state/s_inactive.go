@@ -44,7 +44,7 @@ func (i *Inactive) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerSta
 		i.ackPongDirect(ap, clear.Session, m)
 		return nil
 	default:
-		L(i).Info("ignoring direct session message",
+		L(i).Warn("ignoring direct session message",
 			"ap", ap,
 			"session", clear.Session,
 			"msg", m.Debug())
@@ -73,7 +73,7 @@ func (i *Inactive) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMe
 			m:                  m,
 		})
 	default:
-		L(i).Info("ignoring direct session message",
+		L(i).Warn("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
 			"session", clear.Session,

@@ -68,11 +68,16 @@ func (r *SockRecv) Run() {
 
 		var e net.Error
 		if err != nil && (!errors.As(err, &e) || !e.Timeout()) {
-			// handle error, it'S not a timeout
+			// handle error, it's not a timeout
 			// TODO
 			//  unsure what to do here, as this might be a permanent error of the socket?
 			//  would this result in the closing of the channel? if so, wouldnt the corresponding outconn also die?
 			//  if so, then who detects the death of the actor and recreates it like that?
+			if context.Cause(r.ctx) != nil {
+				// we're closing anyways, just return
+				return
+			}
+
 			panic(err)
 		}
 
@@ -81,6 +86,10 @@ func (r *SockRecv) Run() {
 		}
 
 		pkt := slices.Clone(buf[:n])
+
+		if context.Cause(r.ctx) != nil {
+			return
+		}
 
 		select {
 		case <-r.ctx.Done():
@@ -96,12 +105,10 @@ func (r *SockRecv) Run() {
 }
 
 func (r *SockRecv) Close() {
-	r.Conn.Close()
-	select {
-	case <-r.ctx.Done():
-		return
-	default:
+	if context.Cause(r.ctx) == nil {
+		r.Conn.Close()
 		close(r.outCh)
+		r.ctxCan()
+		return
 	}
-
 }

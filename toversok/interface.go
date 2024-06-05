@@ -1,6 +1,9 @@
 package toversok
 
 import (
+	"context"
+	"github.com/shadowjonathan/edup2p/types"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"net/netip"
 	"time"
@@ -14,8 +17,6 @@ type PeerCfg struct {
 	VIPs *VirtualIPs
 
 	KeepAliveInterval *time.Duration
-
-	LocalEndpointPort *uint16
 }
 
 type VirtualIPs struct {
@@ -29,9 +30,19 @@ type WGStats struct {
 	RxBytes       int64
 }
 
-type WireGuardConfigurator interface {
+type ControlHost interface {
+	CreateClient(parentCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate) (ifaces.FullControlInterface, error)
+}
+
+type WireGuardHost interface {
+	Reset() error
+
+	Controller() WireGuardController
+}
+
+type WireGuardController interface {
 	// Init the wireguard interface, and make it ready for configuration changes.
-	Init(privateKey key.NakedKey, addr4, add6 netip.Prefix) (port uint16, err error)
+	Init(privateKey key.NodePrivate, addr4, add6 netip.Prefix) error
 
 	// UpdatePeer updates a peer with certain values, mapped by public key
 	UpdatePeer(publicKey key.NodePublic, cfg PeerCfg) error
@@ -43,9 +54,19 @@ type WireGuardConfigurator interface {
 	//
 	// Returns (nil, nil) when peer couldn't be found.
 	GetStats(publicKey key.NodePublic) (*WGStats, error)
+
+	ConnFor(node key.NodePublic) types.UDPConn
 }
 
-type FirewallConfigurator interface {
+type FirewallHost interface {
+	Reset() error
+
+	Controller() FirewallController
+}
+
+type FirewallController interface {
+	Init() error
+
 	// QuarantineNodes configures the firewall to block incoming connections from these IPs.
 	//
 	// Replaces an existing firewall configuration.

@@ -118,9 +118,7 @@ func (c *RestartableRelayConn) establish() (success bool) {
 		ExpectCertCN: types.PtrOr(c.config.CertCN, ""),
 		// Connect and establishment timeouts are default
 		// TODO maybe allow Control to tweak this setting?
-	}, func() *key.NodePrivate {
-		return &c.man.s.privKey
-	}, c.config.Key)
+	}, c.man.s.getNodePriv, c.config.Key)
 
 	if err != nil {
 		c.L().Warn("failed to establish connection to relay", "error", err)

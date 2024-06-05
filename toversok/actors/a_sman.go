@@ -17,21 +17,21 @@ type SessionManager struct {
 	*ActorCommon
 	s *Stage
 
-	session key.SessionPrivate
+	session func() *key.SessionPrivate
 }
 
 const SMInboxLen = 8
 
 var DebugSManTakeNodeAsSession = false
 
-func (s *Stage) makeSM(priv key.SessionPrivate) *SessionManager {
+func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
 	sm := &SessionManager{
 		ActorCommon: MakeCommon(s.Ctx, SMInboxLen),
 		s:           s,
 		session:     priv,
 	}
 
-	L(sm).Debug("sman with session key", "sess", priv.Public().Debug())
+	L(sm).Debug("sman with session key", "sess", priv().Public().Debug())
 
 	return sm
 }
@@ -114,7 +114,7 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, err
 
 	b = b[key.Len:]
 
-	clearBytes, ok := sm.session.Shared(sessionKey).Open(b)
+	clearBytes, ok := sm.session().Shared(sessionKey).Open(b)
 
 	if !ok {
 		return nil, fmt.Errorf("could not decrypt session message")
@@ -135,13 +135,13 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, err
 func (sm *SessionManager) Pack(sMsg msg2.SessionMessage, toSession key.SessionPublic) []byte {
 	clearBytes := sMsg.MarshalSessionMessage()
 
-	cipherBytes := sm.session.Shared(toSession).Seal(clearBytes)
+	cipherBytes := sm.session().Shared(toSession).Seal(clearBytes)
 
-	return slices.Concat(msg2.MagicBytes, sm.session.Public().ToByteSlice(), cipherBytes)
+	return slices.Concat(msg2.MagicBytes, sm.session().Public().ToByteSlice(), cipherBytes)
 }
 
 func (sm *SessionManager) Session() key.SessionPublic {
-	return sm.session.Public()
+	return sm.session().Public()
 }
 
 func (sm *SessionManager) Close() {

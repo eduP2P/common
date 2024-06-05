@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/shadowjonathan/edup2p/toversok"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"go4.org/netipx"
+	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"log/slog"
@@ -19,7 +21,7 @@ import (
 //
 // Should only be used for development, not in actual application.
 
-// WGCtrl is a toversok.WireGuardConfigurator implementation that takes a preconfigured `client`-tool compatible
+// WGCtrl is a toversok.WireGuardController implementation that takes a preconfigured `client`-tool compatible
 // interface and interacts with it.
 //
 // On macos, run:
@@ -36,9 +38,43 @@ type WGCtrl struct {
 	name string
 
 	mu sync.Mutex
+
+	wgPort uint16
+
+	localMapping map[key.NodePublic]*mapping
 }
 
-func (w *WGCtrl) Init(privateKey key.NakedKey, addr4, addr6 netip.Prefix) (port uint16, err error) {
+func (w *WGCtrl) Reset() error {
+	for _, m := range w.localMapping {
+		m.conn.Close()
+	}
+
+	maps.Clear(w.localMapping)
+
+	zeroKey := wgtypes.Key{}
+
+	if err := w.client.ConfigureDevice(w.name, wgtypes.Config{
+		PrivateKey:   &zeroKey,
+		ReplacePeers: true,
+		Peers:        []wgtypes.PeerConfig{},
+	}); err != nil {
+		return fmt.Errorf("error resetting wg device: %w", err)
+	}
+
+	return nil
+}
+
+func (w *WGCtrl) Controller() toversok.WireGuardController {
+	return w
+}
+
+type mapping struct {
+	conn types.UDPConnCloseCatcher
+
+	port uint16
+}
+
+func (w *WGCtrl) Init(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -77,8 +113,10 @@ func (w *WGCtrl) Init(privateKey key.NakedKey, addr4, addr6 netip.Prefix) (port 
 		)
 	}
 
+	unveiledKey := key.UnveilPrivate(privateKey)
+
 	err = w.client.ConfigureDevice(w.name, wgtypes.Config{
-		PrivateKey:   (*wgtypes.Key)(&privateKey),
+		PrivateKey:   (*wgtypes.Key)(&unveiledKey),
 		ReplacePeers: true,
 		Peers:        []wgtypes.PeerConfig{},
 	})
@@ -89,26 +127,29 @@ func (w *WGCtrl) Init(privateKey key.NakedKey, addr4, addr6 netip.Prefix) (port 
 	var device *wgtypes.Device
 	device, err = w.client.Device(w.name)
 
-	port = (uint16)(device.ListenPort)
+	w.wgPort = (uint16)(device.ListenPort)
 
 	return
+}
+
+func (w *WGCtrl) ConnFor(node key.NodePublic) types.UDPConn {
+	return &w.ensureLocalConn(node).conn
 }
 
 func (w *WGCtrl) UpdatePeer(publicKey key.NodePublic, cfg toversok.PeerCfg) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	m := w.ensureLocalConn(publicKey)
+
 	peercfg := wgtypes.PeerConfig{
 		PublicKey:                   wgtypes.Key(publicKey),
 		Remove:                      false,
 		UpdateOnly:                  !cfg.Set,
 		PersistentKeepaliveInterval: cfg.KeepAliveInterval,
-	}
-
-	if cfg.LocalEndpointPort != nil {
-		peercfg.Endpoint = net.UDPAddrFromAddrPort(
-			netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), *cfg.LocalEndpointPort),
-		)
+		Endpoint: net.UDPAddrFromAddrPort(
+			netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), m.port),
+		),
 	}
 
 	if cfg.VIPs != nil {
@@ -169,4 +210,66 @@ func (w *WGCtrl) GetStats(publicKey key.NodePublic) (*toversok.WGStats, error) {
 		TxBytes:       foundPeer.TransmitBytes,
 		RxBytes:       foundPeer.ReceiveBytes,
 	}, nil
+}
+
+func (w *WGCtrl) ensureLocalConn(peer key.NodePublic) *mapping {
+	m, ok := w.localMapping[peer]
+
+	if !ok {
+		m = w.bindLocal()
+		w.localMapping[peer] = m
+	}
+
+	if m.conn.Closed {
+		if err := w.rebindMapping(m); err != nil {
+			slog.Warn("wgctrl: received error when trying to rebind conn", "error", err)
+		}
+	}
+
+	return m
+}
+
+func (w *WGCtrl) rebindMapping(m *mapping) error {
+	conn, err := w.getWGConn(&m.port)
+
+	if err == nil {
+		m.conn = types.UDPConnCloseCatcher{UDPConn: conn}
+	}
+
+	return err
+}
+
+func (w *WGCtrl) bindLocal() *mapping {
+	conn, err := w.getWGConn(nil)
+
+	if err != nil {
+		panic(fmt.Sprintf("error when first binding to wgport: %s", err))
+	}
+
+	return mappingFromUDPConn(conn)
+}
+
+func (w *WGCtrl) getWGConn(fromPort *uint16) (*net.UDPConn, error) {
+	var laddr *net.UDPAddr = nil
+
+	if fromPort != nil {
+		laddr = net.UDPAddrFromAddrPort(
+			netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), *fromPort),
+		)
+	}
+
+	return net.DialUDP("udp", laddr,
+		net.UDPAddrFromAddrPort(
+			netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), w.wgPort),
+		),
+	)
+}
+
+func mappingFromUDPConn(udp *net.UDPConn) *mapping {
+	ap := netip.MustParseAddrPort(udp.LocalAddr().String())
+
+	return &mapping{
+		conn: types.UDPConnCloseCatcher{UDPConn: udp},
+		port: ap.Port(),
+	}
 }

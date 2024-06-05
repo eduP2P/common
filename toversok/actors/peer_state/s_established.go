@@ -102,7 +102,7 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) Peer
 
 	//case *msg.Rendezvous:
 	default:
-		L(e).Info("ignoring direct session message",
+		L(e).Warn("ignoring direct session message",
 			"ap", ap,
 			"session", clear.Session,
 			"msg", m.Debug())
@@ -129,7 +129,7 @@ func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg2.Clea
 	//case *msg.Rendezvous:
 	// TODO maybe re-establishment logic?
 	default:
-		L(e).Info("ignoring direct session message",
+		L(e).Warn("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
 			"session", clear.Session,

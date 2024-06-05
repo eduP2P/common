@@ -49,7 +49,7 @@ func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState
 		return nil
 	//case *msg.Rendezvous:
 	default:
-		L(t).Info("ignoring direct session message",
+		L(t).Warn("ignoring direct session message",
 			"ap", ap,
 			"session", clear.Session,
 			"msg", m.Debug())
@@ -77,7 +77,7 @@ func (t *Trying) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMess
 			m:                  m,
 		})
 	default:
-		L(t).Info("ignoring direct session message",
+		L(t).Warn("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
 			"session", clear.Session,
