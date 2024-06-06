@@ -1,0 +1,47 @@
+flowchart TB
+    WG[WireGuard]
+    L((Local Socket\nRecvLoop))
+    WGR{{Wireguard Writer}}
+
+    subgraph Connections
+        POC{Peer\nOutConn}
+        PIC{Peer\nInConn}
+    end
+
+    TM{Traffic\nManager}
+    SM{Session\nManager}
+
+    subgraph Direct
+        DR{Direct\nRouter}
+        DM{Direct\nManager}
+        DM <==> DS[Lots of sockets\nSending and Receiving]
+    end
+
+    subgraph Relay
+        RR{Relay\nRouter}
+        RM{Relay\nManager}
+        RM <==> RC[Relay Connections]
+    end
+
+    POC ==> |Write to\nAddrPort for DST| DM
+    POC ==> |Write to\nRelay for DST| RM
+    DM ==> |Received Packet\nFrom AddrPort| DR
+    RM ==> |Received Packet\nFrom Relay| RR
+    DR & RR ==> |Forward WireGuard Frames| PIC
+
+    WG ==> |1:M| L
+    L ==> |1:1| POC
+    PIC ==> WGR
+    WGR ==> WG
+
+    SM --> |Session Messages\nFrom Relay/AddrPort| TM
+    TM --> |Session Messages\nTo Relay/AddrPort| SM
+    SM --> |Session Frames\nTo AddrPort| DM
+    SM --> |Session Frames\nTo Relay| RM
+    DR --> |Session Frames from AddrPort| SM
+    RR --> |Session Frames from Relay| SM
+
+    POC -.-> |ConnOut\nActive/Inactive| TM
+    PIC -.-> |ConnIn\nActive/Inactive| TM
+    TM -.-> |Use Relay/AddrPort| POC
+    TM -.-> |AddrPort X\nAKA Peer Y| DR

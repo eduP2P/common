@@ -1,0 +1,87 @@
+stateDiagram-v2
+    wfs: Waiting For Info
+
+    I: Inactive
+
+    R: Trying
+
+    Eing: Establishing
+
+    E: Established
+
+    [*] --> wfs
+
+    wfs --> I
+
+    I --> R: Connection Active,\n(re)try immediately
+
+    I --> Eing: Received Rendezvous
+    R --> Eing: Retry Timer Fires
+
+    R --> Eing: Received Rendezvous
+
+    I --> I: Ping>Pong
+    R --> R: Ping>Pong
+
+    state Eing {
+        T: Transmitting
+        PT: Pre-Transmit (T)
+        hE: Half-Established
+        GR: Rendezvous Got (T)
+        RR: Rendezvous Acknowledged
+        he_pre: Half-Establishing (T)
+        F: Finalizing (T)
+
+        %% note left of T: Send Pings and Rendezvous
+        %% note left of hE: Send Pong + Ping
+        %% note right of RR: Send Pings
+
+        %%        state rr_join <<join>>
+
+        [*] --> PT
+        PT --> T: Send Pings and Rendezvous\n(transient)
+        [*] --> GR: Got Rendezvous
+        T --> GR: Got Rendezvous
+        GR --> RR: Send Pings\n(to Rendezvous endpoints)\n(transient)
+
+        %% T --> hE: Got Ping
+
+        RR --> he_pre: Got Ping
+        T --> he_pre: Got Ping
+
+        he_pre --> hE: Send Pong + Ping\n(transient)
+
+        hE --> hE: Ping>Pong
+
+        RR --> F: Got Pong
+        hE --> F: Got Pong
+        T --> F: Got Pong
+
+        F --> [*]
+
+    }
+
+    B: Booting (T)
+
+    TD: Teardown (T)
+
+    Eing-->B
+
+    B --> E: Send addrpair to outconn,\nregister addrpair aka to dman
+
+%%    Eing --> E: Got Pong
+
+    Eing --> R: Timeout of 10s,\nretry after 40s
+
+    E --> TD: Either ping or pong not received in last 5s,\nretry immidiately
+    E --> TD: Connection Inactive
+
+    state td_join <<join>>
+
+    TD --> td_join: clead dman aka\nsend home relay to outconn
+
+    td_join --> I
+    td_join --> R
+
+    E --> E: Send pings every 2s
+    E --> E: Ping>Pong
