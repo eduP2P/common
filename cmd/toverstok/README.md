@@ -205,3 +205,30 @@ pc use
 en create
 en start
 ```
+
+## wgctrl configuration
+
+For toverstok, wgctrl is used, which needs an externally running wireguard implementation.
+
+On MacOS, the wireguard-go binary can be used.
+
+On Linux, kernel wireguard can also be used.
+
+**You will get a message on engine creation to run a few commands, these are required to get networking to run properly.**
+
+### MacOS - Userspace
+
+Create a utunXX interface with the following commands:
+1. Install wireguard-go: `brew install wireguard-go`
+2. Run an instance as sudo: `sudo wireguard-go utun`
+3. Add ownership of current user to wireguard sockets: `sudo chown $USER /var/run/wireguard/utun*`
+
+To shut down the sockets, run `sudo rm /var/run/wireguard/utun*`
+
+### Linux - Kernel
+
+On linux, run the toverstok binary as root, or with `NET_ADMIN` capability.
+
+Create the wg0 interface with the following commands:
+1. Create the wg0 interface: `sudo ip link add wg0 type wireguard`
+2. Set up the interface: `sudo ip link set wg0 up`
