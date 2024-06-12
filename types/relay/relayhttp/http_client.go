@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/dial"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/relay"
@@ -25,7 +25,7 @@ func makeRelayURL(opts dial.Opts) string {
 func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, expectKey key.NodePublic) (*relay.Client, error) {
 	opts.SetDefaults()
 
-	c, err := dial.HTTP(ctx, opts, makeRelayURL(opts), relay.UpgradeProtocol, func(parentCtx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*relay.Client, error) {
+	c, err := dial.HTTP(ctx, opts, makeRelayURL(opts), relay.UpgradeProtocol, func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*relay.Client, error) {
 		return relay.EstablishClient(ctx, mc, brw, opts.EstablishTimeout, getPriv)
 	})
 	if err != nil {

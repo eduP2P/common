@@ -6,8 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/bin"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/msgcontrol"
 	"io"
 	"os"
@@ -18,7 +17,7 @@ import (
 type Conn struct {
 	ctx context.Context
 
-	mc conn.MetaConn
+	mc types.MetaConn
 
 	readMutex sync.Mutex
 	reader    *bufio.Reader
@@ -27,7 +26,7 @@ type Conn struct {
 	writer     *bufio.Writer
 }
 
-func NewConn(ctx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter) *Conn {
+func NewConn(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter) *Conn {
 	return &Conn{
 		ctx:    ctx,
 		mc:     mc,
@@ -157,7 +156,7 @@ func (c *Conn) readMessageHeaderLocked(ttfbTimeout time.Duration) (typ msgcontro
 
 	typ = msgcontrol.ControlMessageType(readType)
 
-	length, err = bin.ReadUint32(c.reader)
+	length, err = types.ReadUint32(c.reader)
 	if err != nil {
 		err = fmt.Errorf("failed to read message length: %w", err)
 	}
@@ -182,7 +181,7 @@ func (c *Conn) Write(obj msgcontrol.ControlMessage) error {
 		return fmt.Errorf("could not write header; type: %w", err)
 	}
 
-	if err := bin.WriteUint32(c.writer, uint32(len(data))); err != nil {
+	if err := types.WriteUint32(c.writer, uint32(len(data))); err != nil {
 		return fmt.Errorf("could not write header; data length: %w", err)
 	}
 

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"io"
@@ -134,7 +134,7 @@ func (s *Server) sendServerInfo(client *ServerClient) error {
 	return client.buffWriter.Flush()
 }
 
-func (s *Server) Accept(ctx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
+func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
 	reader := brw.Reader
 	// TODO: Tailscale mentions that bufio writer buffers take up a large portion of their memory,
 	//  and so they've made an implementation that lazily grabs memory from a pool,

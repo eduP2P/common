@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/conn"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgcontrol"
 	"net/netip"
@@ -31,7 +30,7 @@ type Client struct {
 	// TODO
 }
 
-func EstablishClient(parentCtx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string) (*Client, error) {
+func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string) (*Client, error) {
 	c := &Client{
 		ctx: parentCtx,
 

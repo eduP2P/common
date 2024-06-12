@@ -12,7 +12,7 @@ func main() {
 	log.SetFlags(0)
 
 	if len(os.Args) != 2 {
-		log.Fatalf("usage: %s <hostname>", os.Args[0])
+		log.Fatalf("usage: %s <address>", os.Args[0])
 	}
 	host := os.Args[1]
 

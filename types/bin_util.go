@@ -1,4 +1,6 @@
-package bin
+package types
+
+// Contains various utility functions for binary protocol wrangling.
 
 import (
 	"bufio"

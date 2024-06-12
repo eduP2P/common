@@ -2,7 +2,7 @@ package relay
 
 import (
 	"bufio"
-	"github.com/shadowjonathan/edup2p/types/bin"
+	"github.com/shadowjonathan/edup2p/types"
 )
 
 type FrameType byte
@@ -30,7 +30,7 @@ func readFrameHeader(reader *bufio.Reader) (typ FrameType, frameLen uint32, err 
 	if err != nil {
 		return 0, 0, err
 	}
-	frameLen, err = bin.ReadUint32(reader)
+	frameLen, err = types.ReadUint32(reader)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -41,5 +41,5 @@ func writeFrameHeader(bw *bufio.Writer, typ FrameType, frameLen uint32) error {
 	if err := bw.WriteByte(byte(typ)); err != nil {
 		return err
 	}
-	return bin.WriteUint32(bw, frameLen)
+	return types.WriteUint32(bw, frameLen)
 }

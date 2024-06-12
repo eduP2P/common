@@ -21,6 +21,8 @@ func (b *Booting) OnTick() PeerState {
 	b.tm.OutConnUseAddrPort(b.peer, b.ap)
 	b.tm.DManSetAKA(b.peer, b.ap)
 
+	L(b).Info("ESTABLISHED direct peer connection", "peer", b.peer.Debug(), "via", b.ap.String())
+
 	return LogTransition(b, &Established{
 		StateCommon:      b.StateCommon,
 		lastPingRecv:     time.Now(),

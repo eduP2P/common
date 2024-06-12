@@ -2,7 +2,7 @@ package msgsess
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/bin"
+	"github.com/shadowjonathan/edup2p/types"
 	"net/netip"
 	"slices"
 )
@@ -15,7 +15,7 @@ func (r *Rendezvous) MarshalSessionMessage() []byte {
 	b := make([]byte, 0)
 
 	for _, ap := range r.MyAddresses {
-		b = append(b, bin.PutAddrPort(ap)...)
+		b = append(b, types.PutAddrPort(ap)...)
 	}
 
 	return slices.Concat([]byte{byte(v1), byte(RendezvousMessage)}, b)

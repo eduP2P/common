@@ -1,3 +1,6 @@
+// Package stun contains all the code pertaining to STUN resolution.
+//
+// Note that the code here produces behaviour that toversok needs; it is not an entirely complete STUN implementation.
 package stun
 
 import (

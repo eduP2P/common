@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"io"
 	"net/http"
 	"time"
@@ -12,7 +12,7 @@ import (
 
 // getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.NodePublic
 
-func HTTP[T any](ctx context.Context, opts Opts, url, protocol string, makeClient func(parentCtx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, opts Opts) (*T, error)) (*T, error) {
+func HTTP[T any](ctx context.Context, opts Opts, url, protocol string, makeClient func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts Opts) (*T, error)) (*T, error) {
 	netConn, err := WithTLS(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("dial failed: %w", err)

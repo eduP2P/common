@@ -61,33 +61,39 @@ func main() {
 
 	shell.Println("ToverStok Interactive Shell")
 
-	traceCmd := &ishell.Cmd{
-		Name: "trace",
-		Help: "set log level to e",
+	logCmd := &ishell.Cmd{
+		Name: "log",
+		Help: "get log level",
 		Func: func(c *ishell.Context) {
-			programLevel.Set(-8)
+			c.Println(programLevel.Level().String())
 		},
 	}
 
-	debugCmd := &ishell.Cmd{
+	logCmd.AddCmd(&ishell.Cmd{
+		Name: "info",
+		Help: "set log level to info",
+		Func: func(c *ishell.Context) {
+			programLevel.Set(slog.LevelInfo)
+		},
+	})
+
+	logCmd.AddCmd(&ishell.Cmd{
 		Name: "debug",
 		Help: "set log level to debug",
 		Func: func(c *ishell.Context) {
 			programLevel.Set(slog.LevelDebug)
 		},
-	}
+	})
 
-	infoCmd := &ishell.Cmd{
-		Name: "info",
-		Help: "set log level to debug",
+	logCmd.AddCmd(&ishell.Cmd{
+		Name: "trace",
+		Help: "set log level to trace",
 		Func: func(c *ishell.Context) {
-			programLevel.Set(slog.LevelInfo)
+			programLevel.Set(-8)
 		},
-	}
+	})
 
-	shell.AddCmd(traceCmd)
-	shell.AddCmd(debugCmd)
-	shell.AddCmd(infoCmd)
+	shell.AddCmd(logCmd)
 
 	shell.AddCmd(keyCmd())
 	shell.AddCmd(wgCmd())
@@ -147,13 +153,17 @@ func keyCmd() *ishell.Cmd {
 		},
 	})
 
-	c.AddCmd(&ishell.Cmd{Name: "pub", Help: "show the pubkey", Func: func(c *ishell.Context) {
-		if privKey != nil {
-			c.Println("pub:", privKey.Public().Marshal())
-		} else {
-			c.Err(errors.New("private key not set"))
-		}
-	}})
+	c.AddCmd(&ishell.Cmd{
+		Name: "pub",
+		Help: "show the pubkey",
+		Func: func(c *ishell.Context) {
+			if privKey != nil {
+				c.Println("pub:", privKey.Public().Marshal())
+			} else {
+				c.Err(errors.New("private key not set"))
+			}
+		},
+	})
 
 	return c
 }
@@ -705,7 +715,17 @@ func enCmd() *ishell.Cmd {
 		Name: "en",
 		Help: "toverstok engine and subcommands",
 		Func: func(c *ishell.Context) {
-			// TODO show status
+			if engine == nil {
+				c.Println("engine: nil")
+			} else {
+				started := "not started"
+
+				if engine.Started() {
+					started = "started"
+				}
+
+				c.Println("engine: created, " + started)
+			}
 		},
 	}
 

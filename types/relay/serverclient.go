@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"io"
@@ -43,7 +43,7 @@ type ServerClient struct {
 	// An asynchronous pong return channel, hopping a pong between RunReceiver and RunSender
 	sendPongCh chan PingData
 
-	netConn conn.MetaConn
+	netConn types.MetaConn
 
 	remoteAddrPort netip.AddrPort
 

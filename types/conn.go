@@ -1,6 +1,9 @@
 package types
 
+// Contains types and structs pertaining to wrapping and identifying Conn-like types.
+
 import (
+	"io"
 	"net/netip"
 	"time"
 )
@@ -29,6 +32,11 @@ func (c *UDPConnCloseCatcher) Close() error {
 	return c.UDPConn.Close()
 }
 
-// TODO add wrapper type for net.UDPConn
-
 // TODO add test dummy type
+
+type MetaConn interface {
+	io.Closer
+	SetDeadline(time.Time) error
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}

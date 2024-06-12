@@ -3,7 +3,7 @@ package msgsess
 import (
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/bin"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"net/netip"
 )
@@ -72,7 +72,7 @@ func parsePong(b []byte) (*Pong, error) {
 	txid := [12]byte(b[:12])
 	b = b[12:]
 
-	ap := bin.ParseAddrPort([18]byte(b[:18]))
+	ap := types.ParseAddrPort([18]byte(b[:18]))
 
 	return &Pong{TxID: txid, Src: ap}, nil
 }
@@ -85,7 +85,7 @@ func parseRendezvous(b []byte) (*Rendezvous, error) {
 	aps := make([]netip.AddrPort, 0)
 
 	for {
-		ap := bin.ParseAddrPort([18]byte(b[:18]))
+		ap := types.ParseAddrPort([18]byte(b[:18]))
 		aps = append(aps, ap)
 		b = b[18:]
 

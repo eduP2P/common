@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -13,7 +13,7 @@ import (
 
 type ProtocolServer interface {
 	Logger() *slog.Logger
-	Accept(ctx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error
+	Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error
 }
 
 func HTTPHandler(s ProtocolServer, proto string) http.Handler {

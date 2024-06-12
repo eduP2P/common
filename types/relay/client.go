@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"io"
@@ -33,7 +33,7 @@ type Client struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
 
-	mc conn.MetaConn
+	mc types.MetaConn
 
 	recvMutex sync.Mutex
 	reader    *bufio.Reader
@@ -85,7 +85,7 @@ type RecvPacket struct {
 //
 // It logs in and authenticates the server before returning a Client object.
 // If any error occurs, or no client can be established before timeout, it returns.
-func EstablishClient(parentCtx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate) (*Client, error) {
+func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate) (*Client, error) {
 	ctx, ccc := context.WithCancelCause(parentCtx)
 
 	c := &Client{

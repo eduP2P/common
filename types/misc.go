@@ -1,5 +1,7 @@
 package types
 
+// Contains miscellaneous functions and types
+
 import (
 	"context"
 	"crypto/rand"

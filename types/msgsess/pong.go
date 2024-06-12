@@ -2,7 +2,7 @@ package msgsess
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/bin"
+	"github.com/shadowjonathan/edup2p/types"
 	"net/netip"
 	"slices"
 )
@@ -14,7 +14,7 @@ type Pong struct {
 }
 
 func (p *Pong) MarshalSessionMessage() []byte {
-	return slices.Concat([]byte{byte(v1), byte(PongMessage)}, p.TxID[:], bin.PutAddrPort(p.Src))
+	return slices.Concat([]byte{byte(v1), byte(PongMessage)}, p.TxID[:], types.PutAddrPort(p.Src))
 }
 
 func (p *Pong) Debug() string {

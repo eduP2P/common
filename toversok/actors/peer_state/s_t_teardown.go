@@ -26,10 +26,14 @@ func (t *Teardown) OnTick() PeerState {
 	t.tm.OutConnTrackHome(t.peer)
 
 	if t.inactive {
+		L(t).Info("DROPPED direct peer connection (due to inactivity)", "peer", t.peer.Debug())
+
 		return LogTransition(t, &Inactive{
 			StateCommon: t.StateCommon,
 		})
 	} else {
+		L(t).Info("LOST direct peer connection", "peer", t.peer.Debug())
+
 		return LogTransition(t, &Trying{
 			StateCommon: t.StateCommon,
 			tryAt:       t.tryAt,

@@ -92,17 +92,17 @@ func (e *Engine) Restart() {
 	}()
 
 	if err = e.wg.Reset(); err != nil {
-		e.Slog().Error("restart: could not reset wireguard", "err", err)
+		e.slog().Error("restart: could not reset wireguard", "err", err)
 		return
 	}
 
 	if err = e.fw.Reset(); err != nil {
-		e.Slog().Error("restart: could not reset firewall", "err", err)
+		e.slog().Error("restart: could not reset firewall", "err", err)
 		return
 	}
 
 	if err = e.InstallSession(); err != nil {
-		e.Slog().Error("restart: could not install session", "err", err)
+		e.slog().Error("restart: could not install session", "err", err)
 		return
 	}
 }
@@ -121,7 +121,11 @@ func (e *Engine) InstallSession() error {
 	return err
 }
 
-func (e *Engine) Slog() *slog.Logger {
+func (e *Engine) Started() bool {
+	return e.started
+}
+
+func (e *Engine) slog() *slog.Logger {
 	return slog.With("from", "engine")
 }
 

@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/conn"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgcontrol"
 	"github.com/shadowjonathan/edup2p/types/relay"
@@ -37,7 +37,7 @@ func (s *Server) Logger() *slog.Logger {
 	return slog.With("control", s.privKey.Public().Debug())
 }
 
-func (s *Server) Accept(ctx context.Context, mc conn.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
+func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
 	cc := NewConn(ctx, mc, brw)
 
 	// TODO this logon segment can be in a different function
