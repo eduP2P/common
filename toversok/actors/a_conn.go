@@ -2,9 +2,11 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"net"
 	"net/netip"
 	"time"
 )
@@ -55,6 +57,7 @@ func (oc *OutConn) Run() {
 		if v := recover(); v != nil {
 			L(oc).Error("panicked", "panic", v)
 			oc.Cancel()
+			bail(oc.ctx, v)
 		}
 	}()
 
@@ -215,6 +218,7 @@ func (ic *InConn) Run() {
 			L(ic).Error("panicked", "panic", v)
 			ic.Cancel()
 			ic.Close()
+			bail(ic.ctx, v)
 		}
 	}()
 
@@ -233,6 +237,10 @@ func (ic *InConn) Run() {
 		case frame := <-ic.pktCh:
 			n, err := ic.udp.Write(frame)
 			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					ic.Cancel()
+					return
+				}
 				// TODO failsafe logic
 				panic(err)
 			}

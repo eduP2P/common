@@ -66,6 +66,7 @@ func (em *EndpointManager) Run() {
 		if v := recover(); v != nil {
 			L(em).Error("panicked", "panic", v)
 			em.Cancel()
+			bail(em.ctx, v)
 		}
 	}()
 
@@ -144,9 +145,7 @@ func (em *EndpointManager) onSTUNResponse(from netip.AddrPort, pkt []byte) error
 		return fmt.Errorf("STUN is not active")
 	}
 
-	if from.Addr().Is4In6() {
-		from = netip.AddrPortFrom(netip.AddrFrom4(from.Addr().As4()), from.Port())
-	}
+	from = types.NormaliseAddrPort(from)
 
 	if _, ok := em.stunRequests[from]; !ok {
 		return fmt.Errorf("got response from unexpected raddr while doing STUN: %s", from)
@@ -190,7 +189,7 @@ func (em *EndpointManager) finaliseSTUN(timeout bool) {
 			L(em).Warn("STUN failed, timed out with no endpoints")
 		}
 	} else {
-		L(em).Info("STUN completed", "endpoints", ep)
+		L(em).Debug("STUN completed", "endpoints", ep)
 	}
 
 	if len(ep) > 0 {

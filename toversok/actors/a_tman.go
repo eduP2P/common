@@ -2,6 +2,7 @@ package actors
 
 import (
 	"github.com/shadowjonathan/edup2p/toversok/actors/peer_state"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgactor"
@@ -55,6 +56,7 @@ func (tm *TrafficManager) Run() {
 			L(tm).Error("panicked", "error", v)
 			tm.Cancel()
 			tm.Close()
+			bail(tm.ctx, v)
 		}
 	}()
 
@@ -280,13 +282,13 @@ func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 //const EstablishedPingTimeout = time.Second * 5
 
 func (tm *TrafficManager) DManClearAKA(peer key.NodePublic) {
-	go SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerClearKnownAs{
+	SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerClearKnownAs{
 		Peer: peer,
 	})
 }
 
 func (tm *TrafficManager) DManSetAKA(peer key.NodePublic, ap netip.AddrPort) {
-	go SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerAddKnownAs{
+	SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerAddKnownAs{
 		Peer:     peer,
 		AddrPort: ap,
 	})
@@ -300,7 +302,7 @@ func (tm *TrafficManager) OutConnUseRelay(peer key.NodePublic, relay int64) {
 		return
 	}
 
-	go SendMessage(out.Inbox(), &msgactor.OutConnUse{
+	SendMessage(out.Inbox(), &msgactor.OutConnUse{
 		UseRelay:   true,
 		RelayToUse: relay,
 	})
@@ -314,7 +316,7 @@ func (tm *TrafficManager) OutConnTrackHome(peer key.NodePublic) {
 		return
 	}
 
-	go SendMessage(out.Inbox(), &msgactor.OutConnUse{
+	SendMessage(out.Inbox(), &msgactor.OutConnUse{
 		UseRelay:  true,
 		TrackHome: true,
 	})
@@ -328,7 +330,7 @@ func (tm *TrafficManager) OutConnUseAddrPort(peer key.NodePublic, ap netip.AddrP
 		return
 	}
 
-	go SendMessage(out.Inbox(), &msgactor.OutConnUse{
+	SendMessage(out.Inbox(), &msgactor.OutConnUse{
 		UseRelay:      false,
 		AddrPortToUse: ap,
 	})
@@ -342,14 +344,16 @@ func (tm *TrafficManager) ValidKeys(peer key.NodePublic, session key.SessionPubl
 func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic) {
 	txid := msgsess.NewTxID()
 
-	tm.SendMsgToDirect(endpoint, session, &msgsess.Ping{
+	nep := types.NormaliseAddrPort(endpoint)
+
+	tm.SendMsgToDirect(nep, session, &msgsess.Ping{
 		TxID:    txid,
 		NodeKey: tm.s.getNodePriv().Public(),
 	})
 
 	tm.pings[txid] = &stage.SentPing{
 		ToRelay:  false,
-		AddrPort: endpoint,
+		AddrPort: nep,
 		At:       time.Now(),
 		To:       peer,
 	}

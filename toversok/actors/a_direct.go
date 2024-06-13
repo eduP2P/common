@@ -1,12 +1,14 @@
 package actors
 
 import (
+	"context"
 	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgactor"
 	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"golang.org/x/exp/maps"
+	"log/slog"
 	"net/netip"
 )
 
@@ -41,6 +43,7 @@ func (dm *DirectManager) Run() {
 		if v := recover(); v != nil {
 			L(dm).Error("panicked", "panic", v)
 			dm.Cancel()
+			bail(dm.ctx, v)
 		}
 	}()
 
@@ -64,16 +67,20 @@ func (dm *DirectManager) Run() {
 		//		dm.logUnknownMessage(m)
 		//	}
 		case req := <-dm.writeCh:
+			L(dm).Log(context.Background(), types.LevelTrace, "direct: writing")
 			_, err := dm.sock.Conn.WriteToUDPAddrPort(req.pkt, req.to)
 			if err != nil {
 				L(dm).Warn("error writing to socket", "error", err)
 			}
+			L(dm).Log(context.Background(), types.LevelTrace, "direct: written")
 
 		case frame := <-dm.sock.outCh:
+			L(dm).Log(context.Background(), types.LevelTrace, "direct: receiving")
 			dm.s.DRouter.Push(ifaces.DirectedPeerFrame{
 				SrcAddrPort: frame.src,
 				Pkt:         frame.pkt,
 			})
+			L(dm).Log(context.Background(), types.LevelTrace, "direct: received")
 		}
 	}
 }
@@ -88,12 +95,10 @@ func (dm *DirectManager) Close() {
 //
 // If the Packet is larger than the current MTU, it will be broken up.
 func (dm *DirectManager) WriteTo(pkt []byte, addr netip.AddrPort) {
-	go func() {
-		dm.writeCh <- directWriteRequest{
-			to:  addr,
-			pkt: pkt,
-		}
-	}()
+	dm.writeCh <- directWriteRequest{
+		to:  addr,
+		pkt: pkt,
+	}
 }
 
 //// MTUFor gets the MTU for a netip.AddrPort pair, or default.
@@ -144,9 +149,9 @@ func (s *Stage) makeDR() *DirectRouter {
 }
 
 func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
-	go func() {
-		dr.frameCh <- frame
-	}()
+	//go func() {
+	dr.frameCh <- frame
+	//}()
 }
 
 func (dr *DirectRouter) Run() {
@@ -170,13 +175,9 @@ func (dr *DirectRouter) Run() {
 		case m := <-dr.inbox:
 			switch m := m.(type) {
 			case *msgactor.DRouterPeerAddKnownAs:
-				dr.aka[m.AddrPort] = m.Peer
+				dr.setAKA(m.AddrPort, m.Peer)
 			case *msgactor.DRouterPeerClearKnownAs:
-				maps.DeleteFunc(dr.aka,
-					func(_ netip.AddrPort, peer key.NodePublic) bool {
-						return peer == m.Peer
-					},
-				)
+				dr.removeAKA(m.Peer)
 			case *msgactor.DRouterPushSTUN:
 				dr.doSTUN(m.Packets)
 			default:
@@ -199,7 +200,7 @@ func (dr *DirectRouter) Run() {
 				continue
 			}
 
-			peer, ok := dr.aka[frame.SrcAddrPort]
+			peer, ok := dr.peerAKA(frame.SrcAddrPort)
 
 			if !ok {
 				// todo log? metric?
@@ -218,6 +219,34 @@ func (dr *DirectRouter) Run() {
 	}
 }
 
+func (dr *DirectRouter) peerAKA(ap netip.AddrPort) (peer key.NodePublic, ok bool) {
+	nap := types.NormaliseAddrPort(ap)
+
+	peer, ok = dr.aka[nap]
+
+	slog.Debug("dr: peerAKA", "ap", ap.String(), "nap", nap, "ok", ok)
+
+	return
+}
+
+func (dr *DirectRouter) setAKA(ap netip.AddrPort, peer key.NodePublic) {
+	nap := types.NormaliseAddrPort(ap)
+
+	slog.Info("dr: setAKA", "ap", ap.String(), "nap", nap.String(), "peer", peer.Debug())
+
+	dr.aka[nap] = peer
+}
+
+func (dr *DirectRouter) removeAKA(peer key.NodePublic) {
+	slog.Info("dr: removeAKA", "peer", peer.Debug())
+
+	maps.DeleteFunc(dr.aka,
+		func(_ netip.AddrPort, p key.NodePublic) bool {
+			return p == peer
+		},
+	)
+}
+
 func (dr *DirectRouter) doSTUN(p map[netip.AddrPort][]byte) {
 	maps.Clear(dr.stunEndpoints)
 
@@ -225,7 +254,7 @@ func (dr *DirectRouter) doSTUN(p map[netip.AddrPort][]byte) {
 		ep = netip.AddrPortFrom(netip.AddrFrom16(ep.Addr().As16()), ep.Port())
 		dr.stunEndpoints[ep] = true
 
-		dr.s.DMan.WriteTo(pkt, ep)
+		go dr.s.DMan.WriteTo(pkt, ep)
 	}
 }
 

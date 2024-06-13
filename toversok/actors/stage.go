@@ -162,18 +162,56 @@ func (s *Stage) Watchdog() {
 		case <-s.Ctx.Done():
 			return
 		case <-ticker.C:
-			slog.Debug("watchdog tick")
-			s.reapConns()
-			s.syncConns()
+			slog.Log(context.Background(), types.LevelTrace, "watchdog tick")
+
+			if s.shouldReap() {
+				slog.Debug("doing reapConns")
+				s.reapConns()
+			}
+
+			if s.shouldSync() {
+				slog.Debug("doing syncConns")
+				s.syncConns()
+			}
 		}
 	}
 }
 
+func (s *Stage) shouldReap() bool {
+	s.connMutex.RLock()
+	defer s.connMutex.RUnlock()
+
+	return len(s.reapableConnsLocked()) > 0
+}
+
 // reapConns checks and removes any peer conns that're dead
 func (s *Stage) reapConns() {
+	// FIXME: this causes a lot of contention on active clients, we should look into making this an upgradable lock
 	s.connMutex.Lock()
 	defer s.connMutex.Unlock()
 
+	peers := s.reapableConnsLocked()
+
+	for _, peer := range peers {
+		// we need to remove them here,
+		// as else we'll be mutating the maps while going over them.
+
+		if c, ok := s.outConn[peer]; ok {
+			c.Cancel()
+		}
+
+		if c, ok := s.inConn[peer]; ok {
+			c.Cancel()
+		}
+
+		delete(s.outConn, peer)
+		delete(s.inConn, peer)
+	}
+
+	return
+}
+
+func (s *Stage) reapableConnsLocked() []key.NodePublic {
 	peers := make([]key.NodePublic, 0)
 
 	for peer, inconn := range s.inConn {
@@ -215,23 +253,74 @@ func (s *Stage) reapConns() {
 		}
 	}
 
-	for _, peer := range peers {
-		// we need to remove them here,
-		// as else we'll be mutating the maps while going over them.
+	return peers
+}
 
-		if c, ok := s.outConn[peer]; ok {
-			c.Cancel()
-		}
+func (s *Stage) syncableConnsLocked() (added []key.NodePublic, deleted []key.NodePublic) {
+	piPeers := maps.Keys(s.peerInfo)
+	connPeers := types.SetUnion(maps.Keys(s.inConn), maps.Keys(s.outConn))
 
-		if c, ok := s.inConn[peer]; ok {
-			c.Cancel()
-		}
-
-		delete(s.outConn, peer)
-		delete(s.inConn, peer)
-	}
+	deleted = types.SetSubtraction(connPeers, piPeers)
+	added = types.SetSubtraction(piPeers, connPeers)
 
 	return
+}
+
+func (s *Stage) shouldSync() bool {
+	s.connMutex.RLock()
+	defer s.connMutex.RUnlock()
+
+	s.peerInfoMutex.RLock()
+	defer s.peerInfoMutex.RUnlock()
+
+	added, deleted := s.syncableConnsLocked()
+
+	return len(added) > 0 || len(deleted) > 0
+}
+
+// syncConns repairs any discrepancies between peerinfo and conns
+func (s *Stage) syncConns() {
+	var change bool
+
+	// FIXME: this causes a lot of contention on active clients, we should look into making this an upgradable lock
+
+	s.connMutex.Lock()
+	defer s.connMutex.Unlock()
+
+	s.peerInfoMutex.Lock()
+	defer s.peerInfoMutex.Unlock()
+
+	added, deleted := s.syncableConnsLocked()
+
+	if len(deleted) > 0 || len(added) > 0 {
+		change = true
+	}
+
+	for _, peer := range deleted {
+		in, inok := s.inConn[peer]
+		out, outok := s.outConn[peer]
+
+		if inok {
+			in.Cancel()
+			delete(s.inConn, peer)
+		}
+
+		if outok {
+			out.Cancel()
+			delete(s.outConn, peer)
+		}
+
+		slog.Debug("pruned conns", "peer", peer.Debug())
+	}
+
+	for _, peer := range added {
+		s.addConnLocked(peer, s.bindLocal(peer))
+		slog.Debug("started conns", "peer", peer.Debug())
+	}
+
+	if change {
+		s.TMan.Poke()
+	}
 }
 
 func (s *Stage) informPeerInfoUpdate(peer key.NodePublic) {
@@ -248,8 +337,8 @@ func (s *Stage) OutConnFor(peer key.NodePublic) OutConnActor {
 
 // InConnFor Looks up the InConn for a peer. Returns nil if it doesn't exist.
 func (s *Stage) InConnFor(peer key.NodePublic) InConnActor {
-	s.connMutex.Lock()
-	defer s.connMutex.Unlock()
+	s.connMutex.RLock()
+	defer s.connMutex.RUnlock()
 
 	return s.inConn[peer]
 }
@@ -288,8 +377,8 @@ func (s *Stage) GetEndpoints() []netip.AddrPort {
 }
 
 func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.connMutex.Lock()
+	defer s.connMutex.Unlock()
 
 	sort.SliceStable(endpoints, func(i, j int) bool {
 		return endpoints[i].Addr().Less(endpoints[j].Addr())
@@ -329,53 +418,6 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-// syncConns repairs any discrepancies between peerinfo and conns
-func (s *Stage) syncConns() {
-	var change bool
-
-	s.connMutex.Lock()
-	defer s.connMutex.Unlock()
-
-	s.peerInfoMutex.Lock()
-	defer s.peerInfoMutex.Unlock()
-
-	piPeers := maps.Keys(s.peerInfo)
-	connPeers := types.SetUnion(maps.Keys(s.inConn), maps.Keys(s.outConn))
-
-	deleted := types.SetSubtraction(connPeers, piPeers)
-	added := types.SetSubtraction(piPeers, connPeers)
-
-	if len(deleted) > 0 || len(added) > 0 {
-		change = true
-	}
-
-	for _, peer := range deleted {
-		in, inok := s.inConn[peer]
-		out, outok := s.outConn[peer]
-
-		if inok {
-			in.Cancel()
-			delete(s.inConn, peer)
-		}
-
-		if outok {
-			out.Cancel()
-			delete(s.outConn, peer)
-		}
-
-		slog.Debug("pruned conns", "peer", peer.Debug())
-	}
-
-	for _, peer := range added {
-		s.addConnLocked(peer, s.bindLocal(peer))
-		slog.Debug("started conns", "peer", peer.Debug())
-	}
-
-	if change {
-		s.TMan.Poke()
-	}
-}
-
 func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr) error {
 	s.peerInfoMutex.Lock()
 
@@ -392,7 +434,7 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 
 	s.peerInfo[peer] = &stage.PeerInfo{
 		HomeRelay:           homeRelay,
-		Endpoints:           endpoints,
+		Endpoints:           types.NormaliseAddrPortSlice(endpoints),
 		RendezvousEndpoints: make([]netip.AddrPort, 0),
 		Session:             session,
 	}
@@ -408,7 +450,7 @@ func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []ne
 			info.HomeRelay = *homeRelay
 		}
 		if endpoints != nil {
-			info.Endpoints = endpoints
+			info.Endpoints = types.NormaliseAddrPortSlice(endpoints)
 		}
 		if session != nil {
 			info.Session = *session
@@ -432,7 +474,7 @@ func (s *Stage) UpdateSessionKey(peer key.NodePublic, session key.SessionPublic)
 // SetEndpoints set the known public addresses for a particular peer.
 func (s *Stage) SetEndpoints(peer key.NodePublic, endpoints []netip.AddrPort) error {
 	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
-		info.Endpoints = endpoints
+		info.Endpoints = types.NormaliseAddrPortSlice(endpoints)
 	})
 }
 

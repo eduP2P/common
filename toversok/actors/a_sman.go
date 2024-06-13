@@ -20,7 +20,7 @@ type SessionManager struct {
 	session func() *key.SessionPrivate
 }
 
-const SMInboxLen = 8
+const SMInboxLen = 32
 
 var DebugSManTakeNodeAsSession = false
 
@@ -41,6 +41,7 @@ func (sm *SessionManager) Run() {
 		if v := recover(); v != nil {
 			L(sm).Error("panicked", "panic", v)
 			sm.Cancel()
+			bail(sm.ctx, v)
 		}
 	}()
 

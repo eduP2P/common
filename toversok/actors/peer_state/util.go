@@ -2,6 +2,7 @@ package peer_state
 
 import (
 	"context"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"log/slog"
@@ -38,21 +39,19 @@ func cascadeRelay(so PeerState, relay int64, peer key.NodePublic, clear *msgsess
 	return
 }
 
-const LevelTrace slog.Level = -8
-
 // L stands for Log
 func L(s PeerState) *slog.Logger {
 	return slog.With("peer", s.Peer().Debug(), "state", s.Name())
 }
 
 func LogTransition(from PeerState, to PeerState) PeerState {
-	L(from).Log(context.Background(), LevelTrace, "transitioning state", "to-state", to.Name())
+	L(from).Log(context.Background(), types.LevelTrace, "transitioning state", "to-state", to.Name())
 
 	return to
 }
 
 func LogDirectMessage(s PeerState, ap netip.AddrPort, clear *msgsess.ClearMessage) {
-	L(s).Log(context.Background(), LevelTrace, "received direct message",
+	L(s).Log(context.Background(), types.LevelTrace, "received direct message",
 		slog.Group("from",
 			"addrport", ap,
 			"session", clear.Session.Debug()),
@@ -61,7 +60,7 @@ func LogDirectMessage(s PeerState, ap netip.AddrPort, clear *msgsess.ClearMessag
 }
 
 func LogRelayMessage(s PeerState, relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) {
-	L(s).Log(context.Background(), LevelTrace, "received relay message",
+	L(s).Log(context.Background(), types.LevelTrace, "received relay message",
 		slog.Group("from",
 			"relay", relay,
 			"peer", peer.Debug(),

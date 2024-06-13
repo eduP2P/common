@@ -27,17 +27,19 @@ type Session struct {
 }
 
 func SetupSession(
-	parentCtx context.Context,
+	engineCtx context.Context,
 	wg WireGuardController,
 	fw FirewallController,
 	co ControlHost,
 	getExtSock func() types.UDPConn,
 	getNodePriv func() *key.NodePrivate,
 ) (*Session, error) {
-	ctx, ccc := context.WithCancelCause(parentCtx)
+	ctx, ccc := context.WithCancelCause(engineCtx)
+
+	sCtx := context.WithValue(ctx, "ccc", ccc)
 
 	sess := &Session{
-		ctx:        ctx,
+		ctx:        sCtx,
 		ccc:        ccc,
 		wg:         wg,
 		fw:         fw,
@@ -64,7 +66,7 @@ func SetupSession(
 		return nil, err
 	}
 
-	sess.stage = actors.MakeStage(ctx, getNodePriv, sess.getPriv, getExtSock, wg.ConnFor, cc)
+	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, wg.ConnFor, cc)
 
 	cc.InstallCallbacks(sess)
 

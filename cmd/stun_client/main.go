@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/stun"
 	"log"
 	"net"
@@ -49,9 +50,7 @@ func main() {
 		log.Fatalf("txid mismatch: got %v, want %v", tid, txID)
 	}
 
-	if raddr.Addr().Is4In6() {
-		raddr = netip.AddrPortFrom(netip.AddrFrom4(raddr.Addr().As4()), raddr.Port())
-	}
+	raddr = types.NormaliseAddrPort(raddr)
 
 	log.Printf("local   : %v", c.LocalAddr())
 	log.Printf("sent  ->  %v", uaddr)

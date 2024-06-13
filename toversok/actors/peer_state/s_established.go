@@ -1,9 +1,12 @@
 package peer_state
 
 import (
+	"context"
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
+	"slices"
 	"time"
 )
 
@@ -26,7 +29,9 @@ type Established struct {
 	//   which may be non-ideal.
 	//   Tailscale has logic to pick and switch between different endpoints, and sort them.
 	//   We could possibly build this into the state logic.
-	currentEndpoint netip.AddrPort
+	currentOutEndpoint netip.AddrPort
+
+	knownInEndpoints map[netip.AddrPort]bool
 }
 
 func (e *Established) Name() string {
@@ -68,7 +73,7 @@ func (e *Established) OnTick() PeerState {
 	}
 
 	if time.Now().After(e.nextPingDeadline) {
-		e.tm.SendPingDirect(e.currentEndpoint, e.peer, pi.Session)
+		e.tm.SendPingDirect(e.currentOutEndpoint, e.peer, pi.Session)
 		e.nextPingDeadline = time.Now().Add(EstablishedPingInterval)
 	}
 
@@ -85,9 +90,17 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) Peer
 	// TODO check if endpoint is same as current used one
 	//  - switch? trusting it blindly is open to replay attacks
 
+	if !e.canTrustEndpoint(ap) {
+		L(e).Log(context.Background(), types.LevelTrace,
+			"dropping direct message from addrpair, cannot trust endpoint", "ap", ap.String())
+		return nil
+	}
+
 	switch m := clear.Message.(type) {
 	case *msg2.Ping:
 		if !e.pingDirectValid(ap, clear.Session, m) {
+			L(e).Log(context.Background(), types.LevelTrace,
+				"dropping invalid ping", "ap", ap.String())
 			return nil
 		}
 
@@ -102,7 +115,7 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) Peer
 
 	//case *msg.Rendezvous:
 	default:
-		L(e).Warn("ignoring direct session message",
+		L(e).Debug("ignoring direct session message",
 			"ap", ap,
 			"session", clear.Session,
 			"msg", m.Debug())
@@ -129,11 +142,46 @@ func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg2.Clea
 	//case *msg.Rendezvous:
 	// TODO maybe re-establishment logic?
 	default:
-		L(e).Warn("ignoring relay session message",
+		L(e).Debug("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
 			"session", clear.Session,
 			"msg", m.Debug())
 		return nil
 	}
+}
+
+// canTrustEndpoint returns true if the endpoint that has been given corresponds to the peer.
+// this will check the current knownInEndpoints, and if it does not exist, will check peerInfo to see if the peer
+// sent this endpoint in the past with rendezvous. If so, adds it to the knownInEndpoints, and sends a SetAKA.
+func (e *Established) canTrustEndpoint(ap netip.AddrPort) bool {
+	// b.tm.DManSetAKA(b.peer, b.ap)
+
+	nap := types.NormaliseAddrPort(ap)
+
+	if _, ok := e.knownInEndpoints[nap]; ok {
+		return true
+	}
+
+	pi := e.getPeerInfo()
+	if pi == nil {
+		// Peer info unavailable
+		return false
+	}
+
+	if slices.Contains(pi.Endpoints, nap) || slices.Contains(pi.RendezvousEndpoints, nap) {
+		// we can trust this endpoint
+
+		e.knownInEndpoints[nap] = true
+
+		e.tm.DManSetAKA(e.peer, nap)
+
+		L(e).Info(
+			"adding new aka address to peer, as it is trusted",
+			"ap", nap.String(), "peer", e.peer.Debug(),
+		)
+		return true
+	}
+
+	return false
 }

@@ -1,6 +1,7 @@
 package peer_state
 
 import (
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
@@ -24,7 +25,7 @@ func (e *EstRendezGot) OnTick() PeerState {
 		return nil
 	}
 
-	pi.RendezvousEndpoints = e.m.MyAddresses
+	pi.RendezvousEndpoints = types.NormaliseAddrPortSlice(e.m.MyAddresses)
 
 	for _, ep := range e.m.MyAddresses {
 		e.tm.SendPingDirect(ep, e.peer, pi.Session)

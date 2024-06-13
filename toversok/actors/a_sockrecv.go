@@ -40,6 +40,7 @@ func (r *SockRecv) Run() {
 		if v := recover(); v != nil {
 			L(r).Error("panicked", "err", v)
 			r.Cancel()
+			bail(r.ctx, v)
 		}
 	}()
 
@@ -51,12 +52,8 @@ func (r *SockRecv) Run() {
 	var buf = make([]byte, 1<<16)
 
 	for {
-		select {
-		case <-r.ctx.Done():
-			r.Close()
+		if context.Cause(r.ctx) != nil {
 			return
-		default:
-			// fallthrough
 		}
 
 		err := r.Conn.SetReadDeadline(time.Now().Add(SockRecvReadTimeout))
@@ -75,6 +72,11 @@ func (r *SockRecv) Run() {
 			//  if so, then who detects the death of the actor and recreates it like that?
 			if context.Cause(r.ctx) != nil {
 				// we're closing anyways, just return
+				return
+			}
+
+			if errors.Is(err, net.ErrClosed) {
+				r.Cancel()
 				return
 			}
 

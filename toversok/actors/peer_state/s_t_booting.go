@@ -1,6 +1,7 @@
 package peer_state
 
 import (
+	"github.com/shadowjonathan/edup2p/types"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/msgsess"
 	"net/netip"
@@ -24,12 +25,13 @@ func (b *Booting) OnTick() PeerState {
 	L(b).Info("ESTABLISHED direct peer connection", "peer", b.peer.Debug(), "via", b.ap.String())
 
 	return LogTransition(b, &Established{
-		StateCommon:      b.StateCommon,
-		lastPingRecv:     time.Now(),
-		lastPongRecv:     time.Now(),
-		nextPingDeadline: time.Now(),
-		inactive:         false,
-		currentEndpoint:  b.ap,
+		StateCommon:        b.StateCommon,
+		lastPingRecv:       time.Now(),
+		lastPongRecv:       time.Now(),
+		nextPingDeadline:   time.Now(),
+		inactive:           false,
+		currentOutEndpoint: b.ap,
+		knownInEndpoints:   map[netip.AddrPort]bool{types.NormaliseAddrPort(b.ap): true},
 	})
 }
 

@@ -7,6 +7,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"golang.org/x/exp/maps"
+	"log/slog"
+	"net/netip"
 )
 
 // Incomparable is a zero-width incomparable type. If added as the
@@ -96,4 +98,36 @@ func RandStringBytesMaskImprSrc(n int) string {
 	}
 
 	return hex.EncodeToString(b)[:n]
+}
+
+const LevelTrace slog.Level = -8
+
+func NormaliseAddrPort(ap netip.AddrPort) netip.AddrPort {
+	return netip.AddrPortFrom(NormaliseAddr(ap.Addr()), ap.Port())
+}
+
+func NormaliseAddr(addr netip.Addr) netip.Addr {
+	if addr.Is4In6() {
+		addr = netip.AddrFrom4(addr.As4())
+	}
+
+	return addr
+}
+
+func NormaliseAddrSlice(s []netip.Addr) []netip.Addr {
+	return Map(s, NormaliseAddr)
+}
+
+func NormaliseAddrPortSlice(s []netip.AddrPort) []netip.AddrPort {
+	return Map(s, NormaliseAddrPort)
+}
+
+// Map is a generic slice mapping function taken from https://stackoverflow.com/a/71624929/8700553,
+// since golang loves to not give its developers any usable tools.
+func Map[T, U any](ts []T, f func(T) U) []U {
+	us := make([]U, len(ts))
+	for i := range ts {
+		us[i] = f(ts[i])
+	}
+	return us
 }

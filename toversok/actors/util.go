@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"context"
 	"fmt"
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/msgactor"
@@ -31,4 +32,19 @@ func SendMessage(ch chan<- msgactor.ActorMessage, msg msgactor.ActorMessage) {
 
 func L(a ifaces.Actor) *slog.Logger {
 	return slog.With("actor", fmt.Sprintf("%T", a))
+}
+
+func bail(c context.Context, v any) {
+	maybeCcc := c.Value("ccc")
+	if maybeCcc == nil {
+		panic(fmt.Errorf("could not bail, cannot find ccc: %s", v))
+	}
+
+	probablyCcc, ok := maybeCcc.(context.CancelCauseFunc)
+
+	if !ok {
+		panic(fmt.Errorf("could not bail, ccc is not CancelCauseFunc: %s", v))
+	}
+
+	probablyCcc(fmt.Errorf("bailing: %s", v))
 }

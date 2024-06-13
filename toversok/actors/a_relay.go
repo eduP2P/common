@@ -266,6 +266,7 @@ func (rm *RelayManager) Run() {
 		if v := recover(); v != nil {
 			L(rm).Error("panicked", "panic", v)
 			rm.Cancel()
+			bail(rm.ctx, v)
 		}
 	}()
 
@@ -385,6 +386,7 @@ func (rr *RelayRouter) Run() {
 		if v := recover(); v != nil {
 			L(rr).Warn("panicked", "error", v)
 			rr.Cancel()
+			bail(rr.ctx, v)
 		}
 	}()
 

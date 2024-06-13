@@ -14,10 +14,12 @@ import (
 	"github.com/shadowjonathan/edup2p/types/relay"
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/wgctrl"
+	"log"
 	"log/slog"
 	"math"
 	"net/netip"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,10 +50,22 @@ func init() {
 	fakeControl.relays = make(map[int64]relay.Information)
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: programLevel, AddSource: true})
 	slog.SetDefault(slog.New(h))
 	programLevel.Set(slog.LevelDebug)
+
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	actors.DebugSManTakeNodeAsSession = true
 
@@ -105,6 +119,10 @@ func main() {
 	//shell.AddCmd(ctrlCmd())
 
 	shell.Run()
+
+	if engine != nil {
+		engine.Stop()
+	}
 }
 
 // Key commands

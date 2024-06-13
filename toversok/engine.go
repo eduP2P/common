@@ -107,6 +107,15 @@ func (e *Engine) Restart() {
 	}
 }
 
+func (e *Engine) Stop() {
+	if e.sess.ctx.Err() != nil {
+		e.sess.ccc(errors.New("shutting down"))
+	}
+
+	e.wg.Reset()
+	e.fw.Reset()
+}
+
 func (e *Engine) InstallSession() error {
 	var err error
 	e.sess, err = SetupSession(e.ctx, e.wg.Controller(), e.fw.Controller(), e.co, e.getExtConn, e.getNodePriv)
