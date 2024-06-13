@@ -31,12 +31,9 @@ type TrafficManager struct {
 	sessMap map[key.SessionPublic]key.NodePublic
 }
 
-const TManInboxLen = 16
-const TManTickerInterval = time.Second
-
 func (s *Stage) makeTM() *TrafficManager {
 	return &TrafficManager{
-		ActorCommon: MakeCommon(s.Ctx, TManInboxLen),
+		ActorCommon: MakeCommon(s.Ctx, TrafficManInboxChLen),
 		s:           s,
 
 		ticker:    time.NewTicker(TManTickerInterval),

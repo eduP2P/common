@@ -26,15 +26,13 @@ type DirectManager struct {
 	writeCh chan directWriteRequest
 }
 
-const DMChanWriteRequestLen = 4
-
 func (s *Stage) makeDM(udpSocket types.UDPConn) *DirectManager {
 	c := MakeCommon(s.Ctx, -1)
 	return &DirectManager{
 		ActorCommon: c,
 		sock:        MakeSockRecv(udpSocket, c.ctx),
 		s:           s,
-		writeCh:     make(chan directWriteRequest, DMChanWriteRequestLen),
+		writeCh:     make(chan directWriteRequest, DirectManWriteChLen),
 	}
 }
 
@@ -135,16 +133,13 @@ type DirectRouter struct {
 	frameCh chan ifaces.DirectedPeerFrame
 }
 
-const DRInboxLen = 4
-const DRFrameChLen = 4
-
 func (s *Stage) makeDR() *DirectRouter {
 	return &DirectRouter{
-		ActorCommon:   MakeCommon(s.Ctx, DRInboxLen),
+		ActorCommon:   MakeCommon(s.Ctx, DirectRouterInboxChLen),
 		s:             s,
 		aka:           make(map[netip.AddrPort]key.NodePublic),
 		stunEndpoints: make(map[netip.AddrPort]bool),
-		frameCh:       make(chan ifaces.DirectedPeerFrame, DRFrameChLen),
+		frameCh:       make(chan ifaces.DirectedPeerFrame, DirectRouterFrameChLen),
 	}
 }
 

@@ -20,13 +20,11 @@ type SessionManager struct {
 	session func() *key.SessionPrivate
 }
 
-const SMInboxLen = 32
-
 var DebugSManTakeNodeAsSession = false
 
 func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
 	sm := &SessionManager{
-		ActorCommon: MakeCommon(s.Ctx, SMInboxLen),
+		ActorCommon: MakeCommon(s.Ctx, SessManInboxChLen),
 		s:           s,
 		session:     priv,
 	}

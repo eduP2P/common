@@ -14,13 +14,6 @@ import (
 	"time"
 )
 
-const (
-	RelayConnectionRetryInterval = time.Second * 5
-
-	RelayConnectionIdleAfter  = time.Minute * 1
-	RelayConnectionBufferSize = 32
-)
-
 // RestartableRelayConn is a Relay connection that will automatically reconnect,
 // as long as there are pending packets.
 type RestartableRelayConn struct {
@@ -243,21 +236,15 @@ type RelayManager struct {
 	writeCh chan relayWriteRequest
 }
 
-const (
-	RMInboxLen   = 4
-	RMInChLen    = 8
-	RMWriteChLen = 8
-)
-
 func (s *Stage) makeRM() *RelayManager {
 	return &RelayManager{
-		ActorCommon: MakeCommon(s.Ctx, RMInboxLen),
+		ActorCommon: MakeCommon(s.Ctx, RelayManInboxChLen),
 		s:           s,
 		homeRelay:   0,
 
 		relays:  make(map[int64]RelayConnActor),
-		inCh:    make(chan ifaces.RelayedPeerFrame, RMInChLen),
-		writeCh: make(chan relayWriteRequest, RMWriteChLen),
+		inCh:    make(chan ifaces.RelayedPeerFrame, RelayManFrameChLen),
+		writeCh: make(chan relayWriteRequest, RelayManWriteChLen),
 	}
 }
 
@@ -335,7 +322,7 @@ func (rm *RelayManager) update(info relay.Information) {
 		config:      info,
 
 		stay:     info.ID == rm.homeRelay,
-		bufferCh: make(chan relay.SendPacket, RelayConnectionBufferSize),
+		bufferCh: make(chan relay.SendPacket, RelayConnSendBufferSize),
 		pokeCh:   make(chan interface{}, 1),
 	}
 
@@ -365,13 +352,11 @@ type RelayRouter struct {
 	frameCh chan ifaces.RelayedPeerFrame
 }
 
-const RRFrameChLen = 4
-
 func (s *Stage) makeRR() *RelayRouter {
 	return &RelayRouter{
 		ActorCommon: MakeCommon(s.Ctx, -1),
 		s:           s,
-		frameCh:     make(chan ifaces.RelayedPeerFrame, RRFrameChLen),
+		frameCh:     make(chan ifaces.RelayedPeerFrame, RelayRouterFrameChLen),
 	}
 }
 

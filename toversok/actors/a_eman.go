@@ -14,7 +14,7 @@ import (
 
 func (s *Stage) makeEM() *EndpointManager {
 	em := &EndpointManager{
-		ActorCommon: MakeCommon(s.Ctx, SMInboxLen),
+		ActorCommon: MakeCommon(s.Ctx, SessManInboxChLen),
 		s:           s,
 
 		ticker:      time.NewTicker(EManTickerInterval),
@@ -26,12 +26,6 @@ func (s *Stage) makeEM() *EndpointManager {
 
 	return em
 }
-
-const (
-	EManTickerInterval = time.Second * 60
-
-	EManStunTimeout = time.Second * 10
-)
 
 type EndpointManager struct {
 	*ActorCommon
