@@ -218,6 +218,8 @@ On Linux, kernel wireguard can also be used.
 
 ### MacOS - Userspace
 
+> *Please be aware this userspace wireguard implementation has lot throughput rates (20mbps)*
+
 Create a utunXX interface with the following commands:
 1. Install wireguard-go: `brew install wireguard-go`
 2. Run an instance as sudo: `sudo wireguard-go utun`
