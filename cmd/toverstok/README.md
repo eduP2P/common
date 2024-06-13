@@ -229,7 +229,8 @@ To shut down the sockets, run `sudo rm /var/run/wireguard/utun*`
 
 ### Linux - Kernel
 
-On linux, run the toverstok binary as root, or with `NET_ADMIN` capability.
+On linux, add the `NET_ADMIN` capability to the (compiled) toverstok binary with
+`setcap cap_net_admin=ep toverstok`, or alternatively run as root.
 
 Create the wg0 interface with the following commands:
 1. Create the wg0 interface: `sudo ip link add wg0 type wireguard`
