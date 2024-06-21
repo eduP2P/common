@@ -108,7 +108,7 @@ func (c *RestartableRelayConn) establish() (success bool) {
 		Addrs:        types.SliceOrNil(c.config.IPs),
 		Port:         port,
 		TLS:          !c.config.IsInsecure,
-		ExpectCertCN: types.PtrOr(c.config.CertCN, ""),
+		ExpectCertCN: types.PtrOr(c.config.CertCN, c.config.Domain),
 		// Connect and establishment timeouts are default
 		// TODO maybe allow Control to tweak this setting?
 	}, c.man.s.getNodePriv, c.config.Key)

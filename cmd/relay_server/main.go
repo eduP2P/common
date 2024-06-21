@@ -171,7 +171,7 @@ func loadConfig() Config {
 	}
 	if *configPath == "" {
 		if os.Getuid() == 0 {
-			*configPath = "/var/lib/toversok/relay.key"
+			*configPath = "/var/lib/toversok/relay.json"
 		} else {
 			log.Fatalf("relay: -c <config path> not specified")
 		}

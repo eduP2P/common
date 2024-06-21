@@ -243,7 +243,7 @@ type IPMapping struct {
 func loadConfig() Config {
 	if *configPath == "" {
 		if os.Getuid() == 0 {
-			*configPath = "/var/lib/toversok/control.key"
+			*configPath = "/var/lib/toversok/control.json"
 		} else {
 			log.Fatalf("control: -c <config path> not specified")
 		}
@@ -295,6 +295,8 @@ func newConfig() Config {
 		IP6: netip.MustParsePrefix("fd42:dead:beef::/64"),
 
 		IPMapping: make(map[key.NodePublic]IPMapping),
+
+		Relays: make([]relay.Information, 0),
 	}
 }
 
