@@ -28,8 +28,8 @@ type Session struct {
 
 func SetupSession(
 	engineCtx context.Context,
-	wg WireGuardController,
-	fw FirewallController,
+	wg WireGuardHost,
+	fw FirewallHost,
 	co ControlHost,
 	getExtSock func() types.UDPConn,
 	getNodePriv func() *key.NodePrivate,
@@ -41,8 +41,6 @@ func SetupSession(
 	sess := &Session{
 		ctx:        sCtx,
 		ccc:        ccc,
-		wg:         wg,
-		fw:         fw,
 		sessionKey: key.NewSession(),
 
 		stage: nil,
@@ -54,19 +52,19 @@ func SetupSession(
 		return nil, fmt.Errorf("could not create control client: %w", err)
 	}
 
-	if err = wg.Init(*getNodePriv(), cc.IPv4(), cc.IPv6()); err != nil {
+	if sess.wg, err = wg.Controller(*getNodePriv(), cc.IPv4(), cc.IPv6()); err != nil {
 		err = fmt.Errorf("could not init wireguard: %w", err)
 		sess.ccc(err)
 		return nil, err
 	}
 
-	if err = fw.Init(); err != nil {
+	if sess.fw, err = fw.Controller(); err != nil {
 		err = fmt.Errorf("could not init firewall: %w", err)
 		sess.ccc(err)
 		return nil, err
 	}
 
-	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, wg.ConnFor, cc)
+	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, cc)
 
 	cc.InstallCallbacks(sess)
 

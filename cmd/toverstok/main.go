@@ -12,6 +12,7 @@ import (
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/key"
 	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/shadowjonathan/edup2p/usrwg"
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"log"
@@ -28,7 +29,12 @@ import (
 var (
 	programLevel = new(slog.LevelVar) // Info by default
 
-	wg *WGCtrl
+	wgCtrl *WGCtrl
+	usrWg  *usrwg.UserSpaceWireGuardHost
+
+	wg toversok.WireGuardHost
+
+	wgC toversok.WireGuardController
 
 	privKey *key.NodePrivate
 
@@ -607,7 +613,7 @@ func wgCmd() *ishell.Cmd {
 			if wg == nil {
 				c.Println("wg: nil")
 			} else {
-				c.Println("wg: using", wg.name)
+				c.Println("wg: using", wg)
 			}
 		},
 	}
@@ -660,13 +666,27 @@ func wgCmd() *ishell.Cmd {
 				device = names[choice]
 			}
 
-			wg = &WGCtrl{
+			wgCtrl = &WGCtrl{
 				client:       client,
 				name:         device,
 				localMapping: make(map[key.NodePublic]*mapping),
 			}
 
+			wg = wgCtrl
+
 			c.Println("now using wg device", device)
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{
+		Name: "usr",
+		Help: "Use User Wireguard",
+		Func: func(c *ishell.Context) {
+			usrWg = &usrwg.UserSpaceWireGuardHost{}
+
+			wg = usrWg
+
+			c.Println("now using userspace wireguard")
 		},
 	})
 
@@ -713,13 +733,13 @@ func wgCmd() *ishell.Cmd {
 					return
 				}
 
-				err = wg.Init(privkey, addr4, addr6)
+				wgC, err = wg.Controller(privkey, addr4, addr6)
 				if err != nil {
 					c.Err(err)
 					return
 				}
 
-				c.Println("wg listen port:", wg.wgPort)
+				c.Println("wg controller:", wgC)
 			}
 		},
 	})
@@ -948,14 +968,10 @@ func (s *StokFirewall) Reset() error {
 	return nil
 }
 
-func (s *StokFirewall) Controller() toversok.FirewallController {
-	return s
-}
+func (s *StokFirewall) Controller() (toversok.FirewallController, error) {
+	slog.Info("StokFirewall Controller called")
 
-func (s *StokFirewall) Init() error {
-	slog.Info("StokFirewall Init called")
-
-	return nil
+	return s, nil
 }
 
 func (s *StokFirewall) QuarantineNodes(ips []netip.Addr) error {

@@ -175,6 +175,8 @@ func (em *EndpointManager) onSTUNTimeout() {
 func (em *EndpointManager) finaliseSTUN(timeout bool) {
 	ep := em.collectSTUNResponses()
 
+	sortEndpointSlice(ep)
+
 	// Logging
 	if timeout {
 		if len(ep) > 0 {

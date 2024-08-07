@@ -219,7 +219,7 @@ func (dr *DirectRouter) peerAKA(ap netip.AddrPort) (peer key.NodePublic, ok bool
 
 	peer, ok = dr.aka[nap]
 
-	slog.Debug("dr: peerAKA", "ap", ap.String(), "nap", nap, "ok", ok)
+	//slog.Debug("dr: peerAKA", "ap", ap.String(), "nap", nap, "ok", ok)
 
 	return
 }

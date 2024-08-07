@@ -37,13 +37,11 @@ type ControlHost interface {
 type WireGuardHost interface {
 	Reset() error
 
-	Controller() WireGuardController
+	// Controller initialises the wireguard interface, and make it ready for configuration changes.
+	Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (WireGuardController, error)
 }
 
 type WireGuardController interface {
-	// Init the wireguard interface, and make it ready for configuration changes.
-	Init(privateKey key.NodePrivate, addr4, add6 netip.Prefix) error
-
 	// UpdatePeer updates a peer with certain values, mapped by public key
 	UpdatePeer(publicKey key.NodePublic, cfg PeerCfg) error
 
@@ -61,12 +59,11 @@ type WireGuardController interface {
 type FirewallHost interface {
 	Reset() error
 
-	Controller() FirewallController
+	// Controller initialises the controller and returns it
+	Controller() (FirewallController, error)
 }
 
 type FirewallController interface {
-	Init() error
-
 	// QuarantineNodes configures the firewall to block incoming connections from these IPs.
 	//
 	// Replaces an existing firewall configuration.

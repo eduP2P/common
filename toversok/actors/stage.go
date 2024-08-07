@@ -380,9 +380,7 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 	s.connMutex.Lock()
 	defer s.connMutex.Unlock()
 
-	sort.SliceStable(endpoints, func(i, j int) bool {
-		return endpoints[i].Addr().Less(endpoints[j].Addr())
-	})
+	sortEndpointSlice(endpoints)
 
 	if slices.Equal(s.stunEndpoints, endpoints) {
 		// no change

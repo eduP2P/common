@@ -6,6 +6,8 @@ import (
 	"github.com/shadowjonathan/edup2p/types/ifaces"
 	"github.com/shadowjonathan/edup2p/types/msgactor"
 	"log/slog"
+	"net/netip"
+	"sort"
 	"sync/atomic"
 )
 
@@ -47,4 +49,10 @@ func bail(c context.Context, v any) {
 	}
 
 	probablyCcc(fmt.Errorf("bailing: %s", v))
+}
+
+func sortEndpointSlice(endpoints []netip.AddrPort) {
+	sort.SliceStable(endpoints, func(i, j int) bool {
+		return endpoints[i].Addr().Less(endpoints[j].Addr())
+	})
 }

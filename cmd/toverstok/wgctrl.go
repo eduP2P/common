@@ -64,17 +64,13 @@ func (w *WGCtrl) Reset() error {
 	return nil
 }
 
-func (w *WGCtrl) Controller() toversok.WireGuardController {
-	return w
-}
-
 type mapping struct {
 	conn types.UDPConnCloseCatcher
 
 	port uint16
 }
 
-func (w *WGCtrl) Init(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (err error) {
+func (w *WGCtrl) Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (toversok.WireGuardController, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -115,21 +111,25 @@ func (w *WGCtrl) Init(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (er
 
 	unveiledKey := key.UnveilPrivate(privateKey)
 
-	err = w.client.ConfigureDevice(w.name, wgtypes.Config{
+	err := w.client.ConfigureDevice(w.name, wgtypes.Config{
 		PrivateKey:   (*wgtypes.Key)(&unveiledKey),
 		ReplacePeers: true,
 		Peers:        []wgtypes.PeerConfig{},
 	})
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	var device *wgtypes.Device
 	device, err = w.client.Device(w.name)
 
+	if err != nil {
+		return nil, err
+	}
+
 	w.wgPort = (uint16)(device.ListenPort)
 
-	return
+	return w, nil
 }
 
 func (w *WGCtrl) ConnFor(node key.NodePublic) types.UDPConn {

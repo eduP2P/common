@@ -118,7 +118,7 @@ func (e *Engine) Stop() {
 
 func (e *Engine) InstallSession() error {
 	var err error
-	e.sess, err = SetupSession(e.ctx, e.wg.Controller(), e.fw.Controller(), e.co, e.getExtConn, e.getNodePriv)
+	e.sess, err = SetupSession(e.ctx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv)
 	if err != nil {
 		return fmt.Errorf("failed to setup session: %w", err)
 	}
