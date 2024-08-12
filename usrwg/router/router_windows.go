@@ -1,3 +1,6 @@
+// (Partial) Copyright (c) Tailscale Inc & AUTHORS
+// SPDX-License-Identifier: BSD-3-Clause
+
 package router
 
 import (
@@ -65,7 +68,7 @@ func (r *windowsRouter) Up() error {
 
 func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 	iface, err := interfaceFromLUID(r.luid,
-		// Issue 474: on early boot, when the network is still
+		// Issue tailscale/tailscale#474: on early boot, when the network is still
 		// coming up, if the Tailscale service comes up first,
 		// the Tailscale adapter it finds might not have the
 		// IPv4 service available yet? Try this flag:
@@ -242,7 +245,7 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 
 	// Re-read interface after syncAddresses.
 	iface, err = interfaceFromLUID(r.luid,
-		// Issue 474: on early boot, when the network is still
+		// Issue tailscale/tailscale#474: on early boot, when the network is still
 		// coming up, if the Tailscale service comes up first,
 		// the Tailscale adapter it finds might not have the
 		// IPv4 service available yet? Try this flag:
@@ -428,7 +431,7 @@ func (rd *routeData) Compare(other *routeData) int {
 // configurations may repeatedly re-add them. Link-local addresses are adjusted
 // to set SkipAsSource. SkipAsSource prevents the addresses from being added to
 // DNS locally or remotely and from being picked as a source address for
-// outgoing packets with unspecified sources. See #4647 and
+// outgoing packets with unspecified sources. See tailscale/tailscale#4647 and
 // https://web.archive.org/web/20200912120956/https://devblogs.microsoft.com/scripting/use-powershell-to-change-ip-behavior-with-skipassource/
 func syncAddresses(ifc *winipcfg.IPAdapterAddresses, want []netip.Prefix) error {
 	var erracc error
@@ -606,7 +609,7 @@ func getAllInterfaceRoutes(ifc *winipcfg.IPAdapterAddresses) ([]*routeData, erro
 func filterRoutes(routes []*routeData, dontDelete []netip.Prefix) []*routeData {
 	ddm := make(map[netip.Prefix]bool)
 	for _, dd := range dontDelete {
-		// See issue 1448: we don't want to touch the routes added
+		// See issue tailscale/tailscale#1448: we don't want to touch the routes added
 		// by Windows for our interface addresses.
 		ddm[dd] = true
 	}
@@ -691,9 +694,8 @@ func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*routeData, dontDelete 
 		if err != nil {
 			dstStr := a.Destination.String()
 			if dstStr == "169.254.255.255/32" {
-				// Issue 785. Ignore these routes
+				// Issue tailscale/tailscale#785. Ignore these routes
 				// failing to delete. Harmless.
-				// TODO(maisem): do we still need this?
 				continue
 			}
 			errs = append(errs, fmt.Errorf("deleting route %v: %w", dstStr, err))
