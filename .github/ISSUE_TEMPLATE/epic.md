@@ -2,7 +2,7 @@
 name: Epic
 about: Template for the largest actionable chunk
 title: "[E] "
-labels: epic
+labels: Epic
 assignees: ''
 
 ---
