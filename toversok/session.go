@@ -19,7 +19,7 @@ type Session struct {
 	wg WireGuardController
 	fw FirewallController
 
-	//control ifaces.FullControlInterface
+	//control ifaces.ControlSession
 
 	stage ifaces.Stage
 
@@ -83,8 +83,7 @@ func (s *Session) getPriv() *key.SessionPrivate {
 
 func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr) error {
 	if err := s.wg.UpdatePeer(peer, PeerCfg{
-		Set: true,
-		VIPs: &VirtualIPs{
+		VIPs: VirtualIPs{
 			IPv4: ip4,
 			IPv6: ip6,
 		},

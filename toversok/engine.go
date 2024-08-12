@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 )
 
@@ -36,6 +37,10 @@ import (
 //	PrivateKey key.NodePrivate
 //}
 
+// Engine is the main and most high-level object for any client implementation.
+//
+// It holds the WireGuardHost, FirewallHost, and ControlHost, and utilises these for connectivity
+// with peers, the control server, and maintain these according to Control Server instruction.
 type Engine struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
@@ -51,15 +56,24 @@ type Engine struct {
 
 	nodePriv key.NodePrivate
 
-	started bool
+	ignitionMu sync.Mutex
+	started    bool
 }
 
+// Start will fire up the Engine.
+//
+// It will return an error if for any reason it cannot start. Reasons include;
+// - It cannot connect to the control server
+// - It cannot start the network interface
+// - Reason for any other startup error.
+//
+// After the engine has successfully started once, it will automatically restart on any failure.
 func (e *Engine) Start() error {
 	if e.started {
 		return nil
 	}
 
-	if err := e.InstallSession(); err != nil {
+	if err := e.installSession(); err != nil {
 		return fmt.Errorf("could not install session: %w", err)
 	}
 
@@ -68,28 +82,31 @@ func (e *Engine) Start() error {
 	return nil
 }
 
-// StalledEngineRestartInterval represents how many seconds to wait before retrying creating a session,
-// after creation fails.
-const StalledEngineRestartInterval = time.Second * 10
+// StalledEngineRestartInterval represents how many seconds to wait before restarting an engine,
+// after it has stalled/failed.
+const StalledEngineRestartInterval = time.Second * 2
 
-func (e *Engine) Restart() {
+// Restart the current running engine, will return an error if this does not succeed.
+//
+// This does not start the engine, if it has not started.
+func (e *Engine) Restart() (err error) {
+	if !e.started {
+		// The engine is not supposed to start, stop trying to restart it.
+		return nil
+	}
+
 	if e.ctx.Err() != nil {
 		// If the engine has been cancelled, do nothing
 		return
 	}
 
+	e.ignitionMu.Lock()
+	defer e.ignitionMu.Unlock()
+
 	if e.sess.ctx.Err() == nil {
 		// Session is still running
 		e.sess.ccc(errors.New("restarting"))
 	}
-
-	var err error
-	defer func() {
-		if err != nil {
-			slog.Info("restart: will retry in 10 seconds")
-			time.AfterFunc(StalledEngineRestartInterval, e.Restart)
-		}
-	}()
 
 	if err = e.wg.Reset(); err != nil {
 		e.slog().Error("restart: could not reset wireguard", "err", err)
@@ -101,12 +118,22 @@ func (e *Engine) Restart() {
 		return
 	}
 
-	if err = e.InstallSession(); err != nil {
+	if err = e.installSession(); err != nil {
 		e.slog().Error("restart: could not install session", "err", err)
 		return
 	}
+
+	return nil
 }
 
+func (e *Engine) autoRestart() {
+	if err := e.Restart(); err != nil {
+		slog.Info("autoRestart: will retry in 10 seconds")
+		time.AfterFunc(StalledEngineRestartInterval, e.autoRestart)
+	}
+}
+
+// Stop the engine.
 func (e *Engine) Stop() {
 	if e.sess.ctx.Err() != nil {
 		e.sess.ccc(errors.New("shutting down"))
@@ -114,22 +141,24 @@ func (e *Engine) Stop() {
 
 	e.wg.Reset()
 	e.fw.Reset()
+	e.started = false
 }
 
-func (e *Engine) InstallSession() error {
+func (e *Engine) installSession() error {
 	var err error
 	e.sess, err = SetupSession(e.ctx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv)
 	if err != nil {
 		return fmt.Errorf("failed to setup session: %w", err)
 	}
 
-	context.AfterFunc(e.sess.ctx, e.Restart)
+	context.AfterFunc(e.sess.ctx, e.autoRestart)
 
 	e.sess.Start()
 
 	return err
 }
 
+// Started says whether the engine strives to be in a running state.
 func (e *Engine) Started() bool {
 	return e.started
 }
@@ -140,7 +169,9 @@ func (e *Engine) slog() *slog.Logger {
 
 // TODO add status update event channels (to display connection status, control status, session status, IP, etc.)
 
-// NewEngine creates a new engine and initiates it
+// NewEngine creates a new engine and initiates it.
+//
+// `parentCtx` can be `nil`, will assume `context.Background()`.
 func NewEngine(
 	parentCtx context.Context,
 	wg WireGuardHost,
@@ -151,6 +182,10 @@ func NewEngine(
 
 	privateKey key.NodePrivate,
 ) (*Engine, error) {
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
 	ctx, ccc := context.WithCancelCause(parentCtx)
 
 	if wg == nil {

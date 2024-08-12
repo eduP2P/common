@@ -986,7 +986,7 @@ func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 	}
 }
 
-func (s *StokControl) CreateClient(parentCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate) (ifaces.FullControlInterface, error) {
+func (s *StokControl) CreateClient(parentCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate) (ifaces.ControlSession, error) {
 	return s, nil
 }
 

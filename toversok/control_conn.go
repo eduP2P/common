@@ -27,7 +27,7 @@ type DefaultControlHost struct {
 
 func (d *DefaultControlHost) CreateClient(
 	pCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate,
-) (ifaces.FullControlInterface, error) {
+) (ifaces.ControlSession, error) {
 	return CreateControlSession(pCtx, d.Opts, d.Key,
 		getNode,
 		getSess,

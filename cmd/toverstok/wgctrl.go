@@ -145,19 +145,16 @@ func (w *WGCtrl) UpdatePeer(publicKey key.NodePublic, cfg toversok.PeerCfg) erro
 	peercfg := wgtypes.PeerConfig{
 		PublicKey:                   wgtypes.Key(publicKey),
 		Remove:                      false,
-		UpdateOnly:                  !cfg.Set,
 		PersistentKeepaliveInterval: cfg.KeepAliveInterval,
 		Endpoint: net.UDPAddrFromAddrPort(
 			netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), m.port),
 		),
 	}
 
-	if cfg.VIPs != nil {
-		peercfg.ReplaceAllowedIPs = true
-		peercfg.AllowedIPs = []net.IPNet{
-			*netipx.AddrIPNet(cfg.VIPs.IPv4),
-			*netipx.AddrIPNet(cfg.VIPs.IPv6),
-		}
+	peercfg.ReplaceAllowedIPs = true
+	peercfg.AllowedIPs = []net.IPNet{
+		*netipx.AddrIPNet(cfg.VIPs.IPv4),
+		*netipx.AddrIPNet(cfg.VIPs.IPv6),
 	}
 
 	return w.client.ConfigureDevice(w.name, wgtypes.Config{
