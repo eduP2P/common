@@ -152,9 +152,9 @@ Use that documentation to setup platform-specific wireguard, or receive platform
 
 A few notes/helps/reminders:
 
-Run `key gen` to generate a private key for each client. Write these down, and keep track of which is which.
+Use `key file` for ease and consistency; the private key of the client will be saved in a file called `toverstok.key`, in the local directory, by default. (Change this file location by supplying another argument with the path)
 
-Upon every boot of a client, run `key set` to set the private key of that client again.
+Alternatively, run `key gen` to generate a private key for each client. Write these down, and keep track of which is which. Then, upon every boot of a client, run `key set` to set the private key of that client again.
 
 Use the `pc` commands to point the client to the control server:
 

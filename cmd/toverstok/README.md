@@ -7,6 +7,33 @@ This application can provide a way to prototype/develop/test toversok/eduP2P cli
 
 (The current implementation is hardcoded to use wgctrl/wg-tools to communicate with an external wireguard implementation)
 
+## TLDR
+> Too Long; Didn't Read
+
+A quick summary, and some quick-start commands;
+1. Setup a control server
+2. Setup a relay server
+    - these steps are detailed in [../../docs/prototype_cookbook.md]
+3. Build and launch this commandline program
+    - launch in sudo if you want userspace wireguard
+4. Use the following commands to setup and connect;
+
+```
+log debug
+key file
+wg usr
+
+pc key CONTROL_KEY
+pc ip CONTROL_IP
+pc port CONTROL_PORT
+pc use
+
+en create
+en start
+```
+
+Replace `wg usr` with `wg use`, to select a detected/accessible wireguard implementation (kernel or userspace).
+
 ## Command Reference
 
 ### Log Commands
@@ -37,6 +64,11 @@ key
 
 key gen
     Generate a new private key (and set it).
+    
+key file [filename]
+    Sources a key from a specific file, will create the file if it doesn't exist.
+    
+    Defaults to './toverstok.key'.
 
 key set ["privkey:HEX"]
     Set the private key from command line arguments, or alternatively line-input.
@@ -57,9 +89,14 @@ wg
     Get the current wireguard state.
 
 wg use [device_iface]
-    Initialises a wireguard host with the specified device.
+    Initialises a wgctrl wireguard host with the specified device.
     
     If none are specified, will enter a multi-select mode with the currently detected availible devices.
+
+wg usr
+    Initialises wireguard with a userspace engine.
+    
+    Do note that additional priviledges are required to properly create and maintain an internet interface.
 
 wg init <privkey_hex> <ipv4/cidr> <ipv6/cidr>
     Perform MANUAL INITIALISATION on the wireguard host.
@@ -208,7 +245,7 @@ en start
 
 ## wgctrl configuration
 
-For toverstok, wgctrl is used, which needs an externally running wireguard implementation.
+For toverstok, wgctrl can be used, which needs an externally running wireguard implementation.
 
 On MacOS, the wireguard-go binary can be used.
 
@@ -235,3 +272,32 @@ On linux, add the `NET_ADMIN` capability to the (compiled) toverstok binary with
 Create the wg0 interface with the following commands:
 1. Create the wg0 interface: `sudo ip link add wg0 type wireguard`
 2. Set up the interface: `sudo ip link set wg0 up`
+
+## Userspace Wireguard configuration
+
+In addition to any external wireguard implementation, there is also a userspace wireguard implementation that can be used with `wg usr`.
+
+This requires privileges, which depend on the type of operating system.
+
+As a rule of thumb, if the application can create network devices and maintain them, then it would be fine, but here follows some detailed instructions.
+
+For now, general permission-raising methods are used, but in the future these might/will change to specific permission requests/methods at runtime, see [this issue](https://github.com/ShadowJonathan/eduP2P/issues/56) for more details.
+
+### MacOS
+
+On MacOS, the application needs to run as `root` to have sufficient permissions.
+
+### Linux
+
+On linux, the application needs to run as `root` to have sufficient permissions.
+
+(Note: There is a possibility in the future to make non-root userspace possible, with the `CAP_NET_ADMIN` capability, but as of yet, this does not fully work, see https://github.com/ShadowJonathan/eduP2P/issues/53)
+
+### Windows
+
+On windows, sufficiently system-level capabilities are needed to create and maintain the interface.
+
+So far, sufficient permissions have been gained using the [gsudo](https://github.com/gerardog/gsudo) permission elevator.
+
+In newer versions of windows, [sudo for windows](https://learn.microsoft.com/en-us/windows/sudo/) looks to be a promising built-in method, but this has not been tested.
+

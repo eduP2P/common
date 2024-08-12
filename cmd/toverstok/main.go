@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"math"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -157,6 +159,29 @@ func keyCmd() *ishell.Cmd {
 	})
 
 	c.AddCmd(&ishell.Cmd{
+		Name: "file",
+		Help: "source or generate a key from a filename",
+		Func: func(c *ishell.Context) {
+			var file string
+
+			if len(c.Args) == 0 {
+				c.Println("no file specified, using ./toverstok.key")
+				file = "toverstok.key"
+			} else {
+				file = c.Args[0]
+			}
+
+			k, err := getOrGenerateKey(file, c)
+			if err != nil {
+				c.Err(err)
+				return
+			}
+
+			privKey = &k
+		},
+	})
+
+	c.AddCmd(&ishell.Cmd{
 		Name: "set",
 		Help: "set a key",
 		Func: func(c *ishell.Context) {
@@ -190,6 +215,59 @@ func keyCmd() *ishell.Cmd {
 	})
 
 	return c
+}
+
+func getOrGenerateKey(file string, c *ishell.Context) (key.NodePrivate, error) {
+	var err error
+	var k key.NodePrivate
+
+	file = strings.TrimSpace(file)
+
+	// I hate that golang is like this
+	if strings.HasPrefix(file, "~/") {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			// at this point, just give up
+			panic(err)
+		}
+
+		file = filepath.Join(dirname, file[2:])
+	}
+
+	if file, err = filepath.Abs(file); err != nil {
+		return k, fmt.Errorf("failed to normalise path: %w", err)
+	}
+
+	data, err := os.ReadFile(file)
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.Println(fmt.Sprintf("%s does not exist, generating new key...", file))
+			k = key.NewNode()
+
+			c.Println("key generated, writing to file...")
+			jsonData, err := json.Marshal(k)
+			if err != nil {
+				return k, fmt.Errorf("failed to marshal private key: %w", err)
+			}
+
+			if err := os.WriteFile(file, jsonData, 0644); err != nil {
+				return k, fmt.Errorf("failed to write private key to file: %w", err)
+			}
+
+			return k, nil
+		} else {
+			return k, fmt.Errorf("cannot read key file %s: %w", file, err)
+		}
+	} else {
+		if err = json.Unmarshal(data, &k); err != nil {
+			return k, fmt.Errorf("failed to unmarshal private key: %w", err)
+		}
+
+		c.Println("loaded from", file)
+
+		return k, nil
+	}
 }
 
 // Proper Control commands
