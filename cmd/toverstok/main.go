@@ -760,7 +760,7 @@ func wgCmd() *ishell.Cmd {
 		Name: "usr",
 		Help: "Use User Wireguard",
 		Func: func(c *ishell.Context) {
-			usrWg = &usrwg.UserSpaceWireGuardHost{}
+			usrWg = usrwg.NewUsrWGHost()
 
 			wg = usrWg
 

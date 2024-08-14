@@ -16,6 +16,10 @@ import (
 func init() {
 }
 
+func NewUsrWGHost() *UserSpaceWireGuardHost {
+	return &UserSpaceWireGuardHost{}
+}
+
 type UserSpaceWireGuardHost struct {
 	running *UserSpaceWireGuardController
 }
