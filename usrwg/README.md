@@ -8,7 +8,7 @@ On all platforms; The userspace wireguard implementation needs sufficient permis
 - Create a network interface
 - (MacOS/Linux) Run `ip`/`route` commands.
 
-For now, practically, this requires `sudo` on linux and macos, and `gsudo` on windows.
+For now, practically, this requires `sudo` on linux and macos, and an elevated prompt on windows (or [`gsudo`](https://github.com/gerardog/gsudo)).
 
 (See this issue for more information about permission refinement: https://github.com/ShadowJonathan/eduP2P/issues/56)
 

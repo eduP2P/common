@@ -297,7 +297,4 @@ On linux, the application needs to run as `root` to have sufficient permissions.
 
 On windows, sufficiently system-level capabilities are needed to create and maintain the interface.
 
-So far, sufficient permissions have been gained using the [gsudo](https://github.com/gerardog/gsudo) permission elevator.
-
-In newer versions of windows, [sudo for windows](https://learn.microsoft.com/en-us/windows/sudo/) looks to be a promising built-in method, but this has not been tested.
-
+You can use an elevated prompt, or use [gsudo](https://github.com/gerardog/gsudo) (or [sudo for windows](https://learn.microsoft.com/en-us/windows/sudo/)).

@@ -27,9 +27,9 @@
     
     If using userspace wireguard, privilege escalation is required, see [the same segment](../cmd/toverstok/README.md#userspace-wireguard-configuration) for more information.
     
-    On windows, install [gsudo](https://github.com/gerardog/gsudo) first.
-    
-    On all platforms, then, run toverstok with `sudo ./toverstok`
+    On MacOS and Linux, run toverstok with `sudo ./toverstok`.
+
+    On Windows, run `toverstok.exe` in an elevated prompt.
 
 5. Input the following lines, to set up and connect. Replace `CONTROL_*` with the key, IP, and port gotten above.
 
