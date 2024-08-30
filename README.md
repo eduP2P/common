@@ -25,3 +25,10 @@ On a high level;
 ![](./docs/high_level.png)
 
 For an in-depth overview of the design, you can look at [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+## Funding
+
+This project received funding through [NGI Assure](https://nlnet.nl/assure), a fund established by [NLnet](https://nlnet.nl) with financial support from the European Commission's [Next Generation Internet](https://ngi.eu) program. Learn more at the [NLnet project page](https://nlnet.nl/project/LetsConnect-P2P).
+
+[<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
+[<img src="https://nlnet.nl/image/logos/NGIAssure_tag.svg" alt="NGI Assure Logo" width="20%" />](https://nlnet.nl/assure)
