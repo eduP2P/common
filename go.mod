@@ -1,6 +1,6 @@
 module github.com/shadowjonathan/edup2p
 
-go 1.22.0
+go 1.22
 
 require (
 	github.com/LukaGiorgadze/gonull v1.2.0
