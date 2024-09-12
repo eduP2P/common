@@ -1,3 +1,57 @@
+# Test Suite
+
+This repository uses Continuous Integration (CI) to automatically run
+the tests when the repository is updated. CI is implemented using GitHub
+Workflows, and the workflow running the tests can be found
+[here](.github/workflows/go.yml).
+
+The test suite contains three types of tests:
+
+1.  System tests to verify the functionality of the whole system.
+2.  Integration tests to verify the functionality of smaller parts of
+    the system.
+3.  Performance tests to measure metrics such as the delay, jitter and
+    throughput of the peer-to-peer connection.
+
+They are described in more detail below.
+
+## System Tests
+
+In these tests, two clients attempt to establish a peer-to-peer
+connection using eduP2P. The test suite aims to test each possible
+combination of the following variables:
+
+-   The presence of one or more NATs in front of a client. These NATs
+    may have varying behaviour, as described below:
+    -   TODO
+-   Whether a client uses IPv4 or IPv6.
+
+The tests can be executed manually with [this script](setup.sh).
+
+In these tests, Network Address Translation (NAT) devices have to be
+simulated. An overview and how it is used in the test suite is given in
+a later section of this document.
+
+## Integration Tests
+
+In these tests, the smaller components of the eduP2P client are tested,
+such as the lower layers described in [the document describing eduP2P’s
+architecture](../ARCHITECTURE.md): - The Session - Some of the separate
+Stages: - TODO decide which, if not all
+
+Furthermore, the control server and relay server are also tested.
+
+The tests can be executed manually by running `go test ./test_suite/...`
+from the repository’s root directory.
+
+## Performance Tests
+
+TODO
+
+## Results
+
+TODO
+
 # Network Address Translation
 
 ## Definition
@@ -27,13 +81,6 @@ an Endpoint-Independent Mapping (EIM). With such a mapping, a private
 address-port pair is always translated to the same public address-port
 pair, regardless of the desination address and port (called the
 endpoint).
-
-<!-- RFC 3489 categorizes NATs into the following four variations:
-
-- **Full Cone**: in this variation, each combination of internal IP address and port is always mapped to the same external IP address and port. Therefore, packets sent by an external host to a mapped external address will be forwarded to the corresponding internal host.
-- **Restricted Cone**: this variation is similar to the previous, but packets sent by an external host to a mapped external address will only be forwarded to the corresponding internal host if this internal host previously sent a packet to the external host's IP.
-- **Port Restricted Cone**: this variation is like the restricted cone NAT, but for packets to be forwarded to the internal host, a previous packet must have been sent to the external host's IP *and* port.
-- **Symmetric**: in this variation, the mapping depends on the internal address *and* the destination address: each request from an internal IP address and port to a destination IP address and port is mapped to the same external IP address and port. -->
 
 ## Relevance to eduP2P
 
@@ -67,63 +114,6 @@ connect to the STUN server. Therefore, neither hosts can discover each
 other’s translated address to make a connection using UDP hole punching
 techniques.
 
-<!-- In the case of non-EIM NATs, the hosts can communicate via a globally routable relay server using the TURN protocol @rfc5766. -->
-
-## TODO
-
--   also consider categorization [\[4\]](#ref-rfc4787) as it claims to
-    more accurately represent real life NAT behaviour. Things to
-    consider:
-    -   All combinations of mapping and filtering behaviour
-
-    -   Hairpinning, hole punching might not work if NAT does not
-        support it?
-
-    -   IP pooling, can eduP2P keep track of multiple external
-        addresses?
-
-    -   Also find out if other behavioural properties in this RFC are
-        relevant to test.
-
-    -   Short mapping refresh timers and behaviour
--   The following NAT properties are probably out of scope:
-    -   Port preservation, I think this does not affect eduP2P
-    -   Port overloading, since eduP2P cannot do anything about two
-        clients behind the same NAT having the same address
-    -   Conflicting internal and external address spaces
-    -   ALGs, not worth the time to simulate I think
-    -   Non-deterministic behaviour, hard to determine what the outcome
-        of the test should be
-
-# Test Suite
-
-## Testing Plan
-
-### Type of Tests
-
-In the tests, two clients attempt to establish a peer-to-peer connection
-using eduP2P. The test suite aims to test each possible combination of
-the following variables.
-
--   The presence of one or more NATs in front of a client. These NATs
-    may have varying behaviour, as described below:
-    -   TODO
--   Whether a client uses IPv4 or IPv6.
-
-### NAT Simulation Methodology
-
-TODO
-
-## Tests
-
-The tests are integrated into the repository using GitHub workflows, and
-can be run manually by executing `go test ./test_suite/...` from the
-repository’s root directory.
-
-## Results
-
-TODO
-
 # Bibliography
 
 <span class="csl-left-margin">\[1\]
@@ -144,10 +134,3 @@ J. Rosenberg, D. Wing, R. Mahy, and P. Matthews,
 </span><span class="csl-right-inline">B. Ford, P. Srisuresh, and D.
 Kegel, “Peer-to-peer communication across network address translators.”
 2006. Available: <https://arxiv.org/abs/cs/0603074></span>
-
-<span class="csl-left-margin">\[4\]
-</span><span class="csl-right-inline">C. F. Jennings and F. Audet,
-“<span class="nocase">Network Address Translation (NAT) Behavioral
-Requirements for Unicast UDP</span>.” in Request for comments. RFC 4787;
-RFC Editor, Jan. 2007. doi:
-[10.17487/RFC4787](https://doi.org/10.17487/RFC4787).</span>
