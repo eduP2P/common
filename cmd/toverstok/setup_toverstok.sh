@@ -16,7 +16,9 @@ fi
 
 # Create pipe to redirect input to toverstok CLI
 mkfifo toverstok_in
-./toverstok < toverstok_in &
+
+# Redirect toverstok_in to toverstok binary, and also write this binary's STDOUT and STDERR to toverstok_log.txt
+(./toverstok < toverstok_in 2>&1 | tee toverstok_log.txt &)
 
 # Ensure pipe remains open by continuously feeding input in background
 (

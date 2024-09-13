@@ -7,7 +7,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
+	"github.com/abiosoft/ishell/v2"
+	"github.com/shadowjonathan/edup2p/toversok"
+	"github.com/shadowjonathan/edup2p/toversok/actors"
+	"github.com/shadowjonathan/edup2p/types/ifaces"
+	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/shadowjonathan/edup2p/usrwg"
+	"golang.org/x/exp/maps"
+	"golang.zx2c4.com/wireguard/wgctrl"
 	"log"
 	"log/slog"
 	"math"
@@ -18,16 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"github.com/abiosoft/ishell/v2"
-	"github.com/shadowjonathan/edup2p/toversok"
-	"github.com/shadowjonathan/edup2p/toversok/actors"
-	"github.com/shadowjonathan/edup2p/types/ifaces"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/relay"
-	"github.com/shadowjonathan/edup2p/usrwg"
-	"golang.org/x/exp/maps"
-	"golang.zx2c4.com/wireguard/wgctrl"
 )
 
 var (
@@ -63,14 +61,7 @@ func init() {
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
 func main() {
-	fmt.Println("CREATING FILE")
-	f, err := os.Create("./toverstok_log.txt")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-
-	h := slog.NewTextHandler(io.MultiWriter(os.Stderr, f), &slog.HandlerOptions{Level: programLevel, AddSource: true})
+	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: programLevel, AddSource: true})
 	slog.SetDefault(slog.New(h))
 	programLevel.Set(slog.LevelDebug)
 
