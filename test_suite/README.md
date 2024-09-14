@@ -1,8 +1,20 @@
-# Test Suite
+# eduP2P Test Suite
 
-This repository uses Continuous Integration (CI) to automatically run
-the tests when the repository is updated. CI is implemented using GitHub
-Workflows, and the workflow running the tests can be found
+## Table of Contents
+
+1.  [Overview](#overview)
+2.  [Requirements](#requirements)
+3.  [Network Address Translation](#network-address-translation)
+4.  [Bibliography](#bibliography)
+
+## Overview
+
+This test suite verifies whether two clients running the eduP2P
+prototype can successfully establish a connection under various
+conditions involving Network Address Translation (NAT). Continuous
+Integration (CI) is used to automatically run the tests when the
+repository is updated. CI is implemented using GitHub Workflows, and the
+workflow running the tests can be found
 [here](.github/workflows/go.yml).
 
 The test suite contains three types of tests:
@@ -13,31 +25,41 @@ The test suite contains three types of tests:
 3.  Performance tests to measure metrics such as the delay, jitter and
     throughput of the peer-to-peer connection.
 
-They are described in more detail below.
+## Requirements
+
+The full test suite is known to work on Ubuntu 22.04 and Ubuntu 24.04,
+but will probably work on any Linux installation with a bash shell.
+Furthermore, any machine running Go version 1.22+ should be able to run
+the integration tests. The following software needs to be installed
+before the full test suite can be run:
+
+-   Docker Engine, which can be installed
+    [here](https://docs.docker.com/engine/install/ubuntu/).
+-   Go version 1.22+, which can be installed
+    [here](https://go.dev/doc/install) and is necessary to build eduP2P.
 
 ## System Tests
 
 In these tests, two clients attempt to establish a peer-to-peer
-connection using eduP2P. The test suite aims to test each possible
-combination of the following variables:
-
--   The presence of one or more NATs in front of a client. These NATs
-    may have varying behaviour, as described below:
-    -   TODO
--   Whether a client uses IPv4 or IPv6.
-
-The tests can be executed manually with [this script](setup.sh).
+connection using eduP2P. When these tests are executed via GitHub
+workflows, the test results can be found in the output of the ‘test’ job
+under the step ‘System tests’, and the logs can be downloaded under the
+‘Artifacts’ tab. The system tests can also be executed manually with
+[this script](setup.sh).
 
 In these tests, Network Address Translation (NAT) devices have to be
-simulated. An overview and how it is used in the test suite is given in
-a later section of this document.
+simulated. An overview of NAT and how it is used in the test suite is
+given in a later section of this document.
 
 ## Integration Tests
 
 In these tests, the smaller components of the eduP2P client are tested,
 such as the lower layers described in [the document describing eduP2P’s
-architecture](../ARCHITECTURE.md): - The Session - Some of the separate
-Stages: - TODO decide which, if not all
+architecture](../ARCHITECTURE.md):
+
+-   The Session
+-   Some of the separate Stages:
+    -   TODO decide which, if not all
 
 Furthermore, the control server and relay server are also tested.
 
@@ -52,9 +74,9 @@ TODO
 
 TODO
 
-# Network Address Translation
+## Network Address Translation <a name="nat"></a>
 
-## Definition
+### Definition
 
 Network Address Translation, abbreviated as NAT, is a method currently
 used in many networks to avoid exhausting the IPv4 address space.
@@ -82,7 +104,7 @@ address-port pair is always translated to the same public address-port
 pair, regardless of the desination address and port (called the
 endpoint).
 
-## Relevance to eduP2P
+### Relevance to eduP2P
 
 Establishing peer-to-peer (P2P) connections between two hosts becomes
 more complicated if there is one or multiple NATs on the route between
@@ -107,14 +129,14 @@ performance will also be measured in terms of bandwidth, latency et
 cetera.
 
 Note that this NAT traversal technique does not work if both hosts are
-NAT that does not use an EIM. In this case, the STUN server is unable to
-discover the translated address used by the hosts when connecting to
-each other, since it will differ from the address used when the hosts
-connect to the STUN server. Therefore, neither hosts can discover each
-other’s translated address to make a connection using UDP hole punching
-techniques.
+behind a NAT that does not use an EIM. In this case, the STUN server is
+unable to discover the translated address used by the hosts when
+connecting to each other, since it will differ from the address used
+when the hosts connect to the STUN server. Therefore, neither hosts can
+discover each other’s translated address to make a connection using UDP
+hole punching techniques.
 
-# Bibliography
+## Bibliography
 
 <span class="csl-left-margin">\[1\]
 </span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
