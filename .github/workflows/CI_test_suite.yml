@@ -1,0 +1,35 @@
+name: CI Test Suite
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: System tests
+      run: |
+        host_ip=$(ip addr show docker0 | grep -o "inet [0-9.]\+" | cut -d ' ' -f2)
+        echo "Docker host IP address is: ${host_ip}"
+        ./setup.sh $host_ip 9999 $host_ip 3340 wg0
+      working-directory: test_suite
+
+    - name: Upload system test logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: system-test-logs
+        path: test_suite/logs/
+
+    - name: Integrated tests
+      run: go test -v ./test_suite/...

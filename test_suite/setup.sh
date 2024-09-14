@@ -10,7 +10,7 @@ relay_port=$4
 wg_interface=$5
 
 # Create directory to store logs
-timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+timestamp=$(date +"%Y-%m-%dT%H_%M_%S")
 mkdir -p logs/${timestamp}
 echo "Logging to logs/${timestamp}"
 
