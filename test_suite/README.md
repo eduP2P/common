@@ -38,6 +38,22 @@ before the full test suite can be run:
 -   Go version 1.22+, which can be installed
     [here](https://go.dev/doc/install) and is necessary to build eduP2P.
 
+Additionally, to run the system tests, IPv6 has to be set up for the
+docker bridge connecting Docker containers to the host. First, edit
+`/etc/docker/daemon.json` to enable IPv6 and add an IPv6 subnet, as done
+in the example below:
+
+    {
+      "ipv6": true,
+      "fixed-cidr-v6": "fd42:7e57:c0de::/64"
+    }
+
+Then, restart Docker using `sudo systemctl restart docker`. If IPv6 has
+been set up correctly: - The IPv6 subnet you added to the configuration
+file is part of the `docker0` interface, which can be checked with
+`ip addr show docker0`. - In the output of
+`docker network inspect bridge`, the key “EnableIPv6” is set to true.
+
 ## System Tests
 
 In these tests, two clients attempt to establish a peer-to-peer

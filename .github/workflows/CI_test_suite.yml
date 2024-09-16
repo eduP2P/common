@@ -18,6 +18,14 @@ jobs:
       with:
         go-version: '1.22'
     
+    - name: Enable IPv6 in Docker configuration file
+      run: | 
+        sudo systemctl stop docker
+        sudo rm /etc/docker/daemon.json || echo "No existing configuration file"
+        echo '{ "ipv6": true, "fixed-cidr-v6": "fd42:7e57:c0de::/64" }' | sudo tee /etc/docker/daemon.json
+        sudo systemctl start docker
+        sudo cat /etc/docker/daemon.json && sudo systemctl status docker
+
     - name: System tests
       run: |
         host_ip=$(ip addr show docker0 | grep -o "inet [0-9.]\+" | cut -d ' ' -f2)

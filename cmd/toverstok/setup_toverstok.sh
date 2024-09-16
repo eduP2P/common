@@ -27,7 +27,7 @@ mkfifo toverstok_in
     done
 )&
 
-# Remove pipe and kill background processes when script finishes
+# Remove pipe and kill background process when script finishes
 trap "kill %1; rm toverstok_in" EXIT
 
 # Create log file for toverstok
@@ -66,20 +66,27 @@ if [[ -n $wg_interface ]]; then
 
     # Add IPs to WireGuard interface
     ip address add $ipv4 dev $wg_interface
-    # ip address add $ipv6 dev $wg_interface
+    ip address add $ipv6 dev $wg_interface
 
     fix_wg_interface
 
     # Extract peer's virtual IP address
-    virtual_ip=$(wg | grep -o "allowed ips: [0-9.]\+" | cut -d ' ' -f3)
+    virtual_ipv4=$(wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
+    virtual_ipv6=$(wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
 
-    # Try to ping the peer
-    if ping -c 1 $virtual_ip &> /dev/null; then
-        echo "TS_PASS"
-    else
-        echo "TS_FAIL: ping failed"
-        exit
-    fi  
+    # Try to ping the peer's IPv4 address
+    if ! ping -c 1 $virtual_ipv4 &> /dev/null; then
+        echo "TS_FAIL: IPv4 ping failed with IP address: ${virtual_ipv4}"
+        exit 1
+    fi 
+
+    # Try to ping the peer's IPv6 address
+    if ! ping -c 1 $virtual_ipv6 &> /dev/null; then
+        echo "TS_FAIL: IPv6 ping failed with IP address: ${virtual_ipv6}"
+        exit 1
+    fi   
+
+    echo "TS_PASS"
 
     # Sleep for short duration to give other peer time to ping
     sleep 1s
