@@ -6,10 +6,11 @@ control_port=$1
 # Build
 go build -o control_server *.go
 
-# Run once to save and store public key
-timeout 3s ./start_control_server.sh $control_port &> temp # Redirect STDERR to temporary file
-control_pub_key=$(grep -o "using public key [0-9a-f]\+" temp | cut -d ' ' -f4) # Extract public key from temp
-rm temp
+# Run once to save public key and generate exit code
+control_out=$(timeout --preserve-status -s SIGINT 3s ./start_control_server.sh $control_port 2>& 1)
 
-# Print public key
-echo $control_pub_key
+# Only print public key if server started correctly
+if [[ $? -eq 0 ]]; then
+    echo $control_out | grep -Eo "using public key ([0-9a-f]+)" | cut -d ' ' -f4
+fi
+

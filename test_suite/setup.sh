@@ -18,8 +18,9 @@ echo "Logging to logs/${timestamp}"
 pwd=$(pwd)
 
 function cleanup () {
-    # Kill the two servers created by the script
-    kill $(pgrep control_server) $(pgrep relay_server)
+    # Kill the two servers if they have already been started by the script
+    control_pid=$(pgrep control_server) && kill $control_pid
+    relay_pid=$(pgrep relay_server) && kill $relay_pid
 
     # Save logs of all containers
     cd $pwd
@@ -33,11 +34,23 @@ trap cleanup EXIT # Run cleanup when script exits
 
 # Extract public key of control server
 cd ../cmd/control_server
-control_pub_key=$(./setup_control_server.sh $control_ip $control_port)
+control_pub_key=$(./setup_control_server.sh $control_port)
+
+# If key variable is empty, server did not start successfully
+if [[ -z $control_pub_key ]]; then
+    echo "TS_FAIL: error when starting control server with IP ${control_ip} and port ${control_port}"
+    exit 1
+fi
 
 # Extract public key of relay server
 cd ../relay_server
 relay_pub_key=$(./setup_relay_server.sh $relay_ip $relay_port)
+
+# If key variable is empty, server did not start successfully
+if [[ -z $relay_pub_key ]]; then
+    echo "TS_FAIL: error when starting relay server with IP ${relay_ip} and port ${relay_port}"
+    exit 1
+fi
 
 # Add relay server to control server config
 cd ../control_server
