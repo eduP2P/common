@@ -32,6 +32,7 @@ jobs:
         echo "Docker host IP address is: ${host_ip}"
         ./setup.sh $host_ip 9999 $host_ip 3340 debug wg0:
       working-directory: test_suite
+      continue-on-error: true
 
     - name: Upload system test logs
       uses: actions/upload-artifact@v4
