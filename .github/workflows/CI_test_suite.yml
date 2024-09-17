@@ -30,7 +30,7 @@ jobs:
       run: |
         host_ip=$(ip addr show docker0 | grep -o "inet [0-9.]\+" | cut -d ' ' -f2)
         echo "Docker host IP address is: ${host_ip}"
-        ./setup.sh $host_ip 9999 $host_ip 3340 wg0
+        ./setup.sh $host_ip 9999 $host_ip 3340 debug wg0:
       working-directory: test_suite
 
     - name: Upload system test logs
