@@ -70,7 +70,10 @@ if [[ -n $wg_interface ]]; then
     ip address add $ipv4 dev $wg_interface
     ip address add $ipv6 dev $wg_interface
 
-    # Extract peer's virtual IP address
+    # Sleep for short duration to give toverstok time to update WireGuard interface
+    sleep 5s
+
+    # Extract peer's virtual IP address from WireGuard interface
     virtual_ipv4=$(wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
     virtual_ipv6=$(wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
 # When using userspace WireGuard, we can skip the configuration but need to extract the virtual IPs from the logs

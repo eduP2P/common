@@ -27,6 +27,7 @@ jobs:
         sudo cat /etc/docker/daemon.json && sudo systemctl status docker
 
     - name: System tests
+      id: system-test
       run: |
         host_ip=$(ip addr show docker0 | grep -o "inet [0-9.]\+" | cut -d ' ' -f2)
         echo "Docker host IP address is: ${host_ip}"
@@ -42,3 +43,8 @@ jobs:
 
     - name: Integrated tests
       run: go test -v ./test_suite/...
+
+    - name: Fail job if system test failed (for clarity in GitHub UI)
+      if: ${{ steps.system-test.outcome == 'failure' }}
+      run: |
+        exit 1
