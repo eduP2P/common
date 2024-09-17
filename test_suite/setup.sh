@@ -1,13 +1,19 @@
 #!/bin/bash
 
-# Usage: ./setup.sh <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER IP> <RELAY SERVER PORT> <WIREGUARD INTERFACE>
-# <WIREGUARD INTERFACE> is optional, if it is not set eduP2P is configured with userspace WireGuard
+# Usage: ./setup.sh <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER IP> <RELAY SERVER PORT> <LOG LEVEL> <WG_INTERFACE_1>:<WG_INTERFACE_2>
+# <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
+# Providing an empty string for WG_INTERFACE_{1|2} will make that peer use userspace WireGuard
 
 control_ip=$1
 control_port=$2
 relay_ip=$3
 relay_port=$4
-wg_interface=$5
+log_lvl=$5
+wg_interfaces=()
+
+for i in {1..2}; do
+    wg_interfaces[$i]=$(echo $6 | cut -d ':' -f$i)
+done
 
 # Create directory to store logs
 timestamp=$(date +"%Y-%m-%dT%H_%M_%S")
@@ -25,8 +31,8 @@ function cleanup () {
     # Save logs of all containers
     cd $pwd
 
-    for id in "${container_ids[@]}"; do
-        docker logs $id > logs/${timestamp}/container_${id}.txt
+    for i in {1..2}; do
+        docker logs ${container_ids[$i]} > logs/${timestamp}/peer${i}.txt
     done
 }
 
@@ -63,20 +69,21 @@ cd ../relay_server
 (./start_relay_server.sh $relay_ip $relay_port &> $pwd/logs/${timestamp}/relay.txt &)
 
 # Build docker container to simulate two isolated peers
-echo "Built docker container with image $(docker build -qt peer ../toverstok)"
+echo "Built docker container with image ID: $(docker build -qt peer ../toverstok)"
 
 # Run two peers and store their container ids
 container_ids=()
 
 echo "Starting containers to simulate two peers"
 for i in {1..2}; do
-    container_ids[$i]=$(docker run --cap-add=NET_ADMIN -dt peer $control_pub_key $control_ip $control_port $wg_interface)
+    container_ids[$i]=$(docker run --cap-add=NET_ADMIN -dt peer $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]})
+    echo "Peer ${i} container ID: ${container_ids[$i]}"
 done
 
 # Throw error if one of the two peers did not exit with TS_PASS or timed out
 for i in {1..2}; do 
     export CID=${container_ids[$i]} # Export to use in bash -c
-    timeout 20 bash -c 'docker logs -f $CID | sed -rn "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with |
+    timeout 60 bash -c 'docker logs -f $CID | sed -rn "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with |
     
     # Branch on exit code of previous command
     case $? in

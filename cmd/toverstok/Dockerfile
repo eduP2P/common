@@ -6,8 +6,8 @@ RUN apt-get update &&\
 
 RUN git clone https://github.com/hb140502/eduP2P_test_suite
 
-WORKDIR ./eduP2P_test_suite/cmd/toverstok/
+WORKDIR /go/eduP2P_test_suite/cmd/toverstok/
 
 RUN go build -o toverstok *.go
 
-ENTRYPOINT ["/go/eduP2P_test_suite/cmd/toverstok/setup_toverstok.sh"]
+ENTRYPOINT ["/go/eduP2P_test_suite/cmd/toverstok/setup_client.sh"]
