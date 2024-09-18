@@ -38,21 +38,28 @@ before the full test suite can be run:
 -   Go version 1.22+, which can be installed
     [here](https://go.dev/doc/install) and is necessary to build eduP2P.
 
-Additionally, to run the system tests, IPv6 has to be set up for the
-docker bridge connecting Docker containers to the host. First, edit
-`/etc/docker/daemon.json` to enable IPv6 and add an IPv6 subnet, as done
-in the example below:
+### System test-specific requirements
 
-    {
-      "ipv6": true,
-      "fixed-cidr-v6": "fd42:7e57:c0de::/64"
-    }
+To run the system tests, two new network interfaces have to be created
+to simulate networks between the Docker host and the two peers which run
+in Docker containers. The following commands create two Docker networks
+with IPv6 enabled:
 
-Then, restart Docker using `sudo systemctl restart docker`. If IPv6 has
-been set up correctly: - The IPv6 subnet you added to the configuration
-file is part of the `docker0` interface, which can be checked with
-`ip addr show docker0`. - In the output of
-`docker network inspect bridge`, the key “EnableIPv6” is set to true.
+    docker network create --ipv6 --subnet fd42:7e57:c0de:1::/64 --opt com.docker.network.bridge.name=peer1 peer1
+
+    docker network create --ipv6 --subnet fd42:7e57:c0de:2::/64 --opt com.docker.network.bridge.name=peer2 peer2
+
+If the networks are configured correctly: - In the outputs of
+`ip addr show peer1` and `ip addr show peer2`, you will see one of the
+subnets specified above. - In the outputs of
+`docker network inspect peer1` and `docker network inspect peer2`, the
+key “EnableIPv6” is set to true.
+
+Finally, the `DOCKER-USER` chain of iptables needs to be configured to
+forward packets between the two networks:
+
+    sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
+    sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
 
 ## System Tests
 

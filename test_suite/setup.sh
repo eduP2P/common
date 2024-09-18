@@ -68,16 +68,23 @@ echo "Starting servers"
 cd ../relay_server
 (./start_relay_server.sh $relay_ip $relay_port &> $pwd/logs/${timestamp}/relay.txt &)
 
-# Build docker container to simulate two isolated peers
-echo "Built docker container with image ID: $(docker build -qt peer ../toverstok)"
+# Create docker image to simulate an isolated peer
+echo "Built docker image with ID: $(docker build -qt peer ../toverstok)"
 
-# Run two peers and store their container ids
+# Use above image to run two peers and store their container ids
 container_ids=()
 
 echo "Starting containers to simulate two peers"
 for i in {1..2}; do
-    container_ids[$i]=$(docker run --cap-add=NET_ADMIN -dt peer $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]})
-    echo "Peer ${i} container ID: ${container_ids[$i]}"
+    container_ids[$i]=$(
+        docker run \
+        --network peer$i `# The name of the network used by the container, should have been created before executing this script` \
+        --cap-add=NET_ADMIN `# Required to create and configure WireGuard interface in container` \
+        --sysctl net.ipv6.conf.default.disable_ipv6=0 `# Allow IPv6 in this WireGuard interface` \
+        -dt peer `# Run 'peer' image in detached mode, which returns the container ID` \
+        $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Arguments of setup_client.sh, the entrypoint script of the docker image`
+    )
+    echo "Peer #${i} container ID: ${container_ids[$i]}"
 done
 
 # Throw error if one of the two peers did not exit with TS_PASS or timed out
