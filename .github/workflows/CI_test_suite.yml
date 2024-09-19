@@ -22,7 +22,7 @@ jobs:
       run: | 
         docker network create --ipv6 --subnet fd42:7e57:c0de:1::/64 --opt com.docker.network.bridge.name=peer1 peer1
         docker network create --ipv6 --subnet fd42:7e57:c0de:2::/64 --opt com.docker.network.bridge.name=peer2 peer2
-        sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
+        sudo iptables -I DOCKER-USER -i peer1 -o peer2 -j ACCEPT
         sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
 
     - name: System tests

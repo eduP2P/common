@@ -58,7 +58,7 @@ key “EnableIPv6” is set to true.
 Finally, the `DOCKER-USER` chain of iptables needs to be configured to
 forward packets between the two networks:
 
-    sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
+    sudo iptables -I DOCKER-USER -i peer1 -o peer2 -j ACCEPT
     sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
 
 ## System Tests
