@@ -17,8 +17,9 @@ done
 
 # Create directory to store logs
 timestamp=$(date +"%Y-%m-%dT%H_%M_%S")
-mkdir -p logs/${timestamp}
-echo "Logging to logs/${timestamp}"
+log_dir=logs/${timestamp}
+mkdir -p ${log_dir}
+echo "Logging to ${log_dir}"
 
 # Store present working directory and cmd folder for later use
 pwd=$(pwd)
@@ -95,11 +96,20 @@ for i in {1..2}; do
     # Branch on exit code of previous command
     case $? in
         0|1) echo "TS_FAIL: error when searching for exit code in docker logs of peer ${i} with container id ${container_ids[$i]}"; exit 1 ;; # 0 and 1 indicate docker logs/sed failure
-        2) echo "Peer #${i} success" ;; # 2 indicates TS_SUCCESS was found
+        2) echo "Peer #${i} success" ;; # 2 indicates TS_PASS was found
         3) echo "TS_FAIL: test failed for peer ${i} with container id ${container_ids[$i]}; view this container's logs for more information"; exit 1 ;; # 3 indicates TS_FAIL was found
         124) echo "TS_FAIL: timeout when searching for exit code in docker logs of peer ${i} with container id ${container_ids[$i]}"; exit 1 ;; # 124 is default timeout exit code
         *) echo "TS_FAIL: unknown error"; exit 1 ;;
     esac
 done
 
-echo "TS_PASS"
+# Check if peers established a direct connection
+echo ${container_ids[@]} | xargs -n 1 docker logs > combined_peer_logs.txt
+
+if cat combined_peer_logs.txt | grep -q "ESTABLISHED direct peer connection"; then
+    echo "TS_PASS: direct connection established"
+else
+    echo "TS_PASS: direct connection failed, used relay server as fallback"
+fi
+
+rm combined_peer_logs.txt

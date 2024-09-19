@@ -45,9 +45,9 @@ to simulate networks between the Docker host and the two peers which run
 in Docker containers. The following commands create two Docker networks
 with IPv6 enabled:
 
-    docker network create --ipv6 --subnet fd42:7e57:c0de:1::/64 --opt com.docker.network.bridge.name=peer1 peer1
+    docker network create --ipv6 --subnet fd42:7e57:c0de:1::/64 --opt com.docker.network.bridge.gateway_mode_ipv4=routed --opt com.docker.network.bridge.gateway_mode_ipv6=routed --opt com.docker.network.bridge.name=peer1 peer1
 
-    docker network create --ipv6 --subnet fd42:7e57:c0de:2::/64 --opt com.docker.network.bridge.name=peer2 peer2
+    docker network create --ipv6 --subnet fd42:7e57:c0de:2::/64 --opt com.docker.network.bridge.gateway_mode_ipv4=routed --opt com.docker.network.bridge.gateway_mode_ipv6=routed --opt com.docker.network.bridge.name=peer2 peer2
 
 If the networks are configured correctly: - In the outputs of
 `ip addr show peer1` and `ip addr show peer2`, you will see one of the
@@ -55,8 +55,9 @@ subnets specified above. - In the outputs of
 `docker network inspect peer1` and `docker network inspect peer2`, the
 key “EnableIPv6” is set to true.
 
-Finally, the `DOCKER-USER` chain of iptables needs to be configured to
-forward packets between the two networks:
+Finally, to allow direct connections between the peers, the
+`DOCKER-USER` chain of iptables needs to be configured to forward
+packets between their networks:
 
     sudo iptables -I DOCKER-USER -i peer1 -o peer2 -j ACCEPT
     sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
