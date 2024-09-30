@@ -18,19 +18,13 @@ jobs:
       with:
         go-version: '1.22'
     
-    - name: Create and configure IPV6-enabled Docker networks
-      run: | 
-        docker network create --ipv6 --subnet fd42:7e57:c0de:1::/64 --opt com.docker.network.bridge.gateway_mode_ipv4=routed --opt com.docker.network.bridge.gateway_mode_ipv6=routed --opt com.docker.network.bridge.name=peer1 peer1
-        docker network create --ipv6 --subnet fd42:7e57:c0de:2::/64 --opt com.docker.network.bridge.gateway_mode_ipv4=routed --opt com.docker.network.bridge.gateway_mode_ipv6=routed --opt com.docker.network.bridge.name=peer2 peer2
-        sudo iptables -I DOCKER-USER -i peer1 -o peer2 -j ACCEPT
-        sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
+    - name: Set up simulated networks to test eduP2P with NAT
+      run: ./setup_networks.sh 2 2
+      working-directory: test_suite/nat_simulation
 
     - name: System tests
       id: system-test
-      run: |
-        host_ip=$(ip addr show docker0 | grep -o "inet [0-9.]\+" | cut -d ' ' -f2)
-        echo "Docker host IP address is: ${host_ip}"
-        ./setup.sh $host_ip 9999 $host_ip 3340 debug wg0:
+      run: ./system_test.sh 9999 3340 debug "wg0:"
       working-directory: test_suite
       continue-on-error: true
 

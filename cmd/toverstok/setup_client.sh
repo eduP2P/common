@@ -1,101 +1,109 @@
 #!/bin/bash
 
-# Usage: ./setup_toverstok.sh <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <WIREGUARD INTERFACE> 
+# Usage: ./setup_toverstok.sh <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <WIREGUARD INTERFACE> 
 # <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages)
 # <WIREGUARD INTERFACE> is optional, if it is not set eduP2P is configured with userspace WireGuard
 
-control_pub_key=$1
-control_ip=$2
-control_port=$3
-log_lvl=$4
-wg_interface=$5
+id=$1
+control_pub_key=$2
+control_ip=$3
+control_port=$4
+log_lvl=$5
+wg_interface=$6
 
-# Create WireGuard interface if wg_interface is set, otherwise set up /dev/net/tun for userspace WireGuard
+# Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
-    ip link add $wg_interface type wireguard
-    wg set $wg_interface listen-port 0 # 0 means port is chosen randomly
-    ip link set $wg_interface up
-else
-    mkdir -p /dev/net
-    mknod /dev/net/tun c 10 200
-    chmod 600 /dev/net/tun
+    sudo ip link add $wg_interface type wireguard
+    sudo wg set $wg_interface listen-port 0 # 0 means port is chosen randomly
+    sudo ip link set $wg_interface up
 fi
 
 # Create pipe to redirect input to toverstok CLI
-mkfifo toverstok_in
+pipe="toverstok_in_${id}"
+mkfifo $pipe
 
-# Redirect toverstok_in to toverstok binary, and also write this binary's STDOUT and STDERR to toverstok_log.txt
-(./toverstok < toverstok_in 2>&1 | tee toverstok_log.txt &)
+# Create temporary file to store toverstok CLI output
+out="toverstok_out_${id}.txt"
+
+# Redirect pipe to toverstok binary, and also store its output in a temporary file
+(sudo ./toverstok < $pipe 2>&1 | tee $out &) # Use sed to copy the combined output stream to the specified log file, until the test suite's exit code is found &)
 
 # Ensure pipe remains open by continuously feeding input in background
 (
     while true; do
-        echo "" > toverstok_in
+        echo "" > $pipe
     done
 )&
 
+# Save pid of above background process to kill later
+feed_pipe_pid=$!
+
 function cleanup () {
-    # Kill process feeding input into pipe
-    kill %1
+    # Kill process continuosly feeding input to toverstok
+    sudo kill $feed_pipe_pid
 
     # Remove pipe
-    rm toverstok_in
+    sudo rm $pipe
+
+    # Remove temporary toverstok output file
+    sudo rm $out
 
     # Terminate toverstok, which remains open with userspace WireGuard
-    toverstok_pid=$(pgrep toverstok) && kill $toverstok_pid
+    toverstok_pid=$(pgrep toverstok) && sudo kill $toverstok_pid
+
+    # Delete external WireGuard interface in case external WireGuard was used
+    if [[ -n $wg_interface ]]; then sudo ip link del $wg_interface; fi
 }
 
 # Remove pipe and kill background processes when script finishes
 trap cleanup EXIT
 
-# Create log file for toverstok
-touch toverstok_log.txt
-
 # Generate commands from template and put them in the pipe
 while read line; do
-    eval $line > toverstok_in
+    eval $line > $pipe
 done < commands_template.txt
+
 
 # If wg_interface is set, eduP2P will print some commands to configure the WireGuard interface
 if [[ -n $wg_interface ]]; then
     # Store IPs as "<IPv4> <IPv6>"" when they are logged
-    ips=$(timeout 10s tail -n +1 -f toverstok_log.txt | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
+    ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
 
-    if [[ -z $ips ]]; then echo "TS_FAIL: could not find own virtual IPs in logs"; exit; fi
+    if [[ -z $ips ]]; then echo "TS_FAIL: could not find own virtual IPs in logs"; exit 1; fi
 
     ipv4=$(echo $ips | cut -d ' ' -f1) 
     ipv6=$(echo $ips | cut -d ' ' -f2)
 
     # Add IPs to WireGuard interface
-    ip address add $ipv4 dev $wg_interface
-    ip address add $ipv6 dev $wg_interface
+    sudo ip address add $ipv4 dev $wg_interface
+    sudo ip address add $ipv6 dev $wg_interface
 
     # Sleep for short duration to give toverstok time to update WireGuard interface
     sleep 5s
 
     # Extract peer's virtual IP address from WireGuard interface
-    virtual_ipv4=$(wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
-    virtual_ipv6=$(wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
-# When using userspace WireGuard, we can skip the configuration but need to extract the virtual IPs from the logs
+    peer_ipv4=$(sudo wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
+    peer_ipv6=$(sudo wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
+# When using userspace WireGuard, we can skip the configuration but need to extract the peer's virtual IPs from the logs
 else
-    # Store virtual IPs as "<IPv4> <IPv6>"" when they are logged
-    virtual_ips=$(timeout 10s tail -n +1 -f toverstok_log.txt | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
+    # Store peer IPs as "<IPv4> <IPv6>"" when they are logged
+    peer_ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
 
-    if [[ -z $virtual_ips ]]; then echo "TS_FAIL: could not find peer's virtual IPs in logs"; exit; fi
+    if [[ -z $peer_ips ]]; then echo "TS_FAIL: could not find peer's virtual IPs in logs"; exit 1; fi
 
-    virtual_ipv4=$(echo $virtual_ips | cut -d ' ' -f1) 
-    virtual_ipv6=$(echo $virtual_ips | cut -d ' ' -f2)
+    peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1)
+    peer_ipv6=$(echo $peer_ips | cut -d ' ' -f2)
 fi
 
 # Try to ping the peer's IPv4 address
-if ! ping -c 5 $virtual_ipv4 &> /dev/null; then
-    echo "TS_FAIL: IPv4 ping failed with IP address: ${virtual_ipv4}"
+if ! ping -c 5 $peer_ipv4 &> /dev/null; then
+    echo "TS_FAIL: IPv4 ping failed with IP address: ${peer_ipv4}"
     exit 1
 fi 
 
 # Try to ping the peer's IPv6 address
-if ! ping -c 5 $virtual_ipv6 &> /dev/null; then
-    echo "TS_FAIL: IPv6 ping failed with IP address: ${virtual_ipv6}"
+if ! ping -c 5 $peer_ipv6 &> /dev/null; then
+    echo "TS_FAIL: IPv6 ping failed with IP address: ${peer_ipv6}"
     exit 1
 fi   
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Usage: ./start_control_server.sh <CONTROL SERVER PORT>
+# Usage: ./start_control_server.sh CONTROL SERVER IP> <CONTROL SERVER PORT>
 
-./control_server -c ./control.json -a ":${1}"
+sudo ip netns exec public ./control_server -c ./control.json -a "${1}:${2}"
 

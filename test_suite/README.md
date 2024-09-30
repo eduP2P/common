@@ -33,34 +33,24 @@ Furthermore, any machine running Go version 1.22+ should be able to run
 the integration tests. The following software needs to be installed
 before the full test suite can be run:
 
--   Docker Engine, which can be installed
-    [here](https://docs.docker.com/engine/install/ubuntu/).
 -   Go version 1.22+, which can be installed
     [here](https://go.dev/doc/install) and is necessary to build eduP2P.
 
 ### System test-specific requirements
 
-To run the system tests, two new network interfaces have to be created
-to simulate networks between the Docker host and the two peers which run
-in Docker containers. The following commands create two Docker networks
-with IPv6 enabled:
+The system tests assume the presence of a simulated multi-network setup
+in order to test eduP2P in scenarios involving NAT. This setup is
+created by running [a script in the nat\_simulation
+subdirectory](nat_simulation/setup_networks.sh) with root privileges,
+e.g. by using sudo:
 
-    docker network create --ipv6 --subnet fd42:7e57:c0de:1::/64 --opt com.docker.network.bridge.gateway_mode_ipv4=routed --opt com.docker.network.bridge.gateway_mode_ipv6=routed --opt com.docker.network.bridge.name=peer1 peer1
+    sudo ./setup_networks.sh
 
-    docker network create --ipv6 --subnet fd42:7e57:c0de:2::/64 --opt com.docker.network.bridge.gateway_mode_ipv4=routed --opt com.docker.network.bridge.gateway_mode_ipv6=routed --opt com.docker.network.bridge.name=peer2 peer2
-
-If the networks are configured correctly: - In the outputs of
-`ip addr show peer1` and `ip addr show peer2`, you will see one of the
-subnets specified above. - In the outputs of
-`docker network inspect peer1` and `docker network inspect peer2`, the
-key “EnableIPv6” is set to true.
-
-Finally, to allow direct connections between the peers, the
-`DOCKER-USER` chain of iptables needs to be configured to forward
-packets between their networks:
-
-    sudo iptables -I DOCKER-USER -i peer1 -o peer2 -j ACCEPT
-    sudo iptables -I DOCKER-USER -i peer2 -o peer1 -j ACCEPT
+This script creates network namespaces to simulate isolated networks.
+The system tests execute commands in these namespaces, which also
+requires root privileges. Therefore, the system tests contain some
+commands run with sudo, and running the system tests may result in being
+prompted to enter your password.
 
 ## System Tests
 
