@@ -72,7 +72,7 @@ echo "Starting toverstok clients in network namespaces to simulate two isolated 
 cd ../toverstok
 
 # Build toverstok client
-go build -o toverstok *.go
+go build -o toverstok *.go &> /dev/null
 
 for i in {1..2}; do
     log_file=${log_dir_abs}/peer${i}.txt

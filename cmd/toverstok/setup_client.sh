@@ -82,8 +82,8 @@ if [[ -n $wg_interface ]]; then
     sleep 5s
 
     # Extract peer's virtual IP address from WireGuard interface
-    peer_ipv4=$(sudo wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
-    peer_ipv6=$(sudo wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
+    peer_ipv4=$(wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
+    peer_ipv6=$(wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
 # When using userspace WireGuard, we can skip the configuration but need to extract the peer's virtual IPs from the logs
 else
     # Store peer IPs as "<IPv4> <IPv6>"" when they are logged
