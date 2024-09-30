@@ -19,7 +19,7 @@ jobs:
         go-version: '1.22'
     
     - name: Set up simulated networks to test eduP2P with NAT
-      run: ./setup_networks.sh 2 2
+      run: sudo ./setup_networks.sh 2 2
       working-directory: test_suite/nat_simulation
 
     - name: System tests
