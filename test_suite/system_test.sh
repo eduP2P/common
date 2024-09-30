@@ -59,7 +59,7 @@ fi
 
 # Add relay server to control server config
 cd ../control_server
-python3 configure_json.py $relay_pub_key $relay_ip $relay_port
+sudo python3 configure_json.py $relay_pub_key $relay_ip $relay_port
 
 # Run servers as background processes
 echo "Starting servers in public namespace"
