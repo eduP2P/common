@@ -12,7 +12,7 @@ relay_ip=$3
 ip link set lo up
 
 # Create TUN interface for switch
-sudo ip link add switch type veth peer dummy
+sudo ip tuntap add dev switch mode tun
 sudo ip link set dev switch up
 sudo ip addr add "${switch_ip}/24" dev switch
 
