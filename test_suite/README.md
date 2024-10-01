@@ -52,6 +52,13 @@ requires root privileges. Therefore, the system tests contain some
 commands run with sudo, and running the system tests may result in being
 prompted to enter your password.
 
+Furthermore, the system tests require a few command-line tools to be
+installed. The list of tools is found in
+[system\_test\_requirements.txt](system_test_requirements.txt), and can
+be installed by running the following command:
+
+    xargs -a system_test_requirements.txt sudo apt-get install
+
 ## System Tests
 
 In these tests, two clients attempt to establish a peer-to-peer

@@ -23,9 +23,8 @@ jobs:
       working-directory: test_suite/nat_simulation
 
     - name: System tests dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y iproute2 iputils-ping sed wireguard
+      run: xargs -a system_test_requirements.txt sudo apt-get install
+      working-directory: test_suite
 
     - name: System tests
       id: system-test
