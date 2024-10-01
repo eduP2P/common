@@ -1,8 +1,13 @@
 #!/bin/bash
 
-# Usage: ./setup_networks.sh <NUMBER OF PRIVATE NETWORKS> <NUMBER OF PEERS PER PRIVATE NETWORK>
-# Simulates a network setup containing a specified number of private networks connected via the public network, with their routers applying Network Address Translation (NAT). The private networks contain a specified number of peers using eduP2P.
-# This script must be run with root permissions
+if [[ $# -ne 2 ]]; then
+    echo """
+Usage: ${0} <NUMBER OF PRIVATE NETWORKS> <NUMBER OF PEERS PER PRIVATE NETWORK>
+
+Simulates a network setup containing a specified number of private networks connected via the public network, with their routers applying Network Address Translation (NAT). The private networks contain a specified number of peers using eduP2P
+This script must be run with root permissions"""
+    exit 1
+fi
 
 n_priv_nets=$1
 n_peers=$2

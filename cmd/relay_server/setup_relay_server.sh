@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# Usage: ./setup_relay_server.sh <RELAY SERVER IP> <RELAY SERVER PORT>
+if [[ $# -ne 2 ]]; then
+    echo """
+Usage: ${0} <RELAY SERVER IP> <RELAY SERVER PORT>"""
+    exit 1
+fi
 
 relay_ip=$1
 relay_port=$2

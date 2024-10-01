@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Usage: ./setup_private.sh <ROUTER NAME> <ROUTER PUBLIC IP>
-# This script must be run with root permissions
+if [[ $# -ne 2 ]]; then
+    echo """
+Usage: ${0} <ROUTER NAME> <ROUTER PUBLIC IP>
+
+This script must be run with root permissions"""
+    exit 1
+fi
 
 router_name=$1
 router_ip=$2

@@ -1,8 +1,13 @@
 #!/bin/bash
 
-# Usage: ./system_test.sh <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> <WG_INTERFACE_1>:<WG_INTERFACE_2>
-# <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
-# Providing an empty string for WG_INTERFACE_{1|2} will make that peer use userspace WireGuard
+if [[ $# -ne 4 ]]; then
+    echo """
+Usage: ${0} <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> [WG_INTERFACE_1]:[WG_INTERFACE_2]
+
+<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
+If [WG_INTERFACE_1] or [WG_INTERFACE_2] is not provided, the corresponding peer will use userspace WireGuard"""
+    exit 1
+fi
 
 control_port=$1
 relay_port=$2

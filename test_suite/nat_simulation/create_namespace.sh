@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Usage: ./create_namespace.sh <NAMESPACE NAME>
-# This script must be run with root permissions
+if [[ $# -ne 1 ]]; then
+    echo """
+Usage: ${0} <NAMESPACE NAME>
+
+This script must be run with root permissions"""
+    exit 1
+fi
 
 name=$1
 

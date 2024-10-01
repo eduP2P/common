@@ -1,8 +1,13 @@
 #!/bin/bash
 
-# Usage: ./setup_toverstok.sh <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <WIREGUARD INTERFACE> 
-# <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages)
-# <WIREGUARD INTERFACE> is optional, if it is not set eduP2P is configured with userspace WireGuard
+if [[ $# < 5 || $# > 6 ]]; then
+    echo """
+Usage: ${0} <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> [WIREGUARD INTERFACE]
+
+<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
+If [WIREGUARD INTERFACE] is not provided, eduP2P is configured with userspace WireGuard"""
+    exit 1
+fi
 
 id=$1
 control_pub_key=$2

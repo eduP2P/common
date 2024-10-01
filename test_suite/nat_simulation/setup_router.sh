@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# Usage: ./setup_router.sh <ROUTER NAME> <PRIVATE NETWORK NAME> <PRIVATE SUBNET> <ROUTER PRIVATE IP> <ROUTER PUBLIC IP> <SWITCH IP>
-# This script must be run with root permissions
+if [[ $# -ne 6 ]]; then
+    echo """
+Usage: ${0} <ROUTER NAME> <PRIVATE NETWORK NAME> <PRIVATE SUBNET> <ROUTER PRIVATE IP> <ROUTER PUBLIC IP> <SWITCH IP>
+This script must be run with root permissions"""
+    exit 1
+fi
 
 router_name=$1
 priv_name=$2

@@ -1,7 +1,12 @@
 #!/bin/bash
 
-# Usage: ./setup_peer.sh <PEER NAME> <PRIVATE NETWORK NAME> <PEER IP> <ROUTER PRIVATE IP>
-# This script must be run with root permissions
+if [[ $# -ne 4 ]]; then
+    echo """
+Usage: ${0} <PEER NAME> <PRIVATE NETWORK NAME> <PEER IP> <ROUTER PRIVATE IP>
+
+This script must be run with root permissions"""
+    exit 1
+fi
 
 peer_name=$1
 priv_name=$2

@@ -1,8 +1,12 @@
-
 #!/bin/bash
 
-# Usage: ./setup_public.sh <SWITCH IP> <CONTROL SERVER IP> <RELAY SERVER IP>
-# This script must be run with root permissions
+if [[ $# -ne 3 ]]; then
+    echo """
+Usage: ${0} <SWITCH IP> <CONTROL SERVER IP> <RELAY SERVER IP>
+
+This script must be run with root permissions"""
+    exit 1
+fi
 
 switch_ip=$1
 control_ip=$2

@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# Usage: ./setup_control_server.sh <CONTROL SERVER IP> <CONTROL SERVER PORT>
+if [[ $# -ne 2 ]]; then
+    echo """
+Usage: ${0} <CONTROL SERVER IP> <CONTROL SERVER PORT>"""
+    exit 1
+fi
 
 control_ip=$1
 control_port=$2
