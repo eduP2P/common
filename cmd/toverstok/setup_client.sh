@@ -56,6 +56,14 @@ function cleanup () {
     # Terminate toverstok, which remains open with userspace WireGuard
     toverstok_pid=$(pgrep toverstok) && sudo kill $toverstok_pid
 
+    # Remove http server output files
+    rm $http_ipv4_out
+    rm $http_ipv6_out
+
+    # Kill http servers 
+    if [[ -n $http_ipv4_pid ]]; then kill $http_ipv4_pid; fi
+    if [[ -n $http_ipv6_pid ]]; then kill $http_ipv6_pid; fi
+
     # Delete external WireGuard interface in case external WireGuard was used
     if [[ -n $wg_interface ]]; then sudo ip link del $wg_interface; fi
 }
@@ -68,51 +76,94 @@ while read line; do
     eval $line > $pipe
 done < commands_template.txt
 
-
-# If wg_interface is set, eduP2P will print some commands to configure the WireGuard interface
+# Get own virtual IPs and peer's virtual IPs; method is different for exernal WireGuard vs userspace WireGuard
 if [[ -n $wg_interface ]]; then
-    # Store IPs as "<IPv4> <IPv6>"" when they are logged
+    # Store virtual IPs as "<IPv4> <IPv6>"" when they are logged
     ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
 
     if [[ -z $ips ]]; then echo "TS_FAIL: could not find own virtual IPs in logs"; exit 1; fi
 
+    # Split IPv4 and IPv6
     ipv4=$(echo $ips | cut -d ' ' -f1) 
     ipv6=$(echo $ips | cut -d ' ' -f2)
 
-    # Add IPs to WireGuard interface
+    # Add virtual IPs to WireGuard interface
     sudo ip address add $ipv4 dev $wg_interface
     sudo ip address add $ipv6 dev $wg_interface
+    
+    # Remove network prefix length from own virtual IPs
+    ipv4=$(echo $ipv4 | cut -d '/' -f1)
+    ipv6=$(echo $ipv6 | cut -d '/' -f1)
 
-    # Sleep for short duration to give toverstok time to update WireGuard interface
-    sleep 5s
+    # Wait until timeout or until WireGuard interface is updated to contain peer's virtual IPs
+    timeout=10
+    peer_ips=$(wg show $wg_interface allowed-ips | cut -d$'\t' -f2) # IPs are shown as "<wg pubkey>\t<IPv4> <IPv6>"
 
-    # Extract peer's virtual IP address from WireGuard interface
-    peer_ipv4=$(wg | grep -Eo "allowed ips: [0-9.]+" | cut -d ' ' -f3)
-    peer_ipv6=$(wg | grep -Eo "allowed ips: (\S+) [0-9a-f:]+" | cut -d ' ' -f4)
-# When using userspace WireGuard, we can skip the configuration but need to extract the peer's virtual IPs from the logs
+    while [[ -z $peer_ips ]]; do
+        sleep 1s
+        timeout=$(($timeout-1))
+
+        if [[ $timeout -eq 0 ]]; then
+            echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
+        fi
+
+        peer_ips=$(wg show $wg_interface allowed-ips | cut -d$'\t' -f2)
+    done
+
+    # Split IPv4 and IPv6, and remove network prefix length
+    peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1 | cut -d '/' -f1) 
+    peer_ipv6=$(echo $peer_ips | cut -d ' ' -f2 | cut -d '/' -f1)
 else
+    # Wait until timeout or until TUN interface created with userspace WireGuard is updated to contain peer's virtual IPs
+    timeout=10
+    
+    while ! ip address show ts0 | grep -Eq "inet [0-9.]+"; do
+        sleep 1s
+        timeout=$(($timeout-1))
+
+        if [[ $timeout -eq 0 ]]; then
+            echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
+        fi
+    done
+
+    # Extract own virtual IPs from TUN interface
+    ipv4=$(ip address show ts0 | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
+    ipv6=$(ip address show ts0 | grep -Eo -m 1 "inet6 [0-9a-f:]+" | cut -d ' ' -f2)
+
     # Store peer IPs as "<IPv4> <IPv6>"" when they are logged
     peer_ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
 
     if [[ -z $peer_ips ]]; then echo "TS_FAIL: could not find peer's virtual IPs in logs"; exit 1; fi
 
+    # Split IPv4 and IPv6
     peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1)
     peer_ipv6=$(echo $peer_ips | cut -d ' ' -f2)
 fi
 
-# Try to ping the peer's IPv4 address
-if ! ping -c 5 $peer_ipv4 &> /dev/null; then
-    echo "TS_FAIL: IPv4 ping failed with IP address: ${peer_ipv4}"
-    exit 1
-fi 
+# Start HTTP servers on own virtual IPs for peer to access, and save their pids to kill them during cleanup
+http_ipv4_out="http_ipv4_output_${id}.txt"
+python3 -m http.server -b $ipv4 80 &> $http_ipv4_out &
+http_ipv4_pid=$!
 
-# Try to ping the peer's IPv6 address
-if ! ping -c 5 $peer_ipv6 &> /dev/null; then
-    echo "TS_FAIL: IPv6 ping failed with IP address: ${peer_ipv6}"
-    exit 1
-fi   
+http_ipv6_out="http_ipv6_output_${id}.txt"
+python3 -m http.server -b $ipv6 80 &> $http_ipv6_out &
+http_ipv6_pid=$!
+
+# Try connecting to peer's HTTP server hosted on its IPv4 address
+if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null "http://${peer_ipv4}"; then
+    echo "TS_FAIL: could not connect to peer's HTTP server on IP address: ${peer_ipv4}"
+fi
+
+# Wait to give peer time to establish direct connection
+timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
+
+# Try connecting to peer's HTTP server hosted on its IPv4 address
+if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null -6 "http://[${peer_ipv6}]"; then
+    echo "TS_FAIL: could not connect to peer's HTTP server on IP address: ${peer_ipv6}"
+fi
+
+# Wait until timeout or until peer connected to server (peer's IP will appear in server output)
+timeout 10s tail -f -n +1 $http_ipv4_out | sed -n "/${peer_ipv4}/q"
+timeout 10s tail -f -n +1 $http_ipv6_out | sed -n "/${peer_ipv6}/q"
 
 echo "TS_PASS"
-
-# Sleep for short duration to give other peer time to ping
-sleep 10s

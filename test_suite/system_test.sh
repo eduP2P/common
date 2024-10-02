@@ -91,11 +91,11 @@ done
 # Throw error if one of the two peers did not exit with TS_PASS or timed out
 for i in {1..2}; do 
     export LOG_FILE=${log_dir_abs}/peer${i}.txt # Export to use in bash -c
-    timeout 60 bash -c 'tail -n +1 -f $LOG_FILE | sed -rn "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with |
+    timeout 60s bash -c 'tail -n +1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
     
     # Branch on exit code of previous command
     case $? in
-        0|1) echo "TS_FAIL: error when searching for exit code in logs of peer ${i}"; exit 1 ;; # 0 and 1 indicate docker logs/sed failure
+        0|1) echo "TS_FAIL: error when searching for exit code in logs of peer ${i}"; exit 1 ;; # 0 and 1 indicate tail/sed failure
         2) echo "Peer #${i} success" ;; # 2 indicates TS_PASS was found
         3) echo "TS_FAIL: test failed for peer ${i}; view this peer's logs for more information"; exit 1 ;; # 3 indicates TS_FAIL was found
         124) echo "TS_FAIL: timeout when searching for exit code in logs of peer ${i}"; exit 1 ;; # 124 is default timeout exit code
