@@ -14,7 +14,7 @@ import (
 // Session User messages:
 //   Version (1) + Type (1) + Data
 
-const wireHeaderLen = len(Magic) + key.Len + NaclBoxNonceLen
+var wireHeaderLen = len(Magic) + key.Len + NaclBoxNonceLen
 
 func LooksLikeSessionWireMessage(pkt []byte) bool {
 	if len(pkt) < wireHeaderLen {
