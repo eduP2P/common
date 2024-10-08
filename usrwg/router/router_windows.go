@@ -10,8 +10,8 @@ import (
 	"log/slog"
 
 	"github.com/dblohm7/wingoes/com"
+	"github.com/edup2p/common/usrwg/router/winnet"
 	ole "github.com/go-ole/go-ole"
-	"github.com/shadowjonathan/edup2p/usrwg/router/winnet"
 	"go4.org/netipx"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/tun"

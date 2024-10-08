@@ -1,4 +1,4 @@
-module github.com/shadowjonathan/edup2p
+module github.com/edup2p/common
 
 go 1.22.0
 

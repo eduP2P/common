@@ -2,14 +2,14 @@ package actors
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/dial"
-	"github.com/shadowjonathan/edup2p/types/ifaces"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
-	"github.com/shadowjonathan/edup2p/types/msgsess"
-	"github.com/shadowjonathan/edup2p/types/relay"
-	"github.com/shadowjonathan/edup2p/types/relay/relayhttp"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/dial"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgactor"
+	"github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/relay"
+	"github.com/edup2p/common/types/relay/relayhttp"
 	"log/slog"
 	"time"
 )

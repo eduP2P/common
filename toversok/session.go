@@ -3,11 +3,11 @@ package toversok
 import (
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/toversok/actors"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/ifaces"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/edup2p/common/toversok/actors"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
 	"net/netip"
 )
 

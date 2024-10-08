@@ -4,7 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
+	"github.com/edup2p/common/types"
 	"go4.org/mem"
 	"golang.org/x/crypto/curve25519"
 	"strings"

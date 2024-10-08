@@ -3,8 +3,8 @@ package actors
 import (
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/ifaces"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
 	"net/netip"
 	"sort"

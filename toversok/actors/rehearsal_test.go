@@ -2,9 +2,9 @@ package actors
 
 import (
 	"context"
-	"github.com/shadowjonathan/edup2p/types/ifaces"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgactor"
 	"net/netip"
 )
 

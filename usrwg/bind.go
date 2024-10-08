@@ -3,7 +3,7 @@ package usrwg
 import (
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/edup2p/common/types/key"
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/conn"
 	"reflect"

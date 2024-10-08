@@ -1,7 +1,7 @@
 # Trying out the Proof of Concept
 
 1. Clone the repository
-   - `git clone https://github.com/shadowjonathan/edup2p`
+   - `git clone https://github.com/edup2p/common`
 2. Make sure you have (at least) golang 1.22 installed
 
     Next, if you have not been given credentials to join a control server, first set up the servers as detailed in [this documentation](./prototype_cookbook.md#setting-up-the-servers).

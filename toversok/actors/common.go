@@ -2,7 +2,7 @@ package actors
 
 import (
 	"context"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
 )
 

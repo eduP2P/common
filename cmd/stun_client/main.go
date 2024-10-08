@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/stun"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/stun"
 	"log"
 	"net"
 	"net/netip"

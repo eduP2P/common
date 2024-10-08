@@ -2,7 +2,7 @@
 
 WIP: This folder contains a `WireGuardHost` ran in userspace. 
 
-See this ongoing issue for more context: https://github.com/ShadowJonathan/eduP2P/issues/49.
+See this ongoing issue for more context: https://github.com/edup2p/common/issues/49.
 
 On all platforms; The userspace wireguard implementation needs sufficient permissions to;
 - Create a network interface
@@ -10,7 +10,7 @@ On all platforms; The userspace wireguard implementation needs sufficient permis
 
 For now, practically, this requires `sudo` on linux and macos, and an elevated prompt on windows (or [`gsudo`](https://github.com/gerardog/gsudo)).
 
-(See this issue for more information about permission refinement: https://github.com/ShadowJonathan/eduP2P/issues/56)
+(See this issue for more information about permission refinement: https://github.com/edup2p/common/issues/56)
 
 This implementation will configure its own routing, interface, and IP address, as given by Control.
 

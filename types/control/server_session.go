@@ -3,9 +3,9 @@ package control
 import (
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msgcontrol"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 	"log/slog"
 	"net/netip"
 	"time"

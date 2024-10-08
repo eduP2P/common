@@ -2,7 +2,7 @@ package msgsess
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
+	"github.com/edup2p/common/types"
 	"net/netip"
 	"slices"
 )

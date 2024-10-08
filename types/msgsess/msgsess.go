@@ -3,7 +3,7 @@
 // Session message interface definitions are sealed within this package.
 package msgsess
 
-import "github.com/shadowjonathan/edup2p/types/key"
+import "github.com/edup2p/common/types/key"
 
 type SessionMessage interface {
 	MarshalSessionMessage() []byte

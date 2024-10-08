@@ -3,7 +3,7 @@ package msgsess
 import (
 	crand "crypto/rand"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/edup2p/common/types/key"
 	"slices"
 )
 

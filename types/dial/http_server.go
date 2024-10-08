@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
+	"github.com/edup2p/common/types"
 	"log/slog"
 	"net/http"
 	"net/netip"

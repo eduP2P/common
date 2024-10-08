@@ -1,10 +1,10 @@
 package ifaces
 
 import (
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
-	"github.com/shadowjonathan/edup2p/types/msgsess"
-	"github.com/shadowjonathan/edup2p/types/stage"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgactor"
+	"github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/stage"
 	"net/netip"
 )
 
