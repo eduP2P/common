@@ -1,18 +1,42 @@
 #!/bin/bash
 
-if [[ $# -ne 4 ]]; then
-    echo """
-Usage: ${0} <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> [WG_INTERFACE_1]:[WG_INTERFACE_2]
-
-<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
-If [WG_INTERFACE_1] or [WG_INTERFACE_2] is not provided, the corresponding peer will use userspace WireGuard"""
-    exit 1
-fi
-
 control_port=$1
 relay_port=$2
 log_lvl=$3
-wg_interface_str=$4
+nat_config_str=$4
+wg_interface_str=$5
+
+# Make sure all arguments have been passed, and nat_config_str has the correct format
+if [[ $# -ne 5 || ! ($nat_config_str =~ ^[0-2]-[0-2]:[0-2]-[0-2]$)]]; then
+    echo """
+Usage: ${0} <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> <NAT CONFIGURATION 1>:<NAT CONFIGURATION 2> [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2]
+
+<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
+
+<NAT CONFIGURATION 1> and <NAT CONFIGURATION 2> specify the type of NAT applied to packets sent by peer 1 and 2 respectively. Both should be a string with the format:
+    <NAT MAPPING TYPE>-<NAT FILTERING TYPE>, where both may be one of the following numbers: 
+        0 - Endpoint-Independent
+        1 - Address-Dependent
+        2 - Address and Port-Dependent
+Example of a valid NAT configuration: 0-1:1-2
+
+If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard"""
+    exit 1
+fi
+
+NAT_TYPES=("Endpoint-Independent" "Address-Dependent" "Address and Port-Dependent")
+nat_map=()
+nat_filter=()
+
+echo "Starting system test between two peers:"
+
+for i in {1..2}; do
+    nat_config=$(echo $nat_config_str | cut -d ':' -f$i)
+    nat_map[$i]=$(echo $nat_config | cut -d '-' -f1)
+    nat_filter[$i]=$(echo $nat_config | cut -d '-' -f2)
+
+    echo "  - Peer ${i} is behind a NAT device with an ${NAT_TYPES[${nat_map[$i]}]} Mapping and ${NAT_TYPES[${nat_filter[$i]}]} Filtering"
+done
 
 wg_interfaces=()
 
@@ -34,13 +58,30 @@ log_dir_abs=${pwd}/logs/${timestamp}
 mkdir -p ${log_dir}
 echo "Logging to ${log_dir}"
 
+# Store PIDs of background processes that must be killed when script exits
+background_pids=()
+
 function cleanup () {
     # Kill the two servers and client setup scripts if they have already been started by the script
     control_pid=$(pgrep control_server) && sudo kill $control_pid
     relay_pid=$(pgrep relay_server) && sudo kill $relay_pid
+
+    # Kill the conntrack processes started by the nat simulation scripts, and ignore their output while terminating
+    conntrack_pids=$(pidof conntrack)
+
+    if [[ -n $conntrack_pids ]]; then
+        sudo kill $(pidof conntrack)
+        wait $(pidof conntrack) &> /dev/null
+    fi
+
+    # Reset nftables configuration of the routers
+    for i in {1..2}; do
+        sudo ip netns exec router${i} nft flush ruleset
+    done
 }
 
-trap cleanup EXIT # Run cleanup when script exits
+# Run cleanup when script exits
+trap cleanup EXIT 
 
 # Extract public key of control server
 cd ../cmd/control_server
@@ -80,8 +121,13 @@ cd ../toverstok
 go build -o toverstok *.go &> /dev/null
 
 for i in {1..2}; do
-    log_file=${log_dir_abs}/peer${i}.txt
+    router_ns="router${i}"
     peer_ns="private${i}_peer1"
+    log_file=${log_dir_abs}/peer${i}.txt
+
+    cd $pwd/nat_simulation
+    sudo ip netns exec ${router_ns} ./setup_nat.sh ${router_ns}_pub 10.0.${i}.0/24 ${nat_map[$i]} ${nat_filter[$i]} $pwd/adm_ips.txt 2>&1 | tee ${log_dir_abs}/${router_ns}.txt > /dev/null &
+    cd $pwd/../cmd/toverstok
 
     sudo ip netns exec ${peer_ns} ./setup_client.sh $i $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Run script from the peer's isolated namespace` \
     2>&1 | `# Combine STDERR and STDOUT into one output stream` \
