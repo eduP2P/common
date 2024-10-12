@@ -33,7 +33,7 @@ trap cleanup EXIT
 function build_go() {
     for binary in toverstok control_server relay_server; do
         binary_dir="${repo_dir}/cmd/$binary"
-        go build -o "${binary_dir}/$binary" ${binary_dir}/*.go
+        go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
     done
 }
 
@@ -155,6 +155,7 @@ function print_summary() {
         echo -e "${GREEN}All tests passed!${NC}"
     else
         echo -e "${RED}$n_failed tests failed${NC}"
+        exit 1
     fi
 }
 
