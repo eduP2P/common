@@ -57,8 +57,8 @@ function cleanup () {
     toverstok_pid=$(pgrep toverstok) && sudo kill $toverstok_pid
 
     # Remove http server output files
-    rm $http_ipv4_out
-    rm $http_ipv6_out
+    if [[ -n $http_ipv4_out ]]; then rm $http_ipv4_out; fi
+    if [[ -n $http_ipv6_out ]]; then rm $http_ipv6_out; fi
 
     # Kill http servers 
     if [[ -n $http_ipv4_pid ]]; then kill $http_ipv4_pid; fi
@@ -105,6 +105,7 @@ if [[ -n $wg_interface ]]; then
 
         if [[ $timeout -eq 0 ]]; then
             echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
+            exit 1
         fi
 
         peer_ips=$(wg show $wg_interface allowed-ips | cut -d$'\t' -f2)
@@ -123,6 +124,7 @@ else
 
         if [[ $timeout -eq 0 ]]; then
             echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
+            exit 1
         fi
     done
 
@@ -149,18 +151,23 @@ http_ipv6_out="http_ipv6_output_${id}.txt"
 python3 -m http.server -b $ipv6 80 &> $http_ipv6_out &
 http_ipv6_pid=$!
 
-# Try connecting to peer's HTTP server hosted on its IPv4 address
-if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null "http://${peer_ipv4}"; then
-    echo "TS_FAIL: could not connect to peer's HTTP server on IP address: ${peer_ipv4}"
-fi
+# Try connecting to peer's HTTP server hosted on IP addres
+function try_connect() {
+    peer_addr=$1
 
-# Wait to give peer time to establish direct connection
+    if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null $peer_addr; then
+        echo "TS_FAIL: could not connect to peer's HTTP server with address: ${peer_ip}"
+        exit 1
+    fi
+}
+
+try_connect "http://${peer_ipv4}"
+
+# Peers try to connect directly after initial connection, wait until they are finished or until timeout in case direct connection is impossible
 timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
 
 # Try connecting to peer's HTTP server hosted on its IPv4 address
-if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null -6 "http://[${peer_ipv6}]"; then
-    echo "TS_FAIL: could not connect to peer's HTTP server on IP address: ${peer_ipv6}"
-fi
+try_connect "http://[${peer_ipv6}]"
 
 # Wait until timeout or until peer connected to server (peer's IP will appear in server output)
 timeout 10s tail -f -n +1 $http_ipv4_out | sed -n "/${peer_ipv4}/q"

@@ -20,12 +20,10 @@ relay_ip="${pub_prefix}.2"
 ip netns exec public ./setup_public.sh $switch_ip $control_ip $relay_ip
 
 # Keep track of a list of IP addresses that each peer may communicate with to simulate NAT with an Address-Dependent Mapping
-adm_ips="adm_ips.txt"
-touch $adm_ips
+adm_ips=()
 
 # Add control and relay server to the list
-echo $control_ip >> $adm_ips
-echo $relay_ip >> $adm_ips
+adm_ips+=($control_ip $relay_ip)
 
 # Two private networks that will have different NAT behaviour depending on the system test's parameters
 n_priv_nets=2
@@ -51,7 +49,7 @@ for ((i=1; i<=n_priv_nets; i++)); do
     router_pub_ip="${pub_prefix}.254"
 
     # Add router's public IP to list created earlier
-    echo $router_pub_ip >> $adm_ips
+    adm_ips+=($router_pub_ip)
 
     # Setup router
     ip netns exec $router_name ./setup_router.sh $router_name $priv_name $priv_subnet $router_priv_ip $router_pub_ip $switch_ip
@@ -71,16 +69,5 @@ for ((i=1; i<=n_priv_nets; i++)); do
     done
 done
 
-# Setup NAT in the routers
-# ip netns exec router1 ./setup_nat.sh router1_pub 10.0.1.0/24 0 0 $adm_ips
-# ip netns exec router2 ./setup_nat.sh router2_pub 10.0.2.0/24 0 1 $adm_ips
-# ip netns exec router3 ./setup_nat.sh router3_pub 10.0.3.0/24 0 2 $adm_ips
-
-# ip netns exec router4 ./setup_nat.sh router4_pub 10.0.4.0/24 1 0 $adm_ips
-# ip netns exec router5 ./setup_nat.sh router5_pub 10.0.5.0/24 1 1 $adm_ips
-# ip netns exec router6 ./setup_nat.sh router6_pub 10.0.6.0/24 1 2 $adm_ips
-
-# ip netns exec router7 ./setup_nat.sh router7_pub 10.0.7.0/24 2 0 $adm_ips
-# ip netns exec router8 ./setup_nat.sh router8_pub 10.0.8.0/24 2 1 $adm_ips
-# ip netns exec router9 ./setup_nat.sh router9_pub 10.0.9.0/24 2 2 $adm_ips
+echo ${adm_ips[@]}
 
