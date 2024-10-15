@@ -32,7 +32,7 @@ The test suite contains three types of tests:
 ## Requirements
 
 The full test suite is known to work on Ubuntu 22.04 and Ubuntu 24.04,
-but will probably work on any Linux installation with a bash shell.
+but will probably work on any GNU/Linux installation with a bash shell.
 Furthermore, any machine running Go version 1.22+ should be able to run
 the integration tests. The following software needs to be installed
 before the full test suite can be run:
@@ -42,19 +42,11 @@ before the full test suite can be run:
 
 ### System test-specific requirements
 
-The system tests assume the presence of a simulated multi-network setup
-in order to test eduP2P in scenarios involving NAT. This setup is
-created by running [a script in the nat\_simulation
-subdirectory](nat_simulation/setup_networks.sh) with root privileges,
-e.g. by using sudo:
-
-    sudo ./setup_networks.sh 2 1
-
-This script creates network namespaces to simulate isolated networks.
-The system tests execute commands in these namespaces, which also
-requires root privileges. Therefore, the system tests contain some
-commands run with sudo, and running the system tests may result in being
-prompted to enter your password.
+Running the system tests requires root privileges, since network
+namespaces are created to simulate isolated networks, and commands are
+executed in the context of these namespaces. Therefore, the system tests
+contain some commands run with sudo, and running the system tests may
+result in being prompted to enter your password.
 
 Furthermore, the system tests require a few command-line tools to be
 installed. The list of tools is found in
@@ -68,9 +60,9 @@ be installed by running the following command:
 In these tests, two clients attempt to establish a peer-to-peer
 connection using eduP2P. When these tests are executed via GitHub
 workflows, the test results can be found in the output of the ‘test’ job
-under the step ‘System tests’, and the logs can be downloaded under the
-‘Artifacts’ tab. The system tests can also be executed manually with
-[this script](setup.sh).
+under the step ‘System tests’, and the logs can be downloaded using the
+URL in the ‘Upload system test logs’ step. The system tests can also be
+executed manually with [this script](system_tests.sh).
 
 The system tests specifically verify whether the eduP2P peers are able
 to establish a connection when NAT is involved. To do so, the local host
@@ -81,10 +73,9 @@ described in the next section.
 
 ### Network Simulation Setup
 
-In its most basic form, the eduP2P test suite simulates the following
-network setup:
+The eduP2P test suite simulates the following network setup:
 
-![](./nat_simulation/network_setup.png)
+![](./images/network_setup.png)
 
 The setup contains two private networks, with subnets `10.0.1.0/24` and
 `10.0.2.0/24` respectively, each containing one peer. The routers of the
@@ -106,7 +97,7 @@ uses Linux network namespaces [\[1\]](#ref-man_network_namespaces). For
 example, in order to simulate the network setup above, multiple network
 namespaces are configured as in the following diagram:
 
-![](./nat_simulation/network_namespaces.png)
+![](./images/network_namespaces.png)
 
 Each network namespace is isolated, meaning that a network interface in
 one namespace is not aware of network interfaces in other namespaces. To
@@ -146,8 +137,8 @@ are very similar, the namespaces on the right side are skipped.
 
 -   router1: a separate network namespace is necessary for each router
     in order for NAT to be applied in the router. This test suite uses
-    nft [\[2\]](#ref-man_nft) to apply NAT, and in this framework NAT is
-    only applied to the source IP of packets if these packets are
+    nftables [\[2\]](#ref-man_nft) to apply NAT, and in this framework
+    NAT is only applied to the source IP of packets if these packets are
     leaving the local machine. The network interface `router1_pub` that
     applies NAT is in its own namespace, so that both packets going to
     the private network and to the public network look as if they are
@@ -166,6 +157,159 @@ are very similar, the namespaces on the right side are skipped.
     Besides a veth device for each router, this namespace also contains
     a TUN device that acts as a network switch between the routers, and
     TUN devices to simulate the control and relay server of eduP2P.
+
+This network setup allows eduP2P to be tested under the following
+conditions: - Two peers in different private networks behind NAT
+devices. - Two peers in the same private network behind the same NAT
+device. - One or two peers in the public network. The network setup
+allows public “peers” to be simulated by making a router act as a peer,
+since the routers have a public IP address.
+
+The next section explains the types of NAT in this network setup, and
+describes how they are implemented.
+
+### Applying NAT
+
+To categorize different types of NAT, this test suite follows the
+terminology of RFC 4787 [\[3\]](#ref-rfc4787). This RFC outlines various
+NAT behaviours, of which the following are implemented in the test
+suite: mappings behaviours, filtering behaviours and hairpinning.
+
+#### Mapping behaviours
+
+When an internal endpoint behind a NAT initiates a connection by sending
+a packet to an external endpoint outside its private network, the NAT
+must keep track of this connection between the two endpoints, called a
+session, in order to properly translate the source address of packets
+sent by the internal endpoint, and the destination address of packets
+sent to the internal endpoint. This session is a tuple consisting of the
+IP addresses and ports of the internal endpoint and the IP address and
+port of the external endpoint.
+
+A NAT’s mapping behaviour dictates how mappings are reused when there
+are multiple sessions to different endpoints. We assume there already is
+a session between an internal endpoint with IP address `X` and port `x`,
+and an external endpoint with IP address `Y` and port `y1`, i.e., a
+session `(X:x, Y:y1)`, where `X:x` is mapped to `X':x1'`. RFC 4787
+describes three types of behaviour:
+
+1.  **Endpoint-Independent Mapping (EIM):** the mapping is only reused
+    for later packets from `X:x` to any external endpoint.
+2.  **Address-Dependent Mapping (ADM):** the mapping is only reused for
+    later packets from `X:x` to any external endpoint with IP address
+    `Y`.
+3.  **Address and Port-Dependent Mapping (ADPM):** the mapping is only
+    reused for later packets from `X:x` to the same external endpoint
+    `Y:y1`.
+
+The image below illustrates the difference between the three mapping
+behaviours. It shows the internal endpoint `X:x` sending a packet to the
+external endpoint `Y:y1` to create the initial mapping, and how the
+reuse of this mapping by other sessions differs between the three types
+of behaviours.
+
+![](./images/nat_mapping.png)
+
+Note that in this test suite, the NAT’s IP pooling behaviour is not
+considered, as the routers in the simulated network setup only have one
+IP address.
+
+The test suite implements these three behaviours by using the nftables
+framework [\[2\]](#ref-man_nft) in the routers’ namespaces. For each of
+the three mapping behaviours, separate rules have to be applied in the
+`nat` table’s `postrouting` chain:
+
+1.  **EIM:** A rule is applied to all packets going to the public
+    network with a source address from the private network. The target
+    of this rule is `masquerade`, with the `persistent` option.
+    `masquerade` is a form of Source NAT where the source IP is
+    automatically translated to the IP of the outgoing network
+    interface, which in this case is the router’s public IP address.
+    With the `persistent` option, the same mapping is reused for each
+    different endpoint.
+
+    The mappings created with this rule are also automatically used to
+    translate the destination IP of packets entering private network,
+    since the Linux kernel’s conntrack module
+    [\[4\]](#ref-man_conntrack) keeps track of the sessions using these
+    mappings.
+
+2.  **ADM:** To simulate this type of mapping behaviour, multiple copies
+    of the rule for EIM are used, but each rule only applies to a single
+    destination IP address, and translates the source port to a unique
+    range of 100 ports. This method of simulating ADM is feasible in the
+    test suite, since the possible IP addresses a host can communicate
+    with are limited and known beforehand.
+
+3.  **ADPM:** For this mapping behaviour, only one rule has to be
+    applied again. The rule is identical to that for EIM, except that
+    the `random` option is used with the `masquerade` target instead of
+    the `persistent` option. With the `random` option, a random port is
+    selected for each different endpoint.
+
+The exact syntax of the rules can be found in [the script applying the
+NAT mapping rules](nat_simulation/setup_nat_mapping.sh).
+
+#### Filtering behaviours
+
+We again assume the mapping from `X:x` to `X':x1'` created for the
+session `(X:x, Y:y1)`. A NAT’s filtering behaviour dictates which
+incoming packets destined to `X':x1'` are filtered, instead of being
+translated and sent to `X:x`. Just like for mapping, RFC 4787 describes
+three different types of behaviour with the same naming convention:
+
+1.  **Endpoint-Independent Filtering (EIF):** packets destined to `X:x`
+    are never filtered, regardless of their source IP address or port.
+2.  **Address-Dependent Filtering (ADF):** packets destined to `X:x` are
+    filtered only if their source IP address does not equal `Y`
+3.  **Address and Port-Dependent Filtering (ADPF):** packets destined to
+    `X:x` are filtered only if their source endpoint does not equal
+    `Y:y1`.
+
+The image below illustrates the difference between the three filtering
+behaviours. It shows the internal endpoint `X:x` again sending a packet
+to the external endpoint `Y:y1` to create the initial mapping, then it
+shows packets sent back to `X':x1'` from various endpoints. Some of
+these packets may be filtered, which is indicated by a dashed arrow.
+
+![](./images/nat_filtering.png)
+
+Packets destined to an IP address and port for which a mapping does not
+exist are also filtered, which the test suite implements using one
+nftables rule in the `filter` table’s `input` chain that applies to all
+packets, and accepts those that belong to an existing session. The
+`input` chain’s default policy is set to drop, which means packets that
+do not belong to an existing session are filtered.
+
+Each time an internal endpoint establishes a connection to a new
+external endpoint, a new session is also created. Therefore, the above
+nftables rule is sufficient to simulate ADPF, since only the original
+session’s endpoint can send packets to the corresponding mapped IP
+address.
+
+For the other two filtering behaviours, this rule is too restrictive,
+and they require adding a `prerouting` chain to the `nat` table. In this
+chain, destination NAT is performed on the packets that should not be
+filtered, so that they do not flow through the `input` chain and are
+instead forwarded to the internal endpoint they are destined for. To
+perform such destination NAT, a rule must be applied for each new
+session. To create these rules, the new sessions are monitored and the
+necessary information is parsed from them in order to dynamically add a
+new rule. Suppose a new session `(X:x, Y:y)` is created, where `X:x` is
+mapped to `X':x'`. For such a session, the destination NAT rule would
+look as follows:
+
+1.  EIF: the rule applies to any packet destined to `X':x'`, and changes
+    the destination to `X:x`.
+2.  EIF: the rule applies to any packet destined to `X':x'` originating
+    from source IP `Y`, and changes the destination to `X:x`.
+
+The exact syntax of the rules can be found in [the script applying the
+NAT filtering rules](nat_simulation/setup_nat_filtering.sh).
+
+#### Hairpinning
+
+TODO
 
 ## Integration Tests
 
@@ -190,68 +334,6 @@ TODO
 
 TODO
 
-## Network Address Translation <a name="nat"></a>
-
-### Definition
-
-Network Address Translation, abbreviated as NAT, is a method currently
-used in many networks to avoid exhausting the IPv4 address space.
-Instead of all devices being directly connected to the internet with a
-globally routable IP address, only the NAT device has a globally
-routable IP address. The hosts behind the NAT, called the private
-network, forward their traffic to this NAT device, which maps the hosts’
-private IP addresses and ports which are only routable within this
-private network to public IP addresses and ports which are globally
-routable.
-
-There are multiple ways to categorize the different variations of NAT.
-This test suite assumes the categorization used in RFC 3489
-[\[3\]](#ref-rfc3489), because this RFC is about the STUN protocol,
-which is employed in eduP2P and can be used to discover the type of NAT
-present between a host and the public network.
-
-There is no official standard for NAT devices to follow, but RFC 4787
-outlines behavioural properties observed in NATs and recommends some
-practices which NATs should follow.
-
-One behavioural property that differs between NATs is whether they use
-an Endpoint-Independent Mapping (EIM). With such a mapping, a private
-address-port pair is always translated to the same public address-port
-pair, regardless of the desination address and port (called the
-endpoint).
-
-### Relevance to eduP2P
-
-Establishing peer-to-peer (P2P) connections between two hosts becomes
-more complicated if there is one or multiple NATs on the route between
-the hosts. Peers may not know how to reach eachother because they do not
-have a globally routable IP address when behind a NAT. Furthermore, even
-if translated address of a host behind a NAT is known, packets sent to
-this host could still be dropped by some NATs.
-
-To solve these problems, eduP2P uses a combination of a STUN server
-[\[4\]](#ref-rfc8489) and UDP hole punching techniques
-[\[5\]](#ref-ford2006). With a globally routable STUN server, two hosts
-can discover each other’s translated addresses. Then, they can “punch a
-hole” in their own NATs by sending packets to each other, such that
-their NATs will accept each other’s incoming packets and a direct
-connection can be established.
-
-This NAT traversal technique may not work reliably, or at all, depending
-on the presence and behaviour of NATs between two hosts that attempt to
-establish a P2P connection. In this test suite, the functionality of
-eduP2P is verified in various scenarios involving NATs. Furthermore, its
-performance will also be measured in terms of bandwidth, latency et
-cetera.
-
-Note that this NAT traversal technique does not work if both hosts are
-behind a NAT that does not use an EIM. In this case, the STUN server is
-unable to discover the translated address used by the hosts when
-connecting to each other, since it will differ from the address used
-when the hosts connect to the STUN server. Therefore, neither hosts can
-discover each other’s translated address to make a connection using UDP
-hole punching techniques.
-
 ## Bibliography
 
 <span class="csl-left-margin">\[1\]
@@ -268,20 +350,14 @@ framework for packet filtering and classification</span>.” Available:
 <https://www.netfilter.org/projects/nftables/manpage.html></span>
 
 <span class="csl-left-margin">\[3\]
-</span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
-and J. Weinberger, “<span class="nocase">STUN - Simple Traversal of User
-Datagram Protocol (UDP) Through Network Address Translators
-(NATs)</span>.” in Request for comments. RFC 3489; RFC Editor, Mar.
-2003. doi: [10.17487/RFC3489](https://doi.org/10.17487/RFC3489).</span>
+</span><span class="csl-right-inline">C. F. Jennings and F. Audet,
+“<span class="nocase">Network Address Translation (NAT) Behavioral
+Requirements for Unicast UDP</span>.” in Request for comments. RFC 4787;
+RFC Editor, Jan. 2007. doi:
+[10.17487/RFC4787](https://doi.org/10.17487/RFC4787).</span>
 
 <span class="csl-left-margin">\[4\]
-</span><span class="csl-right-inline">M. Petit-Huguenin, G. Salgueiro,
-J. Rosenberg, D. Wing, R. Mahy, and P. Matthews,
-“<span class="nocase">Session Traversal Utilities for NAT
-(STUN)</span>.” in Request for comments. RFC 8489; RFC Editor, Feb.
-2020. doi: [10.17487/RFC8489](https://doi.org/10.17487/RFC8489).</span>
-
-<span class="csl-left-margin">\[5\]
-</span><span class="csl-right-inline">B. Ford, P. Srisuresh, and D.
-Kegel, “Peer-to-peer communication across network address translators.”
-2006. Available: <https://arxiv.org/abs/cs/0603074></span>
+</span><span class="csl-right-inline">H. Welte,
+“<span class="nocase">conntrack - command line interface for netfilter
+connection tracking</span>.” Available:
+<https://manpages.debian.org/jessie/conntrack/conntrack.8.en.html></span>

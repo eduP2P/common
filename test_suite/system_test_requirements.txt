@@ -1,4 +1,5 @@
 iproute2
 iputils-ping
 sed 
+sudo
 wireguard-tools
