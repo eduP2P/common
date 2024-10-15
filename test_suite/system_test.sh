@@ -10,27 +10,29 @@ adm_ips=$7
 log_lvl=$8
 log_dir=$9
 repo_dir=${10}
-nat_config_str=${11}
-ns_config_str=${12}
+ns_config_str=${11}
+nat_config_str=${12}
 wg_interface_str=${13}
 
 usage_str="""
-Usage: ${0} <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY> <NAT CONFIGURATION 1>:<NAT CONFIGURATION 2> <NAMESPACE CONFIGURATION> [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2]
+Usage: ${0} <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2]
 
 <IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and are necessary to simulate an Address-Dependent Mapping
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
 
-<NAT CONFIGURATION 1> and <NAT CONFIGURATION 2> specify the type of NAT applied to packets sent by peer 1 and 2 respectively. Both should be a string with the format:
+<NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
+    1. <PEER 1>-<PEER 2>, for peers in the public network
+    2. <PEER 1>-<ROUTER 1>:<PEER 2>, for one peer in a private network and the other in the public network
+    3. <PEER 1>-<ROUTER 1>-<PEER 2> for peers in the same private network
+    4. <PEER 1>-<ROUTER 1>:<ROUTER 2>-<PEER 2> for peers in different private networks
+
+[NAT CONFIGURATION 1] and [NAT CONFIGURATION 2] specify the type of NAT applied to packets sent by peer 1 and 2 respectively. They should equal an empty string if the corresponding peer is in the public network, and otherwise follow this format:
     <NAT MAPPING TYPE>-<NAT FILTERING TYPE>, where both may be one of the following numbers: 
         0 - Endpoint-Independent
         1 - Address-Dependent
         2 - Address and Port-Dependent
-Example of a valid NAT configuration: 0-1:1-2
-
-<NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string  with the format:
-    <PEER 1 NAMESPACE>-<ROUTER 1 NAMESPACE>:<ROUTER 2 NAMESPACE>-<PEER 2 NAMESPACE> for peers in different private networks, or 
-    <PEER 1 NAMESPACE>-<ROUTER 1 NAMESPACE>-<PEER 2 NAMESPACE> for peers in the same private network
+Examples of valid NAT configurations: 0-1:1-2 (both peers in private networks), 0-1: (peer 2 in public network), : (both peers in public network)
 
 If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard"""
 
@@ -51,21 +53,45 @@ function validate_str() {
     fi
 }
 
-# Parse NAT configuration string into individual Mapping and Filtering values
-nat_config_regex="^([0-2])-([0-2]):([0-2])-([0-2])$"
-validate_str $nat_config_str $nat_config_regex 
-nat_map=(${BASH_REMATCH[1]} ${BASH_REMATCH[3]})
-nat_filter=(${BASH_REMATCH[2]} ${BASH_REMATCH[4]})
+# Validate namespace configuration string
+ns_regex="([^-:]+)"
+ns_config1_regex="^${ns_regex}-${ns_regex}$"
+ns_config2_regex="^${ns_regex}-${ns_regex}:${ns_regex}$"
+ns_config3_regex="^${ns_regex}-${ns_regex}-${ns_regex}$"
+ns_config4_regex="^${ns_regex}-${ns_regex}:${ns_regex}-${ns_regex}$"
+validate_str $ns_config_str "$ns_config1_regex|$ns_config2_regex|$ns_config3_regex|$ns_config4_regex"
 
-# Parse namespace configuration string into individual peer and router namespaces
-ns_config_regex="^([^-]+)-([^:-]+):?([^:-]+)?-([^-]+)$"
-validate_str $ns_config_str $ns_config_regex 
+# Remove empty string elements in BASH_REMATCH, so that it only contains the matches of exactly one configuration
+BASH_REMATCH=(${BASH_REMATCH[@]}) 
+
+# Parse namespace configuration string into individual peers and routers
 n_groups=$((${#BASH_REMATCH[@]} - 1))
 peer_ns_list=(${BASH_REMATCH[1]} ${BASH_REMATCH[$n_groups]})
 router_ns_list=()
 
 for ((i=2; i<$n_groups; i++)); do
     router_ns_list+=(${BASH_REMATCH[$i]})
+done
+
+# NAT configuration parsing depends on the amount of routers
+n_routers=${#router_ns_list[@]} 
+nat_config_regex="([0-2])-([0-2])"
+nat_map=()
+nat_filter=()
+
+# Ensure the NAT configuration is provided for all routers
+case $n_routers in 
+    0) validate_str $nat_config_str "^:$";;
+    1) validate_str $nat_config_str "^$nat_config_regex:$";;
+    2) validate_str $nat_config_str "^$nat_config_regex:$nat_config_regex$";;
+esac
+
+# Store the individual Mapping and Filtering types
+for ((i=0; i<$n_routers; i++)); do
+    map_idx=$((1 + 2 * $i))
+    filter_idx=$((2 + 2 * $i))
+    nat_map+=(${BASH_REMATCH[$map_idx]})
+    nat_filter+=(${BASH_REMATCH[$filter_idx]})
 done
 
 # Parse WireGuard interfaces string into individual interfaces
@@ -80,7 +106,11 @@ NAT_TYPES=("EI" "AD" "APD")
 function describe_nat() {
     i=$1
 
-    echo "${NAT_TYPES[${nat_map[$i]}]}M-${NAT_TYPES[${nat_filter[$i]}]}F"
+    if [[ $i < $n_routers ]]; then 
+        echo "${NAT_TYPES[${nat_map[$i]}]}M-${NAT_TYPES[${nat_filter[$i]}]}F"
+    else
+        echo "No-NAT"
+    fi
 }
 
 nat1_description=$(describe_nat 0)

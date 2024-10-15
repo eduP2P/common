@@ -101,22 +101,25 @@ function setup_servers() {
 
 setup_servers
 
+n_tests=0
 n_failed=0
 
 function run_system_test() {
-    test_idx=$1
-    test_target=$2
-    nat_config_str=$3
-    ns_config_str=$4
-    wg_interface_str=$5
+    test_target=$1
+    ns_config_str=$2
+    nat_config_str=$3  
+    wg_interface_str=$4
 
     # Run test
-    ./system_test.sh $test_idx $test_target $control_pub_key $control_ip $control_port $relay_port "${adm_ips}" $log_lvl $log_dir $repo_dir $nat_config_str $ns_config_str $wg_interface_str
+    let "n_tests++"
+    ./system_test.sh $n_tests $test_target $control_pub_key $control_ip $control_port $relay_port "${adm_ips}" $log_lvl $log_dir $repo_dir $ns_config_str $nat_config_str $wg_interface_str
 
-    # Increment counters
     if [[ $? -ne 0 ]]; then
         let "n_failed++"
     fi
+
+    # Make sure system_test.sh cleanup finishes before starting next test
+    sleep 1s
 }
 
 cd $repo_dir/test_suite
@@ -128,22 +131,33 @@ Starting system tests between two peers behind NATs with various combinations of
     - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)
 """
 
-test_idx=1
+echo "Test without NAT"
+run_system_test TS_PASS_DIRECT router1-router2 : wg0:
 
-for nat1 in 0-0 0-1 0-2 2-2; do
-    for nat2 in 0-0 0-1 0-2 2-2; do
+echo -e "\nTests with one peer behind a NAT"
+nat_types=("0-0" "0-1" "0-2" "2-2") # Full Cone, Restricted Cone, Port-restricted Cone, Symmetric
+
+for nat in ${nat_types[@]}; do
+    run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+done
+
+echo -e "\nTests with both peers behind a NAT"
+n_nats=${#nat_types[@]}
+
+for ((i=0; i<$n_nats; i++)); do
+    for ((j=$i; j<$n_nats; j++)); do
+        nat1=${nat_types[$i]}
+        nat2=${nat_types[$j]}
+
         if [[ $nat1 == "2-2" && $nat2 == "2-2" ]]; then
             test_target="TS_PASS_RELAY"
         else
             test_target="TS_PASS_DIRECT"
         fi
 
-        run_system_test $test_idx $test_target $nat1:$nat2 private1_peer1-router1:router2-private2_peer1 wg0:
-        let "test_idx++"
+        run_system_test $test_target private1_peer1-router1:router2-private2_peer1 $nat1:$nat2 wg0:
     done
 done
-
-#run_system_test $test_idx TS_PASS_DIRECT 0-0:2-2 private1_peer1-router1:router2-private2_peer1 wg0:
 
 # Constants for colored text in output
 RED="\033[0;31m"
@@ -154,7 +168,7 @@ function print_summary() {
     if [[ $n_failed -eq 0 ]]; then
         echo -e "${GREEN}All tests passed!${NC}"
     else
-        echo -e "${RED}$n_failed tests failed${NC}"
+        echo -e "${RED}$n_failed/$n_tests tests failed!${NC}"
         exit 1
     fi
 }
