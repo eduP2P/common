@@ -24,19 +24,17 @@ nft add chain nat prerouting { type nat hook prerouting priority -100\; }
 nft add table inet filter
 nft add chain inet filter input { type filter hook input priority 0\; policy drop\; }
 nft add rule inet filter input ct state related,established counter accept
-nft add rule inet filter input ct state new counter reject
 
-# This pattern captures 1) the internal source IP, 2) the internal source port, 3) the destination IP, and 4) the external source port from an event
+# This pattern captures 1) the source IP, 2) the source port, 3) the destination IP, and 4) the translated source port from an event
 pattern=".*src=(\S+).*sport=(\S+).*src=(\S+).*dport=(\S+)$"
 
 case $nat_filter in
     0)
-    # If a mapping is created with internal source IP \1, internal source port \2 and external source port \4, all traffic destined to \4 should be forwarded to \1:\2
+    # If a mapping is created with source IP \1, source port \2 and translated source port \4, all traffic destined to \4 should be forwarded to \1:\2
     nft_rule="nat prerouting iif $nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
     1)
-    # If a mapping is created with internal source IP \1 and external source port \3 for a packet with destination IP \2, all traffic from \2 destined to \3 should be forwarded to \1
-    # If a mapping is created with internal source IP \1, internal source port \2 and external source port \4, all traffic from \3 destined to \4 should be forwarded to \1:\2
-    nft_rule="nat prerouting ip saddr \\3 iif $nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
+    # If a mapping is created with source IP \1, source port \2 and translated source port \4, all traffic from \3 destined to \4 should be forwarded to \1:\2
+    nft_rule="nat prerouting ip saddr \3 iif $nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
     2)
     # Monitoring conntrack is not necessary for APDF
     exit 0;;
