@@ -1,8 +1,8 @@
 package peer_state
 
 import (
-	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
+	"github.com/edup2p/common/types/key"
+	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
 )
 

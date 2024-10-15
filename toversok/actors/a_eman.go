@@ -2,10 +2,10 @@ package actors
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
-	"github.com/shadowjonathan/edup2p/types/relay"
-	"github.com/shadowjonathan/edup2p/types/stun"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/msgactor"
+	"github.com/edup2p/common/types/relay"
+	"github.com/edup2p/common/types/stun"
 	"golang.org/x/exp/maps"
 	"net/netip"
 	"slices"

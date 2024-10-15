@@ -2,9 +2,9 @@ package peer_state
 
 import (
 	"context"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/key"
-	msg2 "github.com/shadowjonathan/edup2p/types/msgsess"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"slices"
 	"time"

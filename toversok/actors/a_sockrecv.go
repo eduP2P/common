@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
+	"github.com/edup2p/common/types"
 	"net"
 	"net/netip"
 	"slices"

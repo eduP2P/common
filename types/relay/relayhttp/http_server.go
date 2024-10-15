@@ -1,8 +1,8 @@
 package relayhttp
 
 import (
-	"github.com/shadowjonathan/edup2p/types/dial"
-	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/edup2p/common/types/dial"
+	"github.com/edup2p/common/types/relay"
 	"net/http"
 )
 

@@ -2,10 +2,10 @@ package usrwg
 
 import (
 	"fmt"
-	"github.com/shadowjonathan/edup2p/toversok"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/usrwg/router"
+	"github.com/edup2p/common/toversok"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/usrwg/router"
 	"golang.zx2c4.com/wireguard/device"
 	"log/slog"
 	"net/netip"

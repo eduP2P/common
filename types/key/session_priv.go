@@ -2,7 +2,7 @@ package key
 
 import (
 	"crypto/subtle"
-	"github.com/shadowjonathan/edup2p/types"
+	"github.com/edup2p/common/types"
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/nacl/box"
 )

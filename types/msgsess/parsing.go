@@ -3,8 +3,8 @@ package msgsess
 import (
 	"errors"
 	"fmt"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
 	"net/netip"
 )
 
@@ -14,7 +14,7 @@ import (
 // Session User messages:
 //   Version (1) + Type (1) + Data
 
-const wireHeaderLen = len(Magic) + key.Len + NaclBoxNonceLen
+var wireHeaderLen = len(Magic) + key.Len + NaclBoxNonceLen
 
 func LooksLikeSessionWireMessage(pkt []byte) bool {
 	if len(pkt) < wireHeaderLen {

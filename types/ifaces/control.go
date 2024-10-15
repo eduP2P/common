@@ -1,8 +1,8 @@
 package ifaces
 
 import (
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/relay"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
 	"net/netip"
 )
 

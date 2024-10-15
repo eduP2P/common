@@ -3,9 +3,9 @@ package actors
 import (
 	"context"
 	"errors"
-	"github.com/shadowjonathan/edup2p/types"
-	"github.com/shadowjonathan/edup2p/types/key"
-	"github.com/shadowjonathan/edup2p/types/msgactor"
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgactor"
 	"net"
 	"net/netip"
 	"time"

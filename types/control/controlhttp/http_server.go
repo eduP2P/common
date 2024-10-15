@@ -1,8 +1,8 @@
 package controlhttp
 
 import (
-	"github.com/shadowjonathan/edup2p/types/control"
-	"github.com/shadowjonathan/edup2p/types/dial"
+	"github.com/edup2p/common/types/control"
+	"github.com/edup2p/common/types/dial"
 	"net/http"
 )
 

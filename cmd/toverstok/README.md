@@ -281,7 +281,7 @@ This requires privileges, which depend on the type of operating system.
 
 As a rule of thumb, if the application can create network devices and maintain them, then it would be fine, but here follows some detailed instructions.
 
-For now, general permission-raising methods are used, but in the future these might/will change to specific permission requests/methods at runtime, see [this issue](https://github.com/ShadowJonathan/eduP2P/issues/56) for more details.
+For now, general permission-raising methods are used, but in the future these might/will change to specific permission requests/methods at runtime, see [this issue](https://github.com/edup2p/common/issues/56) for more details.
 
 ### MacOS
 
@@ -291,7 +291,7 @@ On MacOS, the application needs to run as `root` to have sufficient permissions.
 
 On linux, the application needs to run as `root` to have sufficient permissions.
 
-(Note: There is a possibility in the future to make non-root userspace possible, with the `CAP_NET_ADMIN` capability, but as of yet, this does not fully work, see https://github.com/ShadowJonathan/eduP2P/issues/53)
+(Note: There is a possibility in the future to make non-root userspace possible, with the `CAP_NET_ADMIN` capability, but as of yet, this does not fully work, see https://github.com/edup2p/common/issues/53)
 
 ### Windows
 

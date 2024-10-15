@@ -1,7 +1,7 @@
 package msgactor
 
 import (
-	"github.com/shadowjonathan/edup2p/types/key"
+	"github.com/edup2p/common/types/key"
 	"net/netip"
 )
 
