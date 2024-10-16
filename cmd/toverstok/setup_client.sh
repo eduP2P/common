@@ -6,7 +6,7 @@ Usage: ${0} <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL S
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
 If [WIREGUARD INTERFACE] is not provided, eduP2P is configured with userspace WireGuard"""
-    exit 1
+    clean_exit 1
 fi
 
 id=$1
@@ -43,7 +43,9 @@ out="toverstok_out_${id}.txt"
 # Save pid of above background process to kill later
 feed_pipe_pid=$!
 
-function cleanup () {
+function clean_exit () {
+    exit_code = $1
+
     # Kill process continuosly feeding input to toverstok
     sudo kill $feed_pipe_pid
 
@@ -66,10 +68,9 @@ function cleanup () {
 
     # Delete external WireGuard interface in case external WireGuard was used
     if [[ -n $wg_interface ]]; then sudo ip link del $wg_interface; fi
-}
 
-# Remove pipe and kill background processes when script finishes
-trap cleanup EXIT
+    exit $exit_code
+}
 
 # Generate commands from template and put them in the pipe
 while read line; do
@@ -81,7 +82,7 @@ if [[ -n $wg_interface ]]; then
     # Store virtual IPs as "<IPv4> <IPv6>"" when they are logged
     ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
 
-    if [[ -z $ips ]]; then echo "TS_FAIL: could not find own virtual IPs in logs"; exit 1; fi
+    if [[ -z $ips ]]; then echo "TS_FAIL: could not find own virtual IPs in logs"; clean_exit 1; fi
 
     # Split IPv4 and IPv6
     ipv4=$(echo $ips | cut -d ' ' -f1) 
@@ -105,7 +106,7 @@ if [[ -n $wg_interface ]]; then
 
         if [[ $timeout -eq 0 ]]; then
             echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
-            exit 1
+            clean_exit 1
         fi
 
         peer_ips=$(wg show $wg_interface allowed-ips | cut -d$'\t' -f2)
@@ -124,7 +125,7 @@ else
 
         if [[ $timeout -eq 0 ]]; then
             echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
-            exit 1
+            clean_exit 1
         fi
     done
 
@@ -135,7 +136,7 @@ else
     # Store peer IPs as "<IPv4> <IPv6>"" when they are logged
     peer_ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
 
-    if [[ -z $peer_ips ]]; then echo "TS_FAIL: could not find peer's virtual IPs in logs"; exit 1; fi
+    if [[ -z $peer_ips ]]; then echo "TS_FAIL: could not find peer's virtual IPs in logs"; clean_exit 1; fi
 
     # Split IPv4 and IPv6
     peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1)
@@ -157,7 +158,7 @@ function try_connect() {
 
     if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null $peer_addr; then
         echo "TS_FAIL: could not connect to peer's HTTP server with address: ${peer_ip}"
-        exit 1
+        clean_exit 1
     fi
 }
 
@@ -174,3 +175,4 @@ timeout 10s tail -f -n +1 $http_ipv4_out | sed -n "/${peer_ipv4}/q"
 timeout 10s tail -f -n +1 $http_ipv6_out | sed -n "/${peer_ipv6}/q"
 
 echo "TS_PASS"
+clean_exit 0
