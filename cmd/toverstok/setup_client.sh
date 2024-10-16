@@ -48,6 +48,7 @@ function clean_exit () {
 
     # Kill process continuosly feeding input to toverstok
     sudo kill $feed_pipe_pid
+    wait $feed_pipe_pid &> /dev/null
 
     # Remove pipe
     sudo rm $pipe
