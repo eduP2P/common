@@ -16,16 +16,16 @@ relay_ip=$3
 ip link set lo up
 
 # Create TUN interface for switch
-sudo ip tuntap add dev switch mode tun
-sudo ip link set dev switch up
-sudo ip addr add "${switch_ip}/24" dev switch
+ip tuntap add dev switch mode tun
+ip link set dev switch up
+ip addr add "${switch_ip}/24" dev switch
 
 # Create TUN interface for control server
-sudo ip tuntap add dev control mode tun
-sudo ip link set dev control up
-sudo ip addr add "${control_ip}/24" dev control  
+ip tuntap add dev control mode tun
+ip link set dev control up
+ip addr add "${control_ip}/24" dev control  
 
 # Create TUN interface for relay server
-sudo ip tuntap add dev relay mode tun
-sudo ip link set dev relay up
-sudo ip addr add "${relay_ip}/24" dev relay
+ip tuntap add dev relay mode tun
+ip link set dev relay up
+ip addr add "${relay_ip}/24" dev relay
