@@ -159,6 +159,12 @@ for ((i=0; i<$n_nats; i++)); do
     done
 done
 
+echo -e "\nTest hairpinning"
+for nat in ${nat_types[@]}; do
+    run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
+done
+
+
 # Constants for colored text in output
 RED="\033[0;31m"
 GREEN="\033[0;32m"

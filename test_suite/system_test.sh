@@ -155,7 +155,7 @@ cd ${repo_dir}/test_suite/nat_simulation
 for ((i=0; i<${#router_ns_list[@]}; i++)); do
     router_ns=${router_ns_list[$i]}
     sudo ip netns exec $router_ns ./setup_nat_mapping.sh ${router_ns}_pub 10.0.$((i+1)).0/24 ${nat_map[$i]} "${adm_ips}"
-    sudo ip netns exec $router_ns ./setup_nat_filtering.sh ${router_ns}_pub 10.0.$((i+1)).0/24 ${nat_filter[$i]} 2>&1 | \
+    sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh ${router_ns}_pub ${router_ns}_priv 192.168.$((i+1)).254 10.0.$((i+1)).0/24 ${nat_filter[$i]} 2>&1 | \
     tee ${log_dir}/$router_ns.txt > /dev/null & # combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
 

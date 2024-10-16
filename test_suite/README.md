@@ -299,17 +299,56 @@ new rule. Suppose a new session `(X:x, Y:y)` is created, where `X:x` is
 mapped to `X':x'`. For such a session, the destination NAT rule would
 look as follows:
 
-1.  EIF: the rule applies to any packet destined to `X':x'`, and changes
-    the destination to `X:x`.
-2.  EIF: the rule applies to any packet destined to `X':x'` originating
-    from source IP `Y`, and changes the destination to `X:x`.
+1.  **EIF:** the rule applies to any packet destined to `X':x'`, and
+    changes the destination to `X:x`.
+2.  **ADF:** the rule applies to any packet destined to `X':x'`
+    originating from source IP `Y`, and changes the destination to
+    `X:x`.
 
 The exact syntax of the rules can be found in [the script applying the
-NAT filtering rules](nat_simulation/setup_nat_filtering.sh).
+NAT filtering rules](nat_simulation/setup_nat_filtering_hairpinning.sh).
 
 #### Hairpinning
 
-TODO
+NATs that support hairpinning allow endpoints behind the same NAT to
+communicate via their translated IP addresses and ports. For example,
+suppose there are two endpoints `X1:x1` and `X2:x2` behind the same
+hairpinning NAT, which maps `X1:x1` to `X':x1'` and `X2:x2` to `X':x2'`.
+Then, if `X1:x1` sends a packet to `X':x2'`, the NAT will route this
+packet to `X2:x2`. RFC 4797 describes two types of hairpinning
+behaviours:
+
+1.  **Internal source IP address and port:** in the example above, the
+    packet that arrives at `X2:x2` has `X1:x1` as source, i.e., the
+    source is not changed.
+2.  **External source IP address and port:** in the example above, the
+    packet that arrives at `X2:x2` has `X':x1'` as source, i.e., the
+    source address and port are mapped to their external counterparts.
+
+The image below illustrates the second type of behaviour, which is the
+one recommended by RFC 4787 and implemented in the test suite.
+
+![](./images/nat_hairpinning.png)
+
+The way hairpinning is implemented in the test suite is similar to the
+implementation of filtering. For a new session where `X1:x1` is mapped
+to `X':x1'`, two nftables rules are dynamically added:
+
+1.  The first rule is in the `nat` table’s `prerouting` chain, and is
+    necessary to “hairpin” packets *destined to* `X':x1'`. It applies to
+    all packets from the private network destined to `X':x1'`, and uses
+    destination NAT to change the destination endpoint to `X1:x1`.
+2.  The second rule is in the `nat` table’s `postrouting` chain, and is
+    necessary to simulate External source IP address and port
+    hairpinning behaviour for hairpinned packets *originating from*
+    `X1:x1`. It applies to all packets from `X1:x1` destined to the
+    private network, and uses source NAT to change the source endpoint
+    to `X1':x1'`.
+
+The exact syntax of the rules can be found in [the script applying the
+NAT hairpinning
+rules](nat_simulation/setup_nat_filtering_hairpinning.sh), which is the
+same script that was used for applying filtering.
 
 ## Integration Tests
 
