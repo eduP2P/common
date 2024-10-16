@@ -44,9 +44,6 @@ case $nat_filter in
     filter_rule="filter input ip saddr \3 iif $pub_nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
 esac
 
-nft add rule nat postrouting counter
-nft add rule inet filter input counter
-
 # Only monitor new source NAT connections that are created by the nftables masquerade rule
 if [[ $nat_filter -eq 2 ]]; then
     conntrack -En -s $priv_subnet -e NEW | sed -rn -e "s#$pattern#nft add rule $hairpin_rule1; nft add rule $hairpin_rule2#e"
