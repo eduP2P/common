@@ -8,8 +8,7 @@
 4.  [Integration Tests](#integration-tests)
 5.  [Performance Tests](#performance-tests)
 6.  [Test Results](#test-results)
-7.  [Network Address Translation](#network-address-translation)
-8.  [Bibliography](#bibliography)
+7.  [Bibliography](#bibliography)
 
 ## Overview
 
@@ -120,11 +119,11 @@ Below, an explanation of each namespace and the devices within them is
 given. Since the namespaces on the left and right side of the diagram
 are very similar, the namespaces on the right side are skipped.
 
--   private1\_peer1: to allow multiple peers in one private network to
-    use eduP2P with userspace WireGuard, each peer needs its own network
-    namespace. This is because eduP2P creates a TUN device called `ts0`
-    with userspace WireGuard, and only one such device can exist per
-    namespace.
+-   **private1\_peer1:** to allow multiple peers in one private network
+    to use eduP2P with userspace WireGuard, each peer needs its own
+    network namespace. This is because eduP2P creates a TUN device
+    called `ts0` with userspace WireGuard, and only one such device can
+    exist per namespace.
 
     To make sure peers within a private network can still reach their
     router and each other, each peer has a veth pair. Both devices in
@@ -132,17 +131,18 @@ are very similar, the namespaces on the right side are skipped.
     residing in this namespace, while the other resides in the private
     network’s namespace.
 
--   private1: each private network needs its own namespace to properly
-    isolate the private networks from the public network.
+-   **private1:** each private network needs its own namespace to
+    properly isolate the private networks from the public network.
 
--   router1: a separate network namespace is necessary for each router
-    in order for NAT to be applied in the router. This test suite uses
-    nftables [\[2\]](#ref-man_nft) to apply NAT, and in this framework
-    NAT is only applied to the source IP of packets if these packets are
-    leaving the local machine. The network interface `router1_pub` that
-    applies NAT is in its own namespace, so that both packets going to
-    the private network and to the public network look as if they are
-    leaving the local machine, and hence have NAT applied to them.
+-   **router1:** a separate network namespace is necessary for each
+    router in order for NAT to be applied in the router. This test suite
+    uses nftables [\[2\]](#ref-man_nft) to apply NAT, and in this
+    framework NAT is only applied to the source IP of packets if these
+    packets are leaving the local machine. The network interface
+    `router1_pub` that applies NAT is in its own namespace, so that both
+    packets going to the private network and to the public network look
+    as if they are leaving the local machine, and hence have NAT applied
+    to them.
 
     To allow the router to communicate with the public network,
     `router1_pub` forms a veth pair with the `router1` device in the
@@ -151,12 +151,21 @@ are very similar, the namespaces on the right side are skipped.
     `router1_priv` in the router’s namespace, and `router1` in the
     private network’s namespace.
 
--   public: this network namespace exists to isolate the whole network
-    setup from the machine’s root network namespace, such that the only
-    traffic flowing through the namespaces is traffic concerning eduP2P.
-    Besides a veth device for each router, this namespace also contains
-    a TUN device that acts as a network switch between the routers, and
-    TUN devices to simulate the control and relay server of eduP2P.
+-   **public:** this network namespace exists to isolate the whole
+    network setup from the machine’s root network namespace, such that
+    the only traffic flowing through the namespaces is traffic
+    concerning eduP2P. Besides a veth device for each router, this
+    namespace also contains a TUN device that acts as a network switch
+    between the routers, and TUN devices to simulate the control and
+    relay server of eduP2P.
+
+-   **control:** the goal of this namespace is to force all outgoing
+    traffic from the control server to be routed via the switch. If the
+    control server would reside in the public namespace, it could
+    communicate with the routers directly. The reason all traffic should
+    be routed via the switch is so that packet loss, which is a
+    configurable option in the system tests, can be easily simulated on
+    one central interface.
 
 This network setup allows eduP2P to be tested under the following
 conditions: - Two peers in different private networks behind NAT
