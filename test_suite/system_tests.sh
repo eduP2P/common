@@ -3,17 +3,43 @@
 control_port=$1
 relay_port=$2
 log_lvl=$3
+packet_loss=$4
 
-# Make sure all arguments have been passed, and nat_config_str has the correct format
-if [[ $# -ne 3 ]]; then
-    echo """
-Usage: ${0} <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> 
+usage_str="""
+Usage: ${0} <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> <PACKET LOSS PERCENTAGE>
 
 Executes multiple system tests sequentially, each testing a different NAT configuration
 
-<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
+<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
+
+<PACKET LOSS PERCENTAGE> should be a real number in the interval [0, 100)"""
+
+# Make sure all arguments have been passed
+if [[ $# -ne 4 ]]; then
+    echo $usage_str
     exit 1
 fi
+
+# Parse packet loss into an integer and decimal part
+function parse_packet_loss () {
+    packet_loss_regex="^([0-9]+)[.]?([0-9]*[1-9])?0*$" # Skip trailing zeroes in the decimal part
+
+    if [[ !( $packet_loss =~ $packet_loss_regex ) ]]; then
+        echo $usage_str
+        exit 1
+    fi
+
+    decimal_part=${BASH_REMATCH[2]}
+    n_decimals=${#decimal_part}
+    integer_part=${BASH_REMATCH[1]}
+
+    if [[ $real_part -gt 99 ]]; then
+        echo $usage_str
+        exit 1
+    fi
+}
+
+parse_packet_loss
 
 # Store repository's root directory for later use
 repo_dir=$(cd ..; pwd)
@@ -52,6 +78,10 @@ create_log_dir
 function setup_networks() {
     cd nat_simulation/
     adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
+
+    # Simulate packet loss
+    packet_loss="${integer_part}${decimal_part}" # Packet loss must be an integer, so we shift the decimal point all the way to the right
+    sudo ip netns exec public nft add rule inet filter forward numgen random mod $(( 100 * (10 ** $n_decimals) )) \< $packet_loss counter drop # Multiply 100 by a power of 10 to account for the decimal point shifting all the way right
 }
 
 setup_networks
@@ -83,9 +113,9 @@ function start_server() {
 }
 
 function setup_servers() {
-    # Get IP of control and relay servers, which reside in the public namespace
-    control_ip=$(sudo ip netns exec public ip addr show control | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
-    relay_ip=$(sudo ip netns exec public ip addr show relay | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
+    # Get IP of control and relay servers
+    control_ip=$(sudo ip netns exec control ip addr show control | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
+    relay_ip=$(sudo ip netns exec relay ip addr show relay | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
 
     control_pub_key=$(extract_server_pub_key "control_server" $control_ip $control_port)
     relay_pub_key=$(extract_server_pub_key "relay_server" $relay_ip $relay_port)
@@ -94,7 +124,7 @@ function setup_servers() {
     cd ${repo_dir}/cmd/control_server
     sudo python3 configure_json.py $relay_pub_key $relay_ip $relay_port
 
-    echo "Starting servers in public namespace"
+    echo "Starting servers"
     start_server "control_server" $control_ip $control_port
     start_server "relay_server" $relay_ip $relay_port
 }
@@ -163,7 +193,6 @@ echo -e "\nTest hairpinning"
 for nat in ${nat_types[@]}; do
     run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
 done
-
 
 # Constants for colored text in output
 RED="\033[0;31m"

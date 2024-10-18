@@ -6,4 +6,4 @@ Usage: ${0} <RELAY SERVER IP> <RELAY SERVER PORT>"""
     exit 1
 fi
 
-sudo ip netns exec public ./relay_server -c ./relay.json -a "${1}:${2}" -stun-port 3478 
+sudo ip netns exec relay ./relay_server -c ./relay.json -a "${1}:${2}" -stun-port 3478 

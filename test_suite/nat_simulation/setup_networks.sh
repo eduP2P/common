@@ -15,9 +15,17 @@ fi
 # Setup public network
 pub_prefix="192.168.0"
 switch_ip="${pub_prefix}.254"
+ip netns exec public ./setup_public.sh $switch_ip
+
+# Create namespaces to simulate the eduP2P control and relay server
+./create_namespace.sh control
+./create_namespace.sh relay
+
+# Setup servers
 control_ip="${pub_prefix}.1"
 relay_ip="${pub_prefix}.2"
-ip netns exec public ./setup_public.sh $switch_ip $control_ip $relay_ip
+ip netns exec control ./setup_server.sh $switch_ip control $control_ip
+ip netns exec relay ./setup_server.sh $switch_ip relay $relay_ip
 
 # Keep track of a list of IP addresses that each peer may communicate with to simulate NAT with an Address-Dependent Mapping
 adm_ips=()

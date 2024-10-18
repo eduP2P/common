@@ -24,7 +24,7 @@ jobs:
 
     - name: System tests
       id: system-test
-      run: ./system_tests.sh 9999 3340 debug
+      run: ./system_tests.sh 9999 3340 debug 0
       working-directory: test_suite
       continue-on-error: true
 
