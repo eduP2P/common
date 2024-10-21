@@ -14,32 +14,21 @@ Executes multiple system tests sequentially, each testing a different NAT config
 
 <PACKET LOSS PERCENTAGE> should be a real number in the interval [0, 100)"""
 
-# Make sure all arguments have been passed
-if [[ $# -ne 4 ]]; then
+# Make sure all arguments have been passed, and packet loss is a real number
+real_regex="^[0-9]+[.]?([0-9]+)?$"
+
+if [[ $# -ne 4 || !( $packet_loss =~ $real_regex) ]]; then
     echo $usage_str
     exit 1
 fi
 
-# Parse packet loss into an integer and decimal part
-function parse_packet_loss () {
-    packet_loss_regex="^([0-9]+)[.]?([0-9]*[1-9])?0*$" # Skip trailing zeroes in the decimal part
+# Make sure packet loss is in the interval [0, 100)
+in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
 
-    if [[ !( $packet_loss =~ $packet_loss_regex ) ]]; then
-        echo $usage_str
-        exit 1
-    fi
-
-    decimal_part=${BASH_REMATCH[2]}
-    n_decimals=${#decimal_part}
-    integer_part=${BASH_REMATCH[1]}
-
-    if [[ $real_part -gt 99 ]]; then
-        echo $usage_str
-        exit 1
-    fi
-}
-
-parse_packet_loss
+if [[ $in_interval -eq 0 ]]; then
+    echo $usage_str
+    exit 1
+fi
 
 # Store repository's root directory for later use
 repo_dir=$(cd ..; pwd)
@@ -78,10 +67,8 @@ create_log_dir
 function setup_networks() {
     cd nat_simulation/
     adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
-
-    # Simulate packet loss
-    packet_loss="${integer_part}${decimal_part}" # Packet loss must be an integer, so we shift the decimal point all the way to the right
-    sudo ip netns exec public nft add rule inet filter forward numgen random mod $(( 100 * (10 ** $n_decimals) )) \< $packet_loss counter drop # Multiply 100 by a power of 10 to account for the decimal point shifting all the way right
+    cd ${repo_dir}/cmd/toverstok
+    sudo ./set_packet_loss.sh $packet_loss
 }
 
 setup_networks
@@ -134,21 +121,15 @@ setup_servers
 n_tests=0
 n_failed=0
 
+# Usage: run_system_test [optional arguments of system_test.sh] <first 4 positional parameters of system_test.sh>
 function run_system_test() {
-    test_target=$1
-    ns_config_str=$2
-    nat_config_str=$3  
-    wg_interface_str=$4
-
-    # Run test
     let "n_tests++"
-    ./system_test.sh $n_tests $test_target $control_pub_key $control_ip $control_port $relay_port "${adm_ips}" $log_lvl $log_dir $repo_dir $ns_config_str $nat_config_str $wg_interface_str
+    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port $relay_port "$adm_ips" $log_lvl $log_dir $repo_dir
 
     if [[ $? -ne 0 ]]; then
         let "n_failed++"
     fi
 
-    # Make sure system_test.sh cleanup finishes before starting next test
     sleep 1s
 }
 
@@ -161,38 +142,42 @@ Starting system tests between two peers behind NATs with various combinations of
     - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)
 """
 
-echo "Test without NAT"
-run_system_test TS_PASS_DIRECT router1-router2 : wg0:
+# echo "Tests with one peer behind a NAT"
+# nat_types=("0-0" "0-1" "0-2" "2-2") # Full Cone, Restricted Cone, Port-restricted Cone, Symmetric
 
-echo -e "\nTests with one peer behind a NAT"
-nat_types=("0-0" "0-1" "0-2" "2-2") # Full Cone, Restricted Cone, Port-restricted Cone, Symmetric
+# for nat in ${nat_types[@]}; do
+#     run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+# done
 
-for nat in ${nat_types[@]}; do
-    run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
-done
+# echo -e "\nTests with both peers behind a NAT"
+# n_nats=${#nat_types[@]}
 
-echo -e "\nTests with both peers behind a NAT"
-n_nats=${#nat_types[@]}
+# for ((i=0; i<$n_nats; i++)); do
+#     for ((j=$i; j<$n_nats; j++)); do
+#         nat1=${nat_types[$i]}
+#         nat2=${nat_types[$j]}
 
-for ((i=0; i<$n_nats; i++)); do
-    for ((j=$i; j<$n_nats; j++)); do
-        nat1=${nat_types[$i]}
-        nat2=${nat_types[$j]}
+#         if [[ $nat1 == "2-2" && $nat2 == "2-2" ]]; then
+#             test_target="TS_PASS_RELAY"
+#         else
+#             test_target="TS_PASS_DIRECT"
+#         fi
 
-        if [[ $nat1 == "2-2" && $nat2 == "2-2" ]]; then
-            test_target="TS_PASS_RELAY"
-        else
-            test_target="TS_PASS_DIRECT"
-        fi
+#         run_system_test $test_target private1_peer1-router1:router2-private2_peer1 $nat1:$nat2 wg0:
+#     done
+# done
 
-        run_system_test $test_target private1_peer1-router1:router2-private2_peer1 $nat1:$nat2 wg0:
-    done
-done
+# echo -e "\nTest hairpinning"
+# for nat in ${nat_types[@]}; do
+#     run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
+# done
 
-echo -e "\nTest hairpinning"
-for nat in ${nat_types[@]}; do
-    run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
-done
+echo -e "\nPerformance tests (without NAT)"
+#run_system_test -k packet_loss -v 0,0.5,1,1.5,2,2.5 -d 10 TS_PASS_DIRECT router1-router2 : wg0:
+run_system_test -k bitrate -v 1,10,100,1000 -d 10 TS_PASS_DIRECT router1-router2 : wg0:
+
+# Create graphs for performance tests
+python3 visualize_performance_tests.py $log_dir
 
 # Constants for colored text in output
 RED="\033[0;31m"

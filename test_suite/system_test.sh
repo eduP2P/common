@@ -1,25 +1,7 @@
 #!/bin/bash
 
-test_idx=$1
-test_target=$2
-control_pub_key=$3
-control_ip=$4
-control_port=$5
-relay_port=$6
-adm_ips=$7
-log_lvl=$8
-log_dir=$9
-repo_dir=${10}
-ns_config_str=${11}
-nat_config_str=${12}
-wg_interface_str=${13}
-
 usage_str="""
-Usage: ${0} <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2]
-
-<IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and are necessary to simulate an Address-Dependent Mapping
-
-<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
+Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
 <NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
     1. <PEER 1>-<PEER 2>, for peers in the public network
@@ -34,13 +16,16 @@ Usage: ${0} <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTRO
         2 - Address and Port-Dependent
 Examples of valid NAT configurations: 0-1:1-2 (both peers in private networks), 0-1: (peer 2 in public network), : (both peers in public network)
 
-If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard"""
+If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard
 
-# Make sure all arguments have been passed
-if [[ $# -ne 13 ]]; then
-    echo $usage_str
-    exit 1
-fi
+[OPTIONAL ARGUMENTS] can be provided for a performance test:
+    -k <packet_loss|bitrate>
+    -v <comma-separated string of positive real numbers>
+    -d <seconds>
+
+<IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and are necessary to simulate an Address-Dependent Mapping
+
+<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
 
 # Function to validate string against regular expression
 function validate_str() {
@@ -52,6 +37,53 @@ function validate_str() {
         exit 1
     fi
 }
+
+performance_test_duration=0 # Default value in case -d is not used
+
+# Validate optional arguments
+while getopts ":k:v:d:" opt; do
+    case $opt in
+        k)
+            performance_test_var=$OPTARG
+            validate_str $performance_test_var "^packet_loss|bitrate$"
+            ;;
+        v)
+            performance_test_values=$OPTARG
+            real_regex="[0-9]+(.[0-9]+)?"
+            validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
+            ;;
+        d)
+            performance_test_duration=$OPTARG
+            validate_str $performance_test_duration "^[0-9]+*$"
+            ;;
+        *)
+            echo $usage_str
+            ;;
+    esac
+done
+
+# Shift positional parameters indexing by accounting for the optional arguments
+shift $((OPTIND-1))
+
+# Make sure all required arguments have been passed
+if [[ $# -ne 13 ]]; then
+    echo $usage_str
+    exit 1
+fi
+
+test_target=$1
+ns_config_str=$2
+nat_config_str=$3  
+wg_interface_str=$4
+test_idx=$5
+control_pub_key=$6
+control_ip=$7
+control_port=$8
+relay_port=$9
+adm_ips=${10}
+log_lvl=${11}
+log_dir=${12}
+repo_dir=${13}
 
 # Validate namespace configuration string
 ns_regex="([^-:]+)"
@@ -116,7 +148,11 @@ function describe_nat() {
 nat1_description=$(describe_nat 0)
 nat2_description=$(describe_nat 1)
 
-test_description="Test $test_idx. ${nat1_description} <-> ${nat2_description}, target=$test_target, result="
+if [[ -n $performance_test_var ]]; then
+    test_description="Test $test_idx (performance). ${nat1_description} <-> ${nat2_description}, variable=$performance_test_var, target=$test_target, result="
+else
+    test_description="Test $test_idx (connectivity). ${nat1_description} <-> ${nat2_description}, target=$test_target, result="
+fi
 
 # Output test description 
 echo -n "$test_description"
@@ -130,7 +166,7 @@ log_dir=$new_dir
 function cleanup () {
     # Kill the conntrack processes started by the nat simulation scripts
     conntrack_pids=$(pidof conntrack)
-    if [[ -n $conntrack_pids ]]; then sudo kill $conntrack_pids; fi
+    if [[ -n $conntrack_pids ]]; then sudo kill $conntrack_pids &> /dev/null; fi
 
     # Log final nftables configuration and conntrack list of the routers
     for router_ns in ${router_ns_list[@]}; do
@@ -145,6 +181,9 @@ function cleanup () {
     for router_ns in ${router_ns_list[@]}; do
         sudo ip netns exec $router_ns nft flush ruleset
     done
+
+    # Reset nftables configuration of the public network
+    sudo ip netns exec public nft flush chain inet filter forward
 }
 
 trap cleanup EXIT 
@@ -159,22 +198,33 @@ for ((i=0; i<${#router_ns_list[@]}; i++)); do
     tee ${log_dir}/$router_ns.txt > /dev/null & # combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
 
-# Start peers and save their PIDs
+# Start peers
 cd ${repo_dir}/cmd/toverstok
-peer_pids=()
+
+function get_peer_performance_test_role() {
+    i=$1
+    roles=("server" "client")
+
+    if [[ -n $performance_test_var ]]; then
+        echo ${roles[$i]}
+    else
+        echo "none"
+    fi
+}
 
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     peer_ns=${peer_ns_list[$i]}
+    performance_test_role=$(get_peer_performance_test_role $i)
 
-    sudo ip netns exec $peer_ns ./setup_client.sh $peer_id $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Run script from the peer's isolated namespace` \
+    if [[ $performance_test_role != "none" ]]; then
+        optional_args="-k $performance_test_var -v $performance_test_values -d $performance_test_duration"
+    fi
+    
+    sudo ip netns exec $peer_ns ./setup_client.sh $optional_args `# Optional arguments` \
+    $peer_id $control_pub_key $control_ip $control_port $log_lvl $log_dir $performance_test_role ${wg_interfaces[$i]} `# Positional parameters` \
     &> >(sed -r "/TS_(PASS|FAIL)/q" > ${log_dir}/$peer_id.txt) & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
-
-    peer_pids+=($!)
 done
-
-# Wait until peer processes are finished
-wait ${peer_pids[@]}
 
 # Constants for colored text in output
 RED="\033[0;31m"
@@ -185,14 +235,16 @@ NC="\033[0m" # No color
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     export LOG_FILE=${log_dir}/$peer_id.txt # Export to use in bash -c
-    timeout 15s bash -c 'tail -n 1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
+    n_performance_tests=${#performance_test_values}
+    timeout_duration=$((30 + $n_performance_tests * $performance_test_duration))
+    timeout ${timeout_duration}s bash -c 'tail -n 1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
 
     # Branch on exit code of previous command
     case $? in
-        0|1) echo -e "${RED}TS_FAIL: error when searching for exit code in logs of peer $peer_id${NC}"; exit 1 ;; # 0 and 1 indicate tail/sed failure
+        0|1) echo -e "${RED}TS_FAIL: error when searching for exit code in logs of $peer_id${NC}"; exit 1 ;; # 0 and 1 indicate tail/sed failure
         2) ;; # 2 indicates TS_PASS was found
-        3) echo -e "${RED}TS_FAIL: test failed for peer $peer_id; view this peer's logs for more information${NC}"; exit 1 ;; # 3 indicates TS_FAIL was found
-        124) echo -e "${RED}TS_FAIL: timeout when searching for exit code in logs of peer $peer_id${NC}"; exit 1 ;; # 124 is default timeout exit code
+        3) echo -e "${RED}TS_FAIL: test failed for $peer_id; view this peer's logs for more information${NC}"; exit 1 ;; # 3 indicates TS_FAIL was found
+        124) echo -e "${RED}TS_FAIL: timeout when searching for exit code in logs of $peer_id${NC}"; exit 1 ;; # 124 is default timeout exit code
         *) echo -e "${RED}TS_FAIL: unknown error${NC}"; exit 1 ;;
     esac
 done

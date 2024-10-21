@@ -1,12 +1,59 @@
 #!/bin/bash
 
-if [[ $# < 5 || $# > 6 ]]; then
-    echo """
-Usage: ${0} <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> [WIREGUARD INTERFACE]
+usage_str="""
+Usage: ${0} [OPTIONAL ARGUMENTS] <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <PERFORMANCE TEST ROLE> [WIREGUARD INTERFACE]
+
+[OPTIONAL ARGUMENTS] can be provided for a performance test:
+    -k <packet_loss|bitrate>
+    -v <comma-separated string of positive real numbers>
+    -d <seconds>
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
-If [WIREGUARD INTERFACE] is not provided, eduP2P is configured with userspace WireGuard"""
-    clean_exit 1
+
+<PERFORMANCE TEST ROLE> should be either 'client', 'server' or 'none'
+
+If [WIREGUARD INTERFACE] is not provided, this peer will use userspace WireGuard"""
+
+# Function to validate string against regular expression
+function validate_str() {
+    str=$1
+    regex=$2
+
+    if [[ ! $str =~ $regex ]]; then
+        echo $usage_str
+        exit 1
+    fi
+}
+
+# Validate optional arguments
+while getopts ":k:v:d:" opt; do
+    case $opt in
+        k)
+            performance_test_var=$OPTARG
+            validate_str $performance_test_var "^packet_loss|bitrate$"
+            ;;
+        v)
+            performance_test_values=$OPTARG
+            real_regex="[0-9]+(.[0-9]+)?"
+            validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
+            ;;
+        d)
+            performance_test_duration=$OPTARG
+            validate_str $performance_test_duration "^[0-9]+*$"
+            ;;
+        *)
+            echo $usage_str
+            ;;
+    esac
+done
+
+# Shift positional parameters indexing by accounting for the optional arguments
+shift $((OPTIND-1))
+
+# Make sure all mandatory arguments have been passed
+if [[ $# < 7 || $# > 8 ]]; then
+    echo $usage_str
+    exit 1
 fi
 
 id=$1
@@ -14,7 +61,9 @@ control_pub_key=$2
 control_ip=$3
 control_port=$4
 log_lvl=$5
-wg_interface=$6
+log_dir=$6
+performance_test_role=$7
+wg_interface=$8
 
 # Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
@@ -103,7 +152,7 @@ if [[ -n $wg_interface ]]; then
 
     while [[ -z $peer_ips ]]; do
         sleep 1s
-        timeout=$(($timeout-1))
+        let "timeout--"
 
         if [[ $timeout -eq 0 ]]; then
             echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
@@ -122,7 +171,7 @@ else
     
     while ! ip address show ts0 | grep -Eq "inet [0-9.]+"; do
         sleep 1s
-        timeout=$(($timeout-1))
+        let "timeout--"
 
         if [[ $timeout -eq 0 ]]; then
             echo "TS_FAIL: timeout waiting for eduP2P to update the WireGuard interface"
@@ -174,6 +223,67 @@ try_connect "http://[${peer_ipv6}]"
 # Wait until timeout or until peer connected to server (peer's IP will appear in server output)
 timeout 10s tail -f -n +1 $http_ipv4_out | sed -n "/${peer_ipv4}/q"
 timeout 10s tail -f -n +1 $http_ipv6_out | sed -n "/${peer_ipv6}/q"
+
+# Optional performance test with iperf
+function performance_test () {
+    performance_test_val=$1
+    performance_test_dir=$2
+
+    # Default values
+    bitrate=$(( 10**6 )) # Default iperf UDP bitrate is 1 Mbps
+
+    # Assign performance_test_val to performance_test_var
+    case $performance_test_var in
+        "packet_loss")
+            ./set_packet_loss.sh $performance_test_val
+            ;;
+        "bitrate")
+            bitrate=$(( $performance_test_val * 10**6 )) # Convert to bits/sec
+            ;;
+    esac
+
+    echo $bitrate
+
+    # Run performance test
+    connect_timeout=3
+
+    case $performance_test_role in
+    "client") 
+        logfile=$performance_test_dir/$performance_test_var=$performance_test_val.json
+
+        # Retry until server is listening or until timeout
+        while ! iperf3 -c $peer_ipv4 -p 12345 -u -t $performance_test_duration -b $bitrate --json --logfile $logfile; do
+            sleep 1s
+            let "connect_timeout--"
+
+            if [[ $connect_timeout -eq 0 ]]; then
+                echo "TS_FAIL: timeout while trying to connect to peer's iperf server to test performance"
+                clean_exit 1
+            fi
+
+            rm $logfile # File is created and contains an error message, delete for next iteration
+        done 
+        ;;
+    "server") 
+        test_timeout=$(($connect_timeout + $performance_test_duration + 1))
+        mkdir $log_dir
+        timeout ${test_timeout}s iperf3 -s -B $ipv4 -p 12345 --json -1 # -1 to close after first connection
+
+        if [[ $? -ne 0 ]]; then
+            echo "TS_FAIL: timeout while listening on iperf server to test performance"
+            clean_exit 1
+        fi
+        ;;
+esac
+}
+
+performance_test_dir=$log_dir/performance_tests_$performance_test_var
+performance_test_values=$(echo $performance_test_values | tr ',' ' ') # Replace commas by spaces to iterate over each value easily
+
+for performance_test_val in $performance_test_values; do
+    mkdir -p $performance_test_dir
+    performance_test $performance_test_val $performance_test_dir
+done
 
 echo "TS_PASS"
 clean_exit 0
