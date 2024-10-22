@@ -163,8 +163,6 @@ function run_system_test() {
     if [[ $? -ne 0 ]]; then
         let "n_failed++"
     fi
-
-    sleep 1s
 }
 
 cd $repo_dir/test_suite

@@ -224,6 +224,9 @@ function get_peer_performance_test_role() {
     fi
 }
 
+# Store PIDs of peer scripts
+peer_pids=()
+
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     peer_ns=${peer_ns_list[$i]}
@@ -238,6 +241,8 @@ for i in {0..1}; do
     sudo ip netns exec $peer_ns ./setup_client.sh $optional_args `# Optional arguments` \
     $peer_id $control_pub_key $control_ip $control_port $log_lvl $log_dir $performance_test_role ${wg_interfaces[$i]} `# Positional parameters` \
     &> >(sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile) & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
+
+    peer_pids+=($!)
 done
 
 # Constants for colored text in output
@@ -277,3 +282,6 @@ if [[ $test_target != $test_result ]]; then
 fi
 
 echo -e "${GREEN}$test_result${NC}"
+
+# Wait for peer scripts to exit (might still be doing cleanup after outputting exit code)
+wait ${peer_pids[@]} &> /dev/null
