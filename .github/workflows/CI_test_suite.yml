@@ -33,7 +33,7 @@ jobs:
 
     - name: System tests
       id: system-test
-      run: ./system_tests.sh -c 0 -p 9999 3340 debug 0
+      run: ./system_tests.sh -c 0 -p 9999 3340 debug
       working-directory: test_suite
       continue-on-error: true
 
