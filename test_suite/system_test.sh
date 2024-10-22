@@ -3,6 +3,11 @@
 usage_str="""
 Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
+[OPTIONAL ARGUMENTS] can be provided for a performance test:
+    -k <packet_loss|bitrate>
+    -v <comma-separated string of positive real numbers>
+    -d <seconds>
+    
 <NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
     1. <PEER 1>-<PEER 2>, for peers in the public network
     2. <PEER 1>-<ROUTER 1>:<PEER 2>, for one peer in a private network and the other in the public network
@@ -17,11 +22,6 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
 Examples of valid NAT configurations: 0-1:1-2 (both peers in private networks), 0-1: (peer 2 in public network), : (both peers in public network)
 
 If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard
-
-[OPTIONAL ARGUMENTS] can be provided for a performance test:
-    -k <packet_loss|bitrate>
-    -v <comma-separated string of positive real numbers>
-    -d <seconds>
 
 <IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and are necessary to simulate an Address-Dependent Mapping
 

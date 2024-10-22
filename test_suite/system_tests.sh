@@ -1,31 +1,67 @@
 #!/bin/bash
 
+usage_str="""
+Usage: ${0} [OPTIONAL ARGUMENTS] <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL>
+
+This script runs multiple system tests sequentially
+
+The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at least one should be provided:
+    -c >packet loss>
+        Run the test suite's connectivity tests in different scenarios involving NAT
+        The percentage of packets that should be dropped during the tests should be provided as a real number in the interval [0, 100)
+    -p
+        Run the test suite's performance tests
+
+<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
+
+# Function to validate string against regular expression
+function validate_str() {
+    str=$1
+    regex=$2
+
+    if [[ ! $str =~ $regex ]]; then
+        echo $usage_str
+        exit 1
+    fi
+}
+
+# Validate optional arguments
+while getopts ":c:p" opt; do
+    case $opt in
+        c)  
+            connectivity=true
+            packet_loss=$OPTARG
+
+            # Make sure packet_loss is a real number
+            real_regex="^[0-9]+[.]?([0-9]+)?$"
+            validate_str $packet_loss $real_regex
+
+            # Make sure packet loss is in the interval [0, 100)
+            in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
+
+            if [[ $in_interval -eq 0 ]]; then
+                echo $usage_str
+                exit 1
+            fi
+            ;;
+        p)
+            performance=true
+            ;;
+        *)
+            echo $usage_str
+            ;;
+    esac
+done
+
+# Shift positional parameters indexing by accounting for the optional arguments
+shift $((OPTIND-1))
+
 control_port=$1
 relay_port=$2
 log_lvl=$3
-packet_loss=$4
 
-usage_str="""
-Usage: ${0} <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL> <PACKET LOSS PERCENTAGE>
-
-Executes multiple system tests sequentially, each testing a different NAT configuration
-
-<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
-
-<PACKET LOSS PERCENTAGE> should be a real number in the interval [0, 100)"""
-
-# Make sure all arguments have been passed, and packet loss is a real number
-real_regex="^[0-9]+[.]?([0-9]+)?$"
-
-if [[ $# -ne 4 || !( $packet_loss =~ $real_regex) ]]; then
-    echo $usage_str
-    exit 1
-fi
-
-# Make sure packet loss is in the interval [0, 100)
-in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
-
-if [[ $in_interval -eq 0 ]]; then
+# Make sure all arguments have been passed, and at least one optional argument is provided
+if [[ $# -ne 3  || !( $connectivity == true || $performance == true )]]; then
     echo $usage_str
     exit 1
 fi
@@ -67,8 +103,6 @@ create_log_dir
 function setup_networks() {
     cd nat_simulation/
     adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
-    cd ${repo_dir}/cmd/toverstok
-    sudo ./set_packet_loss.sh $packet_loss
 }
 
 setup_networks
@@ -139,46 +173,53 @@ echo """
 Starting system tests between two peers behind NATs with various combinations of mapping and filtering behaviour:
     - Endpoint-Independent Mapping/Filtering (EIM/EIF)
     - Address-Dependent Mapping/Filtering (ADM/ADF)
-    - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)
-"""
+    - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
 
-# echo "Tests with one peer behind a NAT"
-# nat_types=("0-0" "0-1" "0-2" "2-2") # Full Cone, Restricted Cone, Port-restricted Cone, Symmetric
+if [[ $connectivity == true ]]; then
+    # Set packet loss
+    cd ${repo_dir}/cmd/toverstok
+    sudo ./set_packet_loss.sh $packet_loss
+    cd $repo_dir/test_suite
 
-# for nat in ${nat_types[@]}; do
-#     run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
-# done
+    echo -e "\nTests with one peer behind a NAT"
+    nat_types=("0-0" "0-1" "0-2" "2-2") # Full Cone, Restricted Cone, Port-restricted Cone, Symmetric
 
-# echo -e "\nTests with both peers behind a NAT"
-# n_nats=${#nat_types[@]}
+    for nat in ${nat_types[@]}; do
+        run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+    done
 
-# for ((i=0; i<$n_nats; i++)); do
-#     for ((j=$i; j<$n_nats; j++)); do
-#         nat1=${nat_types[$i]}
-#         nat2=${nat_types[$j]}
+    echo -e "\nTests with both peers behind a NAT"
+    n_nats=${#nat_types[@]}
 
-#         if [[ $nat1 == "2-2" && $nat2 == "2-2" ]]; then
-#             test_target="TS_PASS_RELAY"
-#         else
-#             test_target="TS_PASS_DIRECT"
-#         fi
+    for ((i=0; i<$n_nats; i++)); do
+        for ((j=$i; j<$n_nats; j++)); do
+            nat1=${nat_types[$i]}
+            nat2=${nat_types[$j]}
 
-#         run_system_test $test_target private1_peer1-router1:router2-private2_peer1 $nat1:$nat2 wg0:
-#     done
-# done
+            if [[ $nat1 == "2-2" && $nat2 == "2-2" ]]; then
+                test_target="TS_PASS_RELAY"
+            else
+                test_target="TS_PASS_DIRECT"
+            fi
 
-# echo -e "\nTest hairpinning"
-# for nat in ${nat_types[@]}; do
-#     run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
-# done
+            run_system_test $test_target private1_peer1-router1:router2-private2_peer1 $nat1:$nat2 wg0:
+        done
+    done
 
-echo -e "\nPerformance tests (without NAT)"
-#run_system_test -k packet_loss -v 0,0.5,1,1.5,2,2.5 -d 10 TS_PASS_DIRECT router1-router2 : wg0:
-run_system_test -k bitrate -v 1,10,100,1000 -d 10 TS_PASS_DIRECT router1-router2 : wg0:
+    echo -e "\nTest hairpinning"
+    for nat in ${nat_types[@]}; do
+        run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
+    done
+fi
 
-# Create graphs for performance tests
-python3 visualize_performance_tests.py $log_dir
+if [[ $performance == true ]]; then
+    echo -e "\nPerformance tests (without NAT)"
+    run_system_test -k packet_loss -v 0,0.5,1 -d 5 TS_PASS_DIRECT router1-router2 : wg0:
+    run_system_test -k bitrate -v 1,10,100 -d 5 TS_PASS_DIRECT router1-router2 : wg0:
 
+    # Create graphs for performance tests
+    python3 visualize_performance_tests.py $log_dir
+fi
 # Constants for colored text in output
 RED="\033[0;31m"
 GREEN="\033[0;32m"

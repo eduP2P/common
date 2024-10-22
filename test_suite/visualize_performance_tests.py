@@ -106,7 +106,7 @@ def file_iteration(test_dir : str, test_var : str) -> tuple[list[float], dict]:
     test_var_values = np.array(test_var_values)[sorted_indices]
 
     for metric in extracted_data.keys():
-        extracted_data[metric]["values"] = list(np.array(extracted_data[metric]["values"])[sorted_indices])
+        extracted_data[metric]["values"] = np.array(extracted_data[metric]["values"])[sorted_indices]
 
     return test_var_values, extracted_data
 
