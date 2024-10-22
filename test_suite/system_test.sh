@@ -105,6 +105,10 @@ for ((i=2; i<$n_groups; i++)); do
     router_ns_list+=(${BASH_REMATCH[$i]})
 done
 
+if [[ $ns_config_str =~ $ns_config3_regex ]]; then
+    hairpinning=true
+fi
+
 # NAT configuration parsing depends on the amount of routers
 n_routers=${#router_ns_list[@]} 
 nat_config_regex="([0-2])-([0-2])"
@@ -145,13 +149,21 @@ function describe_nat() {
     fi
 }
 
-nat1_description=$(describe_nat 0)
-nat2_description=$(describe_nat 1)
-
-if [[ -n $performance_test_var ]]; then
-    test_description="Test $test_idx (performance). ${nat1_description} <-> ${nat2_description}, variable=$performance_test_var, target=$test_target, result="
+# Prepare a string describing the NAT setup
+if [[ $hairpinning == true ]]; then
+    nat1_description=$(describe_nat 0)
+    nat_setup="$nat1_description with hairpinning"
 else
-    test_description="Test $test_idx (connectivity). ${nat1_description} <-> ${nat2_description}, target=$test_target, result="
+    nat1_description=$(describe_nat 0)
+    nat2_description=$(describe_nat 1)
+    nat_setup="$nat1_description <-> $nat2_description"
+fi
+
+# Prepare a string describing the test description
+if [[ -n $performance_test_var ]]; then
+    test_description="Test $test_idx (performance). $nat_setup, variable=$performance_test_var, target=$test_target, result="
+else
+    test_description="Test $test_idx (connectivity). $nat_setup, target=$test_target, result="
 fi
 
 # Output test description 
@@ -215,15 +227,17 @@ function get_peer_performance_test_role() {
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     peer_ns=${peer_ns_list[$i]}
+    peer_logfile="$log_dir/$peer_id.txt"
     performance_test_role=$(get_peer_performance_test_role $i)
 
     if [[ $performance_test_role != "none" ]]; then
         optional_args="-k $performance_test_var -v $performance_test_values -d $performance_test_duration"
     fi
     
+    touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh $optional_args `# Optional arguments` \
     $peer_id $control_pub_key $control_ip $control_port $log_lvl $log_dir $performance_test_role ${wg_interfaces[$i]} `# Positional parameters` \
-    &> >(sed -r "/TS_(PASS|FAIL)/q" > ${log_dir}/$peer_id.txt) & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
+    &> >(sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile) & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
 done
 
 # Constants for colored text in output
