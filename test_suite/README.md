@@ -5,8 +5,8 @@
 1.  [Overview](#overview)
 2.  [Requirements](#requirements)
 3.  [System Tests](#system-tests)
-4.  [Integration Tests](#integration-tests)
-5.  [Performance Tests](#performance-tests)
+4.  [Performance Tests](#performance-tests)
+5.  [Integration Tests](#integration-tests)
 6.  [Test Results](#test-results)
 7.  [Bibliography](#bibliography)
 
@@ -53,6 +53,16 @@ installed. The list of tools is found in
 be installed by running the following command:
 
     xargs -a system_test_requirements.txt sudo apt-get install
+
+### Performance test-specific requirements
+
+The performance tests are run as a part of the system tests, and require
+a Python script to visualize the results. The dependencies of this
+Python script are listed in
+[python\_requirements.txt](python_requirements.txt), and can be
+installed as follows:
+
+    pip install -r python-requirements.txt
 
 ## System Tests
 
@@ -359,6 +369,47 @@ NAT hairpinning
 rules](nat_simulation/setup_nat_filtering_hairpinning.sh), which is the
 same script that was used for applying filtering.
 
+## Performance Tests
+
+The test suite contains performance tests to measure the bitrate, jitter
+and packet loss of a connection between two peers. These tests are
+implemented using the iperf3 tool [\[5\]](#ref-man_iperf3).
+
+To test the performance of eduP2P, a connection between two peers must
+first be established. Therefore, the performance tests are implemented
+as an optional part of the system tests. For each system test,
+performance tests may be run after a connection has been established by
+configuring the following parameters:
+
+-   **Independent variable**: the user can choose an independent
+    variable during the performance tests. This variable will take
+    different values that are also configured by the user, and an iperf3
+    performance test will be performed for each value. This way, it is
+    possible to measure the effect of the independent variable on the
+    performance of eduP2P. Currently, the test suite implements the
+    following independent variables:
+
+    1.  Packet loss: the percentage of packets that should be dropped
+        during the performance test.
+    2.  Bitrate: the speed at which iperf3 should try to send packets
+        during the performance test (in Mbps).
+
+-   **Performance test duration**: this parameter determines how long
+    each performance test should run for. For one system test, the total
+    amount of time the performance tests take is this parameter
+    multiplied by the amount of values assigned to the independent
+    variable.
+
+Each performance test logs its results to a separate json file, which
+contains (among other data) the average bitrate, jitter and packet loss
+during the test. Using a [Python
+script](visualize_performance_tests.py), these performance metrics are
+extracted from the json files, and graphs are automatically created that
+plot the independent variable on the X axis against each performance
+metric on the Y axis. Below is an example of such a graph:
+
+![](./images/performance_test_packet_loss.png)
+
 ## Integration Tests
 
 In these tests, the smaller components of the eduP2P client are tested,
@@ -373,10 +424,6 @@ Furthermore, the control server and relay server are also tested.
 
 The tests can be executed manually by running `go test ./test_suite/...`
 from the repository’s root directory.
-
-## Performance Tests
-
-TODO
 
 ## Test Results
 
@@ -409,3 +456,8 @@ RFC Editor, Jan. 2007. doi:
 “<span class="nocase">conntrack - command line interface for netfilter
 connection tracking</span>.” Available:
 <https://manpages.debian.org/jessie/conntrack/conntrack.8.en.html></span>
+
+<span class="csl-left-margin">\[5\]
+</span><span class="csl-right-inline">“<span class="nocase">iperf3 -
+perform network throughput tests</span>.” Available:
+<https://manpages.org/iperf3></span>
