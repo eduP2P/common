@@ -27,21 +27,13 @@ If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corre
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
 
-# Function to validate string against regular expression
-function validate_str() {
-    str=$1
-    regex=$2
-
-    if [[ ! $str =~ $regex ]]; then
-        echo $usage_str
-        exit 1
-    fi
-}
+# Use functions and constants from util.sh
+. ./util.sh
 
 performance_test_duration=0 # Default value in case -d is not used
 
 # Validate optional arguments
-while getopts ":k:v:d:" opt; do
+while getopts ":k:v:d:h" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
@@ -56,8 +48,13 @@ while getopts ":k:v:d:" opt; do
             performance_test_duration=$OPTARG
             validate_str $performance_test_duration "^[0-9]+*$"
             ;;
+        h) 
+            echo "$usage_str"
+            exit 0
+            ;;
         *)
-            echo $usage_str
+            print_err "invalid option -$opt"
+            exit 1
             ;;
     esac
 done
@@ -67,7 +64,7 @@ shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
 if [[ $# -ne 13 ]]; then
-    echo $usage_str
+    print_err "expected 13 positional parameters, but received $#"
     exit 1
 fi
 

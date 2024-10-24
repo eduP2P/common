@@ -14,19 +14,11 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL 
 
 If [WIREGUARD INTERFACE] is not provided, this peer will use userspace WireGuard"""
 
-# Function to validate string against regular expression
-function validate_str() {
-    str=$1
-    regex=$2
-
-    if [[ ! $str =~ $regex ]]; then
-        echo $usage_str
-        exit 1
-    fi
-}
+# Use functions and constants from util.sh
+. ../../test_suite/util.sh
 
 # Validate optional arguments
-while getopts ":k:v:d:" opt; do
+while getopts ":k:v:d:h" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
@@ -41,8 +33,13 @@ while getopts ":k:v:d:" opt; do
             performance_test_duration=$OPTARG
             validate_str $performance_test_duration "^[0-9]+*$"
             ;;
+        h) 
+            echo "$usage_str"
+            exit 0
+            ;;
         *)
-            echo $usage_str
+            print_err "invalid option -$opt"
+            exit 1
             ;;
     esac
 done
@@ -52,7 +49,7 @@ shift $((OPTIND-1))
 
 # Make sure all mandatory arguments have been passed
 if [[ $# < 7 || $# > 8 ]]; then
-    echo $usage_str
+    print_err "expected 7 or 8 positional parameters, but received $#"
     exit 1
 fi
 

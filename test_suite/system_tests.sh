@@ -6,27 +6,22 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG 
 This script runs multiple system tests sequentially
 
 The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at least one should be provided:
-    -c >packet loss>
+    -c <packet loss>
         Run the test suite's connectivity tests in different scenarios involving NAT
         The percentage of packets that should be dropped during the tests should be provided as a real number in the interval [0, 100)
+    -f <file>
+        Run custom tests from an existing file. One test should be specified on a single line, and this line should be a call to the run_system_test function found in this script
     -p
         Run the test suite's performance tests
 
+
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
 
-# Function to validate string against regular expression
-function validate_str() {
-    str=$1
-    regex=$2
-
-    if [[ ! $str =~ $regex ]]; then
-        echo $usage_str
-        exit 1
-    fi
-}
+# Use functions and constants from util.sh
+. ./util.sh
 
 # Validate optional arguments
-while getopts ":c:p" opt; do
+while getopts ":c:f:ph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -40,15 +35,29 @@ while getopts ":c:p" opt; do
             in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
 
             if [[ $in_interval -eq 0 ]]; then
-                echo $usage_str
+                print_err "packet loss argument is not in the interval [0, 100)"
+                exit 1
+            fi
+            ;;
+        f)
+            file=$OPTARG
+
+            # Make sure file exists
+            if [[ ! -f $file ]]; then
+                print_err "$file does not exist"
                 exit 1
             fi
             ;;
         p)
             performance=true
             ;;
+        h) 
+            echo "$usage_str"
+            exit 0
+            ;;
         *)
-            echo $usage_str
+            print_err "invalid option -$opt"
+            exit 1
             ;;
     esac
 done
@@ -61,8 +70,14 @@ relay_port=$2
 log_lvl=$3
 
 # Make sure all arguments have been passed, and at least one optional argument is provided
-if [[ $# -ne 3  || !( $connectivity == true || $performance == true )]]; then
-    echo $usage_str
+if [[ $# -ne 3  || !( -n $file || $connectivity == true || $performance == true )]]; then
+    print_err "expected 13 positional parameters, but received $#"
+    exit 1
+fi
+
+# Make sure at least one option argument is provided
+if [[ !( -n $file || $connectivity == true || $performance == true ) ]]; then
+    print_err "at least one option should be set"
     exit 1
 fi
 
@@ -218,10 +233,13 @@ if [[ $performance == true ]]; then
     # Create graphs for performance tests
     python3 visualize_performance_tests.py $log_dir
 fi
-# Constants for colored text in output
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-NC="\033[0m" # No color
+
+if [[ -n $file ]]; then
+    echo -e "\nTests from file: $file"
+    while read test_cmd; do
+        eval $test_cmd
+    done < $file
+fi
 
 function print_summary() {
     if [[ $n_failed -eq 0 ]]; then
