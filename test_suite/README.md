@@ -68,10 +68,11 @@ installed as follows:
 
 In these tests, two clients attempt to establish a peer-to-peer
 connection using eduP2P. When these tests are executed via GitHub
-workflows, the test results can be found in the output of the ‘test’ job
-under the step ‘System tests’, and the logs can be downloaded using the
-URL in the ‘Upload system test logs’ step. The system tests can also be
-executed manually with [this script](system_tests.sh).
+workflows, the test results can be found in the output of the “System
+tests” job under the step “Run system tests”, and the logs can be
+downloaded using the URL in the “Upload system test logs: step. The
+system tests can also be executed manually with [this
+script](system_tests.sh).
 
 The system tests specifically verify whether the eduP2P peers are able
 to establish a connection when NAT is involved. To do so, the local host
@@ -225,7 +226,17 @@ The image below illustrates the difference between the three mapping
 behaviours. It shows the internal endpoint `X:x` sending a packet to the
 external endpoint `Y:y1` to create the initial mapping, and how the
 reuse of this mapping by other sessions differs between the three types
-of behaviours.
+of behaviours:
+
+1.  **EIM:** The mapping is reused for both the packet destined to
+    `Y:y2` and the packet destined to `Z:z`, since this mapping
+    behaviour reuses a mapping for all endpoints.
+2.  **ADM:** The mapping is reused for the packet destined to `Y:y2`,
+    since its destination IP is equal to the one of the session the
+    mapping was created for. However, the packet destined to `Z:z` uses
+    a new mapping, since it has a different destination IP.
+3.  **ADPM:** A new mapping is used for each packet, since all packets
+    have different endpoints.
 
 ![](./images/nat_mapping.png)
 
@@ -289,7 +300,15 @@ The image below illustrates the difference between the three filtering
 behaviours. It shows the internal endpoint `X:x` again sending a packet
 to the external endpoint `Y:y1` to create the initial mapping, then it
 shows packets sent back to `X':x1'` from various endpoints. Some of
-these packets may be filtered, which is indicated by a dashed arrow.
+these packets may be filtered, which is indicated by a dashed arrow:
+
+1.  **EIF:** None of the packets are filtered, since they are all
+    destined to a port on the NAT for which a mapping exists.
+2.  **ADF:** The packet from `Z:z` is filtered, because incoming packets
+    to `X':x1'` are only accepted if they have source IP address `Y`.
+3.  **ADPF:** The packets from `Y:y2` and `Z:z` are filtered, because
+    incoming packets to `X':x1'` are only accepted if they have source
+    IP address `Y` and source port `y1`.
 
 ![](./images/nat_filtering.png)
 
@@ -417,13 +436,21 @@ such as the lower layers described in [the document describing eduP2P’s
 architecture](../ARCHITECTURE.md):
 
 -   The Session
--   Some of the separate Stages:
-    -   TODO decide which, if not all
+-   The actors in the Stage
 
 Furthermore, the control server and relay server are also tested.
 
-The tests can be executed manually by running `go test ./test_suite/...`
-from the repository’s root directory.
+The tests are written in Go, using its `testing` package. When executed
+via GitHub workflows, the test results can be found in the output of the
+“Integration tests” job under the step “Run integration tests”, and a
+code coverage report can be downloaded using the URL in the “Upload
+integration test coverage report” step. The system tests can also be
+executed manually with [this script](system_tests.sh). To execute the
+tests and create the coverage report file `cover.html` manually, run the
+following commands:
+
+    go test -coverprofile cover.out -v ./...
+    go tool cover -html cover.out -o cover.html
 
 ## Test Results
 
