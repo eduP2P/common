@@ -8,7 +8,7 @@ on:
 
 jobs:
 
-  test:
+  System tests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
       run: pip install -r python_requirements.txt
       working-directory: test_suite
 
-    - name: System tests
+    - name: Run system tests
       id: system-test
       run: ./system_tests.sh -c 0 -p 9999 3340 debug
       working-directory: test_suite
@@ -43,10 +43,33 @@ jobs:
         name: system-test-logs
         path: test_suite/logs/
 
-    - name: Integrated tests
-      run: go test -v ./test_suite/...
-
     - name: Fail job if system test failed (for clarity in GitHub UI)
       if: ${{ steps.system-test.outcome == 'failure' }}
-      run: |
-        exit 1
+      run: exit 1
+
+  Integration tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+
+    - name: Run integration tests
+      id: integration-test
+      run: go test -coverprofile cover.out -v ./...
+
+    - name: Create integration test coverage report
+      run: go tool cover -html cover.out -o cover.html
+
+    - name: Upload integration test coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: integration-test-coverage
+        path: cover.html
+
+    - name: Fail job if integration test failed (for clarity in GitHub UI)
+      if: ${{ steps.integration-test.outcome == 'failure' }}
+      run: exit 1

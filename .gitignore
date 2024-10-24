@@ -208,3 +208,6 @@ cmd/relay_server/relay.json
 cmd/control_server/control_server
 cmd/relay_server/relay_server
 cmd/toverstok/toverstok
+
+# Go testing coverage files
+*.html
