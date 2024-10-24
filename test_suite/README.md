@@ -68,8 +68,8 @@ installed as follows:
 
 In these tests, two clients attempt to establish a peer-to-peer
 connection using eduP2P. When these tests are executed via GitHub
-workflows, the test results can be found in the output of the “System
-tests” job under the step “Run system tests”, and the logs can be
+workflows, the test results can be found in the output of the
+“SystemTests” job under the step “Run system tests”, and the logs can be
 downloaded using the URL in the “Upload system test logs: step. The
 system tests can also be executed manually with [this
 script](system_tests.sh).
@@ -442,7 +442,7 @@ Furthermore, the control server and relay server are also tested.
 
 The tests are written in Go, using its `testing` package. When executed
 via GitHub workflows, the test results can be found in the output of the
-“Integration tests” job under the step “Run integration tests”, and a
+“IntegrationTests” job under the step “Run integration tests”, and a
 code coverage report can be downloaded using the URL in the “Upload
 integration test coverage report” step. The system tests can also be
 executed manually with [this script](system_tests.sh). To execute the

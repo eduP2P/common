@@ -8,7 +8,7 @@ on:
 
 jobs:
 
-  System tests:
+  SystemTests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
       if: ${{ steps.system-test.outcome == 'failure' }}
       run: exit 1
 
-  Integration tests:
+  IntegrationTests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
