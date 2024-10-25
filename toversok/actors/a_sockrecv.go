@@ -15,6 +15,8 @@ type RecvFrame struct {
 	pkt []byte
 
 	src netip.AddrPort
+
+	ts time.Time
 }
 
 type SockRecv struct {
@@ -63,6 +65,8 @@ func (r *SockRecv) Run() {
 
 		n, ap, err := r.Conn.ReadFromUDPAddrPort(buf)
 
+		ts := time.Now()
+
 		var e net.Error
 		if err != nil && (!errors.As(err, &e) || !e.Timeout()) {
 			// handle error, it's not a timeout
@@ -99,6 +103,7 @@ func (r *SockRecv) Run() {
 			return
 		case r.outCh <- RecvFrame{
 			pkt: pkt,
+			ts:  ts,
 			src: ap,
 		}:
 			// fallthrough continue

@@ -6,6 +6,7 @@ import (
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
 	"net/netip"
+	"time"
 )
 
 type Actor interface {
@@ -30,6 +31,8 @@ type DirectManagerActor interface {
 
 type DirectedPeerFrame struct {
 	SrcAddrPort netip.AddrPort
+
+	Timestamp time.Time
 
 	Pkt []byte
 }

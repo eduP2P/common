@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"context"
 	"fmt"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/msgactor"
@@ -36,11 +37,26 @@ type EndpointManager struct {
 	didStartup bool
 
 	// will be nil if not currently doing STUN
-	collectedEndpoints []netip.AddrPort
-	stunRequests       map[netip.AddrPort]stun.TxID
+	collectedResponse  []stunResponse
+	stunRequests       map[netip.AddrPort]stunRequest
+	relayStunEndpoints map[netip.AddrPort]int64
 	stunTimeout        *time.Timer
 
 	relays map[int64]relay.Information
+}
+
+type stunRequest struct {
+	txid stun.TxID
+
+	sendTimestamp time.Time
+}
+
+type stunResponse struct {
+	respondedAddrPort netip.AddrPort
+
+	fromAddrPort netip.AddrPort
+
+	latency time.Duration
 }
 
 // TODO
@@ -92,7 +108,7 @@ func (em *EndpointManager) Run() {
 				}
 
 			case *msgactor.EManSTUNResponse:
-				if err := em.onSTUNResponse(m.Endpoint, m.Packet); err != nil {
+				if err := em.onSTUNResponse(m.Endpoint, m.Packet, m.Timestamp); err != nil {
 					L(em).Error("error when processing STUN response", "endpoint", m.Endpoint, "error", err)
 				}
 
@@ -104,29 +120,38 @@ func (em *EndpointManager) Run() {
 }
 
 func (em *EndpointManager) startSTUN() {
-	if em.collectedEndpoints != nil {
+	if em.collectedResponse != nil {
 		L(em).Error("tried to start STUN while it was already underway")
 		return
 	}
 
-	em.collectedEndpoints = make([]netip.AddrPort, 0)
+	em.collectedResponse = make([]stunResponse, 0)
 
 	var stunReq = &msgactor.DRouterPushSTUN{Packets: make(map[netip.AddrPort][]byte)}
 
-	em.stunRequests = make(map[netip.AddrPort]stun.TxID)
+	em.stunRequests = make(map[netip.AddrPort]stunRequest)
 
-	for _, ep := range em.collectSTUNEndpoints() {
+	ts := time.Now()
+
+	// FIXME clean up this mess,
+	//  make the ongoing STUN process a pointer to a struct or something
+
+	em.relayStunEndpoints = em.collectRelaySTUNEndpoints()
+
+	stunEndpoints := slices.Concat(em.s.ControlSTUN(), maps.Keys(em.relayStunEndpoints))
+
+	for _, ep := range stunEndpoints {
 		txID := stun.NewTxID()
 		req := stun.Request(txID)
 
 		stunReq.Packets[ep] = req
-		em.stunRequests[ep] = txID
+		em.stunRequests[ep] = stunRequest{txID, ts}
 	}
 
 	if len(em.stunRequests) == 0 {
 		// We're sending no packets, abort
 		L(em).Warn("aborted STUN due to no endpoints")
-		em.collectedEndpoints = nil
+		em.collectedResponse = nil
 		return
 	}
 
@@ -134,8 +159,8 @@ func (em *EndpointManager) startSTUN() {
 	em.stunTimeout.Reset(EManStunTimeout)
 }
 
-func (em *EndpointManager) onSTUNResponse(from netip.AddrPort, pkt []byte) error {
-	if em.collectedEndpoints == nil {
+func (em *EndpointManager) onSTUNResponse(from netip.AddrPort, pkt []byte, ts time.Time) error {
+	if em.collectedResponse == nil {
 		return fmt.Errorf("STUN is not active")
 	}
 
@@ -145,15 +170,23 @@ func (em *EndpointManager) onSTUNResponse(from netip.AddrPort, pkt []byte) error
 		return fmt.Errorf("got response from unexpected raddr while doing STUN: %s", from)
 	}
 
+	req := em.stunRequests[from]
+
 	tid, saddr, err := stun.ParseResponse(pkt)
 	if err != nil {
 		return fmt.Errorf("got error when parsing STUN response from %s: %w", from, err)
 	}
-	if tid != em.stunRequests[from] {
+	if tid != req.txid {
 		return fmt.Errorf("received different TXID from raddr %s than expected: expected %s, got %s", from, em.stunRequests[from], tid)
 	}
 
-	em.collectedEndpoints = append(em.collectedEndpoints, saddr)
+	latency := ts.Sub(req.sendTimestamp)
+
+	em.collectedResponse = append(em.collectedResponse, stunResponse{
+		respondedAddrPort: saddr,
+		fromAddrPort:      from,
+		latency:           latency,
+	})
 	delete(em.stunRequests, from)
 
 	if len(em.stunRequests) == 0 {
@@ -164,7 +197,7 @@ func (em *EndpointManager) onSTUNResponse(from netip.AddrPort, pkt []byte) error
 }
 
 func (em *EndpointManager) onSTUNTimeout() {
-	if em.collectedEndpoints == nil {
+	if em.collectedResponse == nil {
 		L(em).Warn("got timeout notice while not performing STUN")
 		return
 	}
@@ -192,20 +225,41 @@ func (em *EndpointManager) finaliseSTUN(timeout bool) {
 		em.s.setSTUNEndpoints(ep)
 	}
 
-	em.collectedEndpoints = nil
+	em.collectedResponse = nil
 	em.stunTimeout.Stop()
 }
 
 func (em *EndpointManager) collectSTUNResponses() []netip.AddrPort {
 	collected := make(map[netip.AddrPort]bool)
+	relayLatency := make(map[int64]time.Duration)
 
-	for _, ep := range em.collectedEndpoints {
-		collected[ep] = true
+	for _, r := range em.collectedResponse {
+		collected[r.respondedAddrPort] = true
+
+		if rid := em.endpointToRelay(r.fromAddrPort); rid != nil {
+			rid := *rid
+
+			if latency, ok := relayLatency[rid]; (ok && latency > r.latency) || !ok {
+				relayLatency[rid] = r.latency
+			}
+		} else {
+			L(em).Log(context.Background(), types.LevelTrace, "collectSTUNResponses: could not match ap to relay", "ap", r.respondedAddrPort.String())
+		}
 	}
 
-	em.collectedEndpoints = nil
+	go SendMessage(em.s.RMan.Inbox(), &msgactor.RManRelayLatencyResults{RelayLatency: relayLatency})
+
+	em.collectedResponse = nil
 
 	return maps.Keys(collected)
+}
+
+func (em *EndpointManager) endpointToRelay(ap netip.AddrPort) *int64 {
+	if i, ok := em.relayStunEndpoints[ap]; ok {
+		return &i
+	}
+
+	return nil
 }
 
 //func (em *EndpointManager) updateEndpoints() {
@@ -299,16 +353,16 @@ func (em *EndpointManager) collectSTUNResponses() []netip.AddrPort {
 //}
 
 // Collects STUN endpoints from known relay definitions and Control itself
-func (em *EndpointManager) collectSTUNEndpoints() []netip.AddrPort {
-	var relayEndpoints []netip.AddrPort
+func (em *EndpointManager) collectRelaySTUNEndpoints() map[netip.AddrPort]int64 {
+	relayEndpoints := make(map[netip.AddrPort]int64)
 
 	for _, ri := range em.relays {
 		for _, ip := range types.SliceOrEmpty(ri.IPs) {
-			relayEndpoints = append(relayEndpoints, netip.AddrPortFrom(ip, types.PtrOr(ri.STUNPort, stun.DefaultPort)))
+			relayEndpoints[netip.AddrPortFrom(ip, types.PtrOr(ri.STUNPort, stun.DefaultPort))] = ri.ID
 		}
 	}
 
-	return slices.Concat(em.s.ControlSTUN(), relayEndpoints)
+	return relayEndpoints
 }
 
 func (em *EndpointManager) Close() {

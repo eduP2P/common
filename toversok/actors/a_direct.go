@@ -77,6 +77,7 @@ func (dm *DirectManager) Run() {
 			dm.s.DRouter.Push(ifaces.DirectedPeerFrame{
 				SrcAddrPort: frame.src,
 				Pkt:         frame.pkt,
+				Timestamp:   frame.ts,
 			})
 			L(dm).Log(context.Background(), types.LevelTrace, "direct: received")
 		}
@@ -181,8 +182,9 @@ func (dr *DirectRouter) Run() {
 		case frame := <-dr.frameCh:
 			if _, ok := dr.stunEndpoints[frame.SrcAddrPort]; ok {
 				go SendMessage(dr.s.EMan.Inbox(), &msgactor.EManSTUNResponse{
-					Endpoint: frame.SrcAddrPort,
-					Packet:   frame.Pkt,
+					Endpoint:  frame.SrcAddrPort,
+					Packet:    frame.Pkt,
+					Timestamp: frame.Timestamp,
 				})
 				continue
 			}

@@ -44,6 +44,8 @@ type ControlInterface interface {
 
 	// UpdateEndpoints informs the server of any changes in STUN-resolved endpoints. This is a set-replace operation.
 	UpdateEndpoints([]netip.AddrPort) error
+	// UpdateHomeRelay informs the server of the current client preferred home relay.
+	UpdateHomeRelay(int64) error
 }
 
 // ControlSession is an interface representing an active control session.
