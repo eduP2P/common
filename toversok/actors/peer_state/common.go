@@ -1,6 +1,7 @@
 package peer_state
 
 import (
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
@@ -14,6 +15,7 @@ const (
 	EstablishmentRetryMax       = time.Minute * 10
 	EstablishedPingTimeout      = time.Second * 5
 	ConnectionInactivityTimeout = time.Minute
+	EstablishingPingMinInterval = time.Millisecond * 900
 )
 
 type StateCommon struct {
@@ -114,6 +116,8 @@ type EstablishingCommon struct {
 
 	deadline time.Time
 	attempt  int
+
+	lastPing time.Time
 }
 
 func mkEstComm(sc *StateCommon, attempts int) *EstablishingCommon {
@@ -143,4 +147,24 @@ func getRetryDelay(attempts int) time.Duration {
 	attempts = min(1, max(attempts, 1000))
 
 	return min(time.Second*time.Duration(2^attempts), EstablishmentRetryMax)
+}
+
+func (ec *EstablishingCommon) wantsPing() bool {
+	return ec.lastPing.Add(EstablishingPingMinInterval).Before(time.Now())
+}
+
+func (ec *EstablishingCommon) sendPingsToPeer() *stage.PeerInfo {
+	pi := ec.getPeerInfo()
+	if pi == nil {
+		// Peer info unavailable
+		return nil
+	}
+
+	for _, ep := range types.SetUnion(pi.Endpoints, pi.RendezvousEndpoints) {
+		ec.tm.SendPingDirect(ep, ec.peer, pi.Session)
+	}
+
+	ec.lastPing = time.Now()
+
+	return pi
 }

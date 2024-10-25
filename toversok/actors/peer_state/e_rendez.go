@@ -1,6 +1,8 @@
 package peer_state
 
 import (
+	"context"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
@@ -17,6 +19,11 @@ func (e *EstRendezAck) Name() string {
 func (e *EstRendezAck) OnTick() PeerState {
 	if e.expired() {
 		return LogTransition(e, e.retry())
+	}
+
+	if e.wantsPing() {
+		L(e).Log(context.Background(), types.LevelTrace, "sending periodic ping", "peer", e.peer.Debug())
+		e.sendPingsToPeer()
 	}
 
 	return nil
