@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
@@ -13,8 +14,49 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func zeroBytes(n int) []byte {
-	return make([]byte, n)
+func TestDirectManager(t *testing.T) {
+	// DirectManager uses DirectRouter and a UDP socket in this test
+	dr := &DirectRouter{
+		frameCh: make(chan ifaces.DirectedPeerFrame, DirectRouterFrameChLen),
+	}
+
+	mockUDPConn := &MockUDPConn{
+		writeCh: make(chan []byte),
+		setReadDeadline: func(t time.Time) error {
+			return nil
+		},
+		readFromUDPAddrPort: func(b []byte) (n int, addr netip.AddrPort, err error) {
+			return 0, dummyAddrPort, nil
+		},
+		writeToUDPAddrPort: func(b []byte, addr netip.AddrPort) (int, error) {
+			return 0, nil
+		},
+	}
+
+	s := &Stage{
+		Ctx:     context.TODO(),
+		DRouter: dr,
+	}
+
+	// Make and run DirectManager
+	dm := s.makeDM(mockUDPConn)
+	go dm.Run()
+
+	// Message that should be written to UDP socket
+	udpPkt := []byte{37}
+	dm.WriteTo(udpPkt, dummyAddrPort)
+	pkt := <-mockUDPConn.writeCh
+	assert.Equal(t, udpPkt, pkt, "UDP Socket did not receive the expected message")
+
+	// Message that should be sent to DirectRouter
+	drFrame := RecvFrame{
+		pkt: []byte{42},
+		src: dummyAddrPort,
+	}
+
+	dm.sock.outCh <- drFrame
+	frame := <-dr.frameCh
+	assert.Equal(t, drFrame.pkt, frame.Pkt, "DirectRouter did not receive the expected message")
 }
 
 func TestDirectRouter(t *testing.T) {
@@ -31,7 +73,7 @@ func TestDirectRouter(t *testing.T) {
 	var peerEndpoints []netip.AddrPort
 
 	for _, b := range []byte{1, 2} {
-		peerKey := [32]byte{0}
+		peerKey := dummyKey
 		peerKey[31] = b
 		peerEndpoint := netip.AddrPortFrom(netip.AddrFrom4([4]byte{b, b, b, b}), uint16(b))
 
@@ -51,18 +93,11 @@ func TestDirectRouter(t *testing.T) {
 		inConn: make(map[key.NodePublic]InConnActor),
 	}
 
-	// Run DirectRouter
-	dr := DirectRouter{
-		ActorCommon:   MakeCommon(context.TODO(), 0),
-		s:             s,
-		aka:           make(map[netip.AddrPort]key.NodePublic),
-		stunEndpoints: make(map[netip.AddrPort]bool),
-		frameCh:       make(chan ifaces.DirectedPeerFrame, DirectRouterFrameChLen),
-	}
-
+	// Make and run DirectRouter
+	dr := s.makeDR()
 	go dr.Run()
 
-	// Message that should be sent to Endpoint Manager
+	// Message that should be sent to EndpointManager
 	stunAddrPort := netip.AddrPortFrom(netip.AddrFrom4([4]byte{1, 2, 3, 4}), 1234)
 	dr.stunEndpoints[stunAddrPort] = true
 
@@ -73,19 +108,19 @@ func TestDirectRouter(t *testing.T) {
 
 	dr.Push(frameEndpoint)
 	msgEM := <-em.inbox
-	assert.Equal(t, msgEM, &msgactor.EManSTUNResponse{Endpoint: frameEndpoint.SrcAddrPort, Packet: frameEndpoint.Pkt}, "Endpoint Manager did not receive message")
+	assert.Equal(t, msgEM, &msgactor.EManSTUNResponse{Endpoint: frameEndpoint.SrcAddrPort, Packet: frameEndpoint.Pkt}, "EndpointManager did not receive the expected message")
 
-	// Message that should be sent to Session Manager
+	// Message that should be sent to SessionManager
 	sessionPkt := append(msgsess.MagicBytes, zeroBytes(56)...)
 
 	frameSession := ifaces.DirectedPeerFrame{
-		SrcAddrPort: netip.AddrPortFrom(netip.IPv4Unspecified(), 0),
+		SrcAddrPort: dummyAddrPort,
 		Pkt:         sessionPkt,
 	}
 
 	dr.Push(frameSession)
 	msgSM := <-sm.inbox
-	assert.Equal(t, msgSM, &msgactor.SManSessionFrameFromAddrPort{AddrPort: frameSession.SrcAddrPort, FrameWithMagic: frameSession.Pkt}, "Session Manager did not receive message")
+	assert.Equal(t, msgSM, &msgactor.SManSessionFrameFromAddrPort{AddrPort: frameSession.SrcAddrPort, FrameWithMagic: frameSession.Pkt}, "SessionManager did not receive the expected message")
 
 	// For each peer: register peer in DirectRouter and Stage, and then send a message to their inConn
 	for i, b := range []byte{1, 2} {
@@ -103,6 +138,6 @@ func TestDirectRouter(t *testing.T) {
 
 		dr.Push(frame)
 		pkt := <-ic.pktCh
-		assert.Equal(t, pkt, frame.Pkt, fmt.Sprintf("Peer %d did not receive message", int(b)))
+		assert.Equal(t, pkt, frame.Pkt, fmt.Sprintf("Peer %d did not receive the expected message", int(b)))
 	}
 }
