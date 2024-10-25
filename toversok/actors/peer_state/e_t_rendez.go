@@ -5,6 +5,7 @@ import (
 	"github.com/edup2p/common/types/key"
 	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
+	"time"
 )
 
 // EstRendezGot is a transient state that immediately transitions to EstRendezAck after the first OnTick
@@ -30,6 +31,8 @@ func (e *EstRendezGot) OnTick() PeerState {
 	for _, ep := range e.m.MyAddresses {
 		e.tm.SendPingDirect(ep, e.peer, pi.Session)
 	}
+
+	e.lastPing = time.Now()
 
 	e.resetDeadline()
 

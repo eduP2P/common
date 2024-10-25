@@ -5,6 +5,7 @@ import (
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/relay"
 	"net/netip"
+	"time"
 )
 
 // Messages
@@ -108,7 +109,7 @@ type DManSetMTU struct {
 // RelayManager msgs
 
 type RManRelayLatencyResults struct {
-	// TODO
+	RelayLatency map[int64]time.Duration
 }
 
 //type RManSendSessionMessage struct {
@@ -142,6 +143,8 @@ type EManSTUNResponse struct {
 	Endpoint netip.AddrPort
 
 	Packet []byte
+
+	Timestamp time.Time
 }
 
 // ====

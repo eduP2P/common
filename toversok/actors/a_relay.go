@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"context"
 	"fmt"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/dial"
@@ -27,6 +28,8 @@ type RestartableRelayConn struct {
 
 	stay bool
 
+	connected bool
+
 	lastActivity time.Time
 
 	// Buffered packet channel
@@ -40,6 +43,13 @@ func (c *RestartableRelayConn) noteActivity() {
 	c.lastActivity = time.Now()
 }
 
+func (c *RestartableRelayConn) Poke() {
+	select {
+	case c.pokeCh <- struct{}{}:
+	default:
+	}
+}
+
 func (c *RestartableRelayConn) Run() {
 	for {
 		if c.shouldIdle() {
@@ -47,6 +57,7 @@ func (c *RestartableRelayConn) Run() {
 			case <-c.ctx.Done():
 				return
 			case <-c.pokeCh:
+				continue
 			case p := <-c.bufferCh:
 				c.noteActivity()
 				go func() {
@@ -67,7 +78,11 @@ func (c *RestartableRelayConn) Run() {
 
 		// Established
 
+		c.connected = true
+
 		err := c.loop()
+
+		c.connected = false
 
 		// Possibly the client exited because the relayConn is being closed, check for that first
 		select {
@@ -202,6 +217,12 @@ func (c *RestartableRelayConn) Update(info relay.Information) {
 
 func (c *RestartableRelayConn) StayConnected(stay bool) {
 	c.stay = stay
+
+	c.Poke()
+}
+
+func (c *RestartableRelayConn) IsConnected() bool {
+	return c.connected
 }
 
 func (c *RestartableRelayConn) L() *slog.Logger {
@@ -214,6 +235,7 @@ type RelayConnActor interface {
 	Queue(pkt []byte, peer key.NodePublic)
 	Update(info relay.Information)
 	StayConnected(bool)
+	IsConnected() bool
 }
 
 type relayWriteRequest struct {
@@ -227,7 +249,8 @@ type RelayManager struct {
 
 	s *Stage
 
-	homeRelay int64
+	homeRelay             int64
+	latestHomeRelayChange time.Time
 
 	relays map[int64]RelayConnActor
 
@@ -235,6 +258,8 @@ type RelayManager struct {
 
 	writeCh chan relayWriteRequest
 }
+
+const HomeRelayChangeInterval = time.Minute * 5
 
 func (s *Stage) makeRM() *RelayManager {
 	return &RelayManager{
@@ -268,11 +293,42 @@ func (rm *RelayManager) Run() {
 			rm.Close()
 			return
 		case m := <-rm.inbox:
-			if update, ok := m.(*msgactor.UpdateRelayConfiguration); ok {
-				for _, c := range update.Config {
+			switch m := m.(type) {
+			case *msgactor.UpdateRelayConfiguration:
+				for _, c := range m.Config {
 					rm.update(c)
 				}
-			} else {
+			case *msgactor.RManRelayLatencyResults:
+				newRelay := rm.selectRelay(m.RelayLatency)
+				oldRelay := rm.homeRelay
+
+				if newRelay != oldRelay {
+					if !time.Now().After(rm.latestHomeRelayChange.Add(HomeRelayChangeInterval)) {
+						// it is too soon since the latest change, we want to prevent flapping
+
+						if !rm.relays[oldRelay].IsConnected() {
+							// special case: old relay is not connected anymore
+							slog.Warn("rman: proceeding with home relay change, even though it is too soon since the latest change; old home relay is not connected anymore")
+						} else {
+							slog.Warn("rman: home relay change was suggested, but its too soon since the latest change", "old-relay", oldRelay, "new-relay", newRelay, "latest-change", rm.latestHomeRelayChange.String())
+							continue
+						}
+					}
+
+					rm.homeRelay = newRelay
+
+					rm.relays[oldRelay].StayConnected(false)
+					rm.relays[newRelay].StayConnected(true)
+
+					L(rm).Info("chosen new home relay based on latency", "old-relay", oldRelay, "new-relay", newRelay)
+
+					if err := rm.s.control.UpdateHomeRelay(newRelay); err != nil {
+						L(rm).Warn("control: failed to update home relay", "err", err)
+					}
+
+					rm.latestHomeRelayChange = time.Now()
+				}
+			default:
 				rm.logUnknownMessage(m)
 			}
 		case req := <-rm.writeCh:
@@ -305,6 +361,26 @@ func (rm *RelayManager) Run() {
 
 func (rm *RelayManager) Close() {
 	rm.ctxCan()
+}
+
+func (rm *RelayManager) selectRelay(latencies map[int64]time.Duration) int64 {
+	var srid int64 = 0
+	var slat = 60 * time.Second
+
+	L(rm).Debug("selectRelay: starting latency check")
+
+	for rid, lat := range latencies {
+		L(rm).Log(context.Background(), types.LevelTrace, "selectRelay", "rid", rid, "latency", lat.String())
+
+		if slat > lat {
+			srid = rid
+			slat = lat
+		}
+	}
+
+	L(rm).Debug("selectRelay: ending latency check", "selected", srid, "latency", slat.String())
+
+	return srid
 }
 
 func (rm *RelayManager) getConn(id int64) RelayConnActor {

@@ -1,9 +1,12 @@
 package peer_state
 
 import (
+	"context"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
+	"time"
 )
 
 type EstHalf struct {
@@ -17,6 +20,11 @@ func (e *EstHalf) Name() string {
 func (e *EstHalf) OnTick() PeerState {
 	if e.expired() {
 		return LogTransition(e, e.retry())
+	}
+
+	if e.wantsPing() {
+		L(e).Log(context.Background(), types.LevelTrace, "sending periodic ping", "peer", e.peer.Debug())
+		e.sendPingsToPeer()
 	}
 
 	return nil
@@ -39,6 +47,7 @@ func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerStat
 
 		// Send one as a hail-mary, for if another got lost
 		e.tm.SendPingDirect(ap, e.peer, clear.Session)
+		e.lastPing = time.Now()
 		return nil
 	case *msg2.Pong:
 		e.tm.Poke()

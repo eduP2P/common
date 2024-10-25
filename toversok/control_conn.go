@@ -349,6 +349,10 @@ func (rcs *ResumableControlSession) UpdateEndpoints(endpoints []netip.AddrPort) 
 	return rcs.send(&msgcontrol.EndpointUpdate{Endpoints: endpoints})
 }
 
+func (rcs *ResumableControlSession) UpdateHomeRelay(rid int64) error {
+	return rcs.send(&msgcontrol.HomeRelayUpdate{HomeRelay: rid})
+}
+
 func (rcs *ResumableControlSession) QueueIn(msg msgcontrol.ControlMessage) {
 	rcs.queueMutex.Lock()
 	defer rcs.queueMutex.Unlock()

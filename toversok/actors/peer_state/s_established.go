@@ -68,7 +68,6 @@ func (e *Established) OnTick() PeerState {
 		return LogTransition(e, &Teardown{
 			StateCommon: e.StateCommon,
 			inactive:    false,
-			tryAt:       time.Now(),
 		})
 	}
 

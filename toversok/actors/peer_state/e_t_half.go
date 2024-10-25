@@ -4,6 +4,7 @@ import (
 	"github.com/edup2p/common/types/key"
 	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
+	"time"
 )
 
 type EstHalfIng struct {
@@ -22,6 +23,7 @@ func (e *EstHalfIng) OnTick() PeerState {
 	e.replyWithPongDirect(e.ap, e.sess, e.ping)
 
 	e.tm.SendPingDirect(e.ap, e.peer, e.sess)
+	e.lastPing = time.Now()
 
 	return LogTransition(e, &EstHalf{EstablishingCommon: e.EstablishingCommon})
 }

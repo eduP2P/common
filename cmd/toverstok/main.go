@@ -966,6 +966,12 @@ func (s *StokControl) UpdateEndpoints(endpoints []netip.AddrPort) error {
 	return nil
 }
 
+func (s *StokControl) UpdateHomeRelay(i int64) error {
+	slog.Info("called UpdateHomeRelay", "relay", i)
+
+	return nil
+}
+
 func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 	s.callback = callbacks
 

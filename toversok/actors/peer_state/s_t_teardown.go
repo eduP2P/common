@@ -12,9 +12,6 @@ type Teardown struct {
 
 	// if true, transition to Inactive afterward
 	inactive bool
-
-	// if not inactive, set the tryAt parameter for Trying
-	tryAt time.Time
 }
 
 func (t *Teardown) Name() string {
@@ -36,7 +33,7 @@ func (t *Teardown) OnTick() PeerState {
 
 		return LogTransition(t, &Trying{
 			StateCommon: t.StateCommon,
-			tryAt:       t.tryAt,
+			tryAt:       time.Now(),
 		})
 	}
 }
