@@ -18,5 +18,5 @@ func (p *Pong) MarshalSessionMessage() []byte {
 }
 
 func (p *Pong) Debug() string {
-	return fmt.Sprintf("pong tx=%x", p.TxID)
+	return fmt.Sprintf("pong tx=%x src=%s", p.TxID, p.Src.String())
 }
