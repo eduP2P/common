@@ -41,7 +41,7 @@ case $nat_filter in
     filter_rule="nat prerouting iif $pub_nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
     1)
     # If a mapping is created with source IP \1, source port \2, translated source IP \3 and translated source port \4, all traffic from \3 destined to \4 should be forwarded to \1:\2
-    filter_rule="filter input ip saddr \3 iif $pub_nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
+    filter_rule="nat prerouting ip saddr \3 iif $pub_nat_iface meta l4proto {tcp, udp} th dport \4 counter dnat to \1:\2";;
 esac
 
 # Only monitor new source NAT connections that are created by the nftables masquerade rule
