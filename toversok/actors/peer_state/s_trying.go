@@ -38,6 +38,7 @@ func (t *Trying) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState
 	switch m := clear.Message.(type) {
 	case *msg2.Ping:
 		if !t.pingDirectValid(ap, clear.Session, m) {
+			L(t).Warn("dropping invalid ping", "ap", ap.String())
 			return nil
 		}
 
