@@ -111,7 +111,7 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 
 		if n != nil {
 			tm.forState(*n, func(s peer_state.PeerState) peer_state.PeerState {
-				return s.OnDirect(m.AddrPort, m.Msg)
+				return s.OnDirect(types.NormaliseAddrPort(m.AddrPort), m.Msg)
 			})
 		} else {
 			L(tm).Warn("got message from direct for unknown session", "session", m.Msg.Session.Debug())
