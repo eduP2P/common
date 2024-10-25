@@ -195,7 +195,7 @@ if [[ $connectivity == true ]]; then
     cd $repo_dir/test_suite
 
     echo -e "\nTests with one peer behind a NAT"
-    nat_types=("0-0" "0-1" "0-2" "2-2") # Full Cone, Restricted Cone, Port-restricted Cone, Symmetric
+    nat_types=("0-0" "0-1" "0-2" "2-2") # 0-0 = Full Cone, 0-1 = Restricted Cone,  0-2 = Port Restricted Cone, 2-2 = Symmetric
 
     for nat in ${nat_types[@]}; do
         run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
@@ -209,7 +209,7 @@ if [[ $connectivity == true ]]; then
             nat1=${nat_types[$i]}
             nat2=${nat_types[$j]}
 
-            if [[ $nat1 == "2-2" && $nat2 == "2-2" ]]; then
+            if [[ $nat1 == "2-2" && $nat2 == "2-2" || $nat1 == "0-2" && $nat2 == "2-2" ]]; then
                 test_target="TS_PASS_RELAY"
             else
                 test_target="TS_PASS_DIRECT"

@@ -236,7 +236,7 @@ for i in {0..1}; do
     
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh $optional_args `# Optional arguments` \
-    $peer_id $control_pub_key $control_ip $control_port $log_lvl $log_dir $performance_test_role ${wg_interfaces[$i]} `# Positional parameters` \
+    $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir $performance_test_role ${wg_interfaces[$i]} `# Positional parameters` \
     &> >(sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile) & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
 
     peer_pids+=($!)

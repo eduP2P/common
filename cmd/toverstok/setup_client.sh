@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage_str="""
-Usage: ${0} [OPTIONAL ARGUMENTS] <PEER ID> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <PERFORMANCE TEST ROLE> [WIREGUARD INTERFACE]
+Usage: ${0} [OPTIONAL ARGUMENTS] <PEER ID> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <PERFORMANCE TEST ROLE> [WIREGUARD INTERFACE]
 
 [OPTIONAL ARGUMENTS] can be provided for a performance test:
     -k <packet_loss|bitrate>
@@ -47,20 +47,24 @@ done
 # Shift positional parameters indexing by accounting for the optional arguments
 shift $((OPTIND-1))
 
-# Make sure all mandatory arguments have been passed
-if [[ $# < 7 || $# > 8 ]]; then
-    print_err "expected 7 or 8 positional parameters, but received $#"
+# Make sure all required positional parameters have been passed
+min_req=8
+max_req=9
+
+if [[ $# < $min_req || $# > max_req ]]; then
+    print_err "expected $min_req or $max_req positional parameters, but received $#"
     exit 1
 fi
 
 id=$1
-control_pub_key=$2
-control_ip=$3
-control_port=$4
-log_lvl=$5
-log_dir=$6
-performance_test_role=$7
-wg_interface=$8
+test_target=$2
+control_pub_key=$3
+control_ip=$4
+control_port=$5
+log_lvl=$6
+log_dir=$7
+performance_test_role=$8
+wg_interface=$9
 
 # Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
@@ -79,22 +83,18 @@ out="toverstok_out_${id}.txt"
 # Redirect pipe to toverstok binary, and also store its output in a temporary file
 (sudo ./toverstok < $pipe 2>&1 | tee $out &) # Use sed to copy the combined output stream to the specified log file, until the test suite's exit code is found &)
 
-# Ensure pipe remains open by continuously feeding input in background
-(
-    while true; do
-        echo "" > $pipe
-    done
-)&
+# Ensure pipe remains open by redirecting an infinite sleep to it
+sleep infinity > $pipe &
 
 # Save pid of above background process to kill later
-feed_pipe_pid=$!
+open_pipe_pid=$!
 
 function clean_exit () {
     exit_code = $1
 
     # Kill process continuosly feeding input to toverstok
-    sudo kill $feed_pipe_pid
-    wait $feed_pipe_pid &> /dev/null
+    sudo kill $open_pipe_pid
+    wait $open_pipe_pid &> /dev/null
 
     # Remove pipe
     sudo rm $pipe
@@ -211,8 +211,10 @@ function try_connect() {
 
 try_connect "http://${peer_ipv4}"
 
-# Peers try to connect directly after initial connection, wait until they are finished or until timeout in case direct connection is impossible
-timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
+# Peers try to connect directly after initial connection; if expecting a direct connection, give them some time to establish one
+if [[ $test_target == "TS_PASS_DIRECT" ]]; then
+    timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
+fi
 
 # Try connecting to peer's HTTP server hosted on its IPv4 address
 try_connect "http://[${peer_ipv6}]"
