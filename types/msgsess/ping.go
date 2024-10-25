@@ -32,5 +32,5 @@ func (p *Ping) MarshalSessionMessage() []byte {
 }
 
 func (p *Ping) Debug() string {
-	return fmt.Sprintf("ping tx=%x padding=%v", p.TxID, p.Padding)
+	return fmt.Sprintf("ping tx=%x nodekey=%s padding=%v", p.TxID, p.NodeKey.Debug(), p.Padding)
 }

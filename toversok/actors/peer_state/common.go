@@ -1,11 +1,13 @@
 package peer_state
 
 import (
+	"context"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
+	"log/slog"
 	"net/netip"
 	"time"
 )
@@ -160,9 +162,13 @@ func (ec *EstablishingCommon) sendPingsToPeer() *stage.PeerInfo {
 		return nil
 	}
 
-	for _, ep := range types.SetUnion(pi.Endpoints, pi.RendezvousEndpoints) {
+	endpoints := types.SetUnion(pi.Endpoints, pi.RendezvousEndpoints)
+
+	for _, ep := range endpoints {
 		ec.tm.SendPingDirect(ep, ec.peer, pi.Session)
 	}
+
+	slog.Log(context.Background(), types.LevelTrace, "fanning direct pings to peer", "peer", ec.peer.Debug(), "via-endpoints", types.PrettyAddrPortSlice(endpoints))
 
 	ec.lastPing = time.Now()
 

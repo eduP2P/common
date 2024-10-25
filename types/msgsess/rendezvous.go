@@ -22,5 +22,5 @@ func (r *Rendezvous) MarshalSessionMessage() []byte {
 }
 
 func (r *Rendezvous) Debug() string {
-	return fmt.Sprintf("rendezvous addresses=%#v", r.MyAddresses)
+	return fmt.Sprintf("rendezvous addresses=%s", types.PrettyAddrPortSlice(r.MyAddresses))
 }
