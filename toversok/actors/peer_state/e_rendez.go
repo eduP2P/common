@@ -39,6 +39,7 @@ func (e *EstRendezAck) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) Pee
 	switch m := clear.Message.(type) {
 	case *msg2.Ping:
 		if !e.pingDirectValid(ap, clear.Session, m) {
+			L(e).Warn("dropping invalid ping", "ap", ap.String())
 			return nil
 		}
 
