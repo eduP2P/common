@@ -265,8 +265,7 @@ function performance_test () {
         ;;
     "server") 
         test_timeout=$(($connect_timeout + $performance_test_duration + 1))
-        mkdir $log_dir
-        timeout ${test_timeout}s iperf3 -s -B $ipv4 -p 12345 --json -1 # -1 to close after first connection
+        timeout ${test_timeout}s iperf3 -s -B $ipv4 -p 12345 -1 &> /dev/null # -1 to close after first connection
 
         if [[ $? -ne 0 ]]; then
             echo "TS_FAIL: timeout while listening on iperf server to test performance"
