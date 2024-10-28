@@ -1,16 +1,22 @@
 # eduP2P Test Suite
 
+A CI test suite for the eduP2P prototype.
+
 ## Table of Contents
 
 1.  [Overview](#overview)
-2.  [Requirements](#requirements)
-3.  [System Tests](#system-tests)
-4.  [Performance Tests](#performance-tests)
-5.  [Integration Tests](#integration-tests)
-6.  [Test Results](#test-results)
-7.  [Bibliography](#bibliography)
+    1.  [Requirements](#requirements)
+    2.  [System Tests](#system-tests)
+    3.  [Performance Tests](#performance-tests)
+    4.  [Integration Tests](#integration-tests)
+    5.  [System Test Results](#system-test-results)
+2.  [Results](#results)
+    1.  [System Test Results](#system-test-results)
+    2.  [Performance Test Results](#performance-test-results)
+    3.  [Integration Test Results](#integration-test-results)
+3.  [Bibliography](#bibliography)
 
-## Overview
+# Overview
 
 This test suite verifies whether two clients running the eduP2P
 prototype can successfully establish a connection under various
@@ -23,10 +29,10 @@ workflow running the tests can be found
 The test suite contains three types of tests:
 
 1.  System tests to verify the functionality of the whole system.
-2.  Integration tests to verify the functionality of smaller parts of
-    the system.
-3.  Performance tests to measure metrics such as the delay, jitter and
+2.  Performance tests to measure metrics such as the delay, jitter and
     throughput of the peer-to-peer connection.
+3.  Integration tests to verify the functionality of smaller parts of
+    the system.
 
 ## Requirements
 
@@ -88,13 +94,15 @@ The eduP2P test suite simulates the following network setup:
 ![](./images/network_setup.png)
 
 The setup contains two private networks, with subnets `10.0.1.0/24` and
-`10.0.2.0/24` respectively, each containing one peer. The routers of the
-private networks have a public and private IP. The private IP is part of
-the private subnet, and its host part is `254`. The public IPs of router
-1 and router 2 are `192.168.1.254` and `192.168.2.254`, respectively.
-These routers apply NAT by translating the source IP of outgoing packets
-from the private network to the router’s public IP, and by translating
-the destination IP of incoming packets back to the corresponding private
+`10.0.2.0/24` respectively. In the test suite, each private network
+contains two hosts. In the diagram, only one host is shown per private
+network for the sake of simplicity. The routers of the private networks
+have a public and private IP. The private IP is part of the private
+subnet, and its host part is `254`. The public IPs of router 1 and
+router 2 are `192.168.1.254` and `192.168.2.254`, respectively. These
+routers apply NAT by translating the source IP of outgoing packets from
+the private network to the router’s public IP, and by translating the
+destination IP of incoming packets back to the corresponding private
 host’s address.
 
 There is a network switch with IP address `192.168.0.254` in between the
@@ -452,7 +460,460 @@ following commands:
     go test -coverprofile cover.out -v ./...
     go tool cover -html cover.out -o cover.html
 
-## Test Results
+# Results
+
+The results are split in a separate section for the system tests,
+performance tests, and integration tests.
+
+## System Test Results
+
+Using the test suite’s system tests, we can get an overview of whether
+two eduP2P peers are able to establish a direct connection using UDP
+hole punching when both peers are behind various types of NAT.
+
+When considering the four types of NAT described in RFC 3489
+[\[6\]](#ref-rfc3489), the results of using UDP hole punching to
+establish a connection between peers are well-established
+[\[7\]](#ref-wacker2008) [\[8\]](#ref-hole_punching_table).
+
+This test suite uses the RFC 4787 [\[3\]](#ref-rfc4787) terminology,
+which does not categorize NAT into these four types. However, each of
+these four types of NAT described in RFC 3489 uses a different
+combination of the NAT mapping and filtering behaviour described in RFC
+4787. Below, the four types of NAT from RFC 3489 are listed, while
+noting the RFC 4787 mapping and filtering behaviour they are equivalent
+to:
+
+-   **Full Cone NAT:** equivalent to a NAT with Endpoint-Independent
+    Mapping (EIM) and Endpoint-Independent Filtering (EIF).
+-   **Restricted Cone NAT:** equivalent to a NAT with
+    Endpoint-Independent Mapping (EIM) and Address-Dependent Filtering
+    (ADF).
+-   **Port Restricted Cone NAT:** equivalent to a NAT with
+    Endpoint-Independent Mapping (EIM) and Address and Port-Dependent
+    Filtering (ADPF).
+-   **Symmetric NAT:** equivalent to a NAT with Address and
+    Port-Dependent Mapping (ADPM) and Address and Port-Dependent
+    Filtering (ADPF).
+
+The expected results are shown in the table below. A cell is marked with
+an ‘X’ if UDP hole punching is successful in the scenario where one peer
+is behind the NAT indicated by the cell’s row header, and the other peer
+is behind the NAT indicated by the cell’s column header.
+
+<table style="width:98%;">
+<colgroup>
+<col style="width: 19%" />
+<col style="width: 13%" />
+<col style="width: 21%" />
+<col style="width: 28%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">NAT Type</th>
+<th style="text-align: left;">Full Cone</th>
+<th style="text-align: left;">Restricted Cone</th>
+<th style="text-align: left;">Port Restricted Cone</th>
+<th style="text-align: left;">Symmetric</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Full Cone</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Restricted Cone</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Port Restricted Cone</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Symmetric</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+</tr>
+</tbody>
+</table>
+
+In the next section, the experiment involving the four types of NAT from
+RFC 3489 is repeated for eduP2P, in order to compare its results to the
+table above. In the section after that, the experiment is extended such
+that the NATs use every possible combination of RFC 4787 NAT mapping and
+filtering behaviour.
+
+### Experiment with RFC 3489 NAT types
+
+The results of this experiment differed from the expected results shown
+in the table above:
+
+<table style="width:98%;">
+<colgroup>
+<col style="width: 19%" />
+<col style="width: 13%" />
+<col style="width: 21%" />
+<col style="width: 28%" />
+<col style="width: 14%" />
+</colgroup>
+<thead>
+<tr>
+<th style="text-align: left;">NAT Type</th>
+<th style="text-align: left;">Full Cone</th>
+<th style="text-align: left;">Restricted Cone</th>
+<th style="text-align: left;">Port Restricted Cone</th>
+<th style="text-align: left;">Symmetric</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Full Cone</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Restricted Cone</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Port Restricted Cone</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;"></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Symmetric</strong></td>
+<td style="text-align: left;">X</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"></td>
+</tr>
+</tbody>
+</table>
+
+Comparing the tables, we see that eduP2P is not able to establish a
+direct connection when one peer is behind a Port Restricted Cone NAT and
+the other behind a Symmetric NAT, while this should be possible with UDP
+hole punching. Finding out why eduP2P fails to establish a direct
+connection in this scenario required investigating the traffic between
+the two peers, and the logs generated by the system tests. The cause of
+the failure was a combination of two factors:
+
+1.  In eduP2P, each peer only sends two “pings” during the UDP hole
+    punching process.
+2.  In the test suite, the NAT simulation contains some delay due to the
+    monitoring script used for NAT filtering.
+
+#### Failure due to only sending two pings
+
+The first factor causes a race condition in the UDP hole punching
+process: the process only succeeds if the pings are sent in a specific
+order. Specifically, the peer behind the Restricted Cone NAT must send
+its first ping before the peer behind the Symmetric NAT sends its first
+ping. If the first pings are sent in the reverse order, the hole
+punching process will fail, as illustrated in the diagram below:
+
+       sequenceDiagram
+          autonumber
+
+          actor p1 as Peer 1 (X:x)
+          participant rc as Restricted Cone NAT
+          participant sym as Symmetric NAT
+          actor p2 as Peer 2 (Y:y)
+
+          %% Ping 1 from Peer 2
+          p2->>sym: Ping from Y:y to X':x1'
+          Note over sym: SNAT Y:y #8594; Y':y2'
+          sym--xrc: Ping from Y':y2' to X':x1'
+          Note over rc: DROP: src IP #8800; Z
+
+          %% Ping 1 from Peer 1
+          p1->>rc: Ping from X:x to Y':y1'
+          Note over rc: SNAT X:x #8594; X':x1'
+          rc--xsym: Ping from X':x1' to Y':y1'
+          Note over sym: DROP: src #8800; Z:z
+
+          %% Fail
+          Note over p1,p2: UDP hole punching failed
+          
+
+In this diagram, we denote the private endpoints of Peer 1 and Peer 2 by
+`X:x` and `Y:y` respectively. Furthermore, we denote the “STUN
+endpoints” of these peers by `X':x1'` and `Y':y1'` respectively. These
+STUN endpoints are the source IP and port used by the peers’ NAT boxes
+when they communicate with the STUN server, which is a part of eduP2P’s
+relay server and has endpoint `Z:z`. The STUN endpoints of the peers are
+exchanged via eduP2P’s control server, as the peers need each other’s
+STUN endpoints to perform hole punching.
+
+Because Peer 1 is behind a Restricted Cone NAT (which has
+Endpoint-Independent Mapping behaviour), packets from Peer 1 to Peer 2’s
+STUN endpoint will use Peer 1’s STUN endpoint `X':x1'` as the translated
+source IP and port. On the other hand, Peer 2 is behind a Symmetric NAT
+(which has Address and Port-Dependent Mapping behaviour), so packets
+from Peer 2 to Peer 1’s STUN endpoint will be translated to a different
+source IP and port, which we denote as `Y':y2'`.
+
+As seen in the diagram, the first ping of both peers will be filtered by
+the other peer’s NAT. The Restricted Cone NAT only accepts packets
+destined to `X':x1'` when they have source IP `Z`, while the Symmetric
+NAT only accepts packets destined to `X':x1'` when they have source
+endpoint `Z:z`. In eduP2P, the second ping is only sent upon upon
+receiving a ping from the peer, so in this case neither peer will send a
+second ping, and the hole punching process fails.
+
+Of all NAT scenarios involving combinations of the four RFC 3489 NAT
+types where UDP hole punching should succeed, the combination of one
+Restricted Cone NAT and one Symmetric NAT is the only combination where
+the order of the pings may cause it to fail. This is the case because of
+two properties of the ping order:
+
+1.  The ping order is only relevant if one of the NATs is a Symmetric
+    NAT. When performing UDP hole punching with a Symmetric NAT, the
+    pings sent *to* the Symmetric NAT will always be filtered. However
+    these pings still have some use: in case the other NAT is a
+    Restricted Cone NAT, these pings punch a hole in the NAT to allow
+    the pings *from* the Symmetric NAT to go through. Therefore, the
+    Symmetric NAT’s first ping must be sent after the other NAT’s first
+    ping if this other NAT is a Restricted Cone NAT
+2.  The ping order is not relevant if one of the NATs is a Full Cone
+    NAT, as such a NAT always lets the first ping of the other NAT
+    through.
+
+#### Failure due to NAT filtering delay
+
+Even if the pings are sent in the correct order, the hole punching
+process still fails in the test suite because of the second factor, as
+illustrated in the next diagram:
+
+       sequenceDiagram
+          autonumber
+
+          actor p1 as Peer 1 (X:x)
+          participant rc as Restricted Cone NAT
+          participant sym as Symmetric NAT
+          actor p2 as Peer 2 (Y:y)
+
+          %% Ping 1 from Peer 1
+          p1->>rc: Ping from X:x to Y':y1'
+          Note over rc: SNAT X:x #8594; X':x1'
+          rc--xsym: Ping from X':x1' to Y':y1'
+          activate rc
+             Note over sym: DROP: src #8800; Z:z
+
+             %% Ping 1 from Peer 2
+             p2->>sym: Ping from Y:y to X':x1'
+             Note over sym: SNAT Y:y #8594; Y':y2'
+             sym--xrc: Ping from Y':y2' to X':x1'
+             Note over rc: DROP: src IP #8800; Z
+             Note over rc: Added rule: <br/> DNAT to X:x if src IP = Y, dst = X':x1'
+          deactivate rc
+
+          %% Fail
+          Note over p1,p2: UDP hole punching failed
+
+As seen in the diagram, the ping from Peer 2 to Peer 1 is still
+filtered, even though Peer 1 sent a ping first. When Peer 1 sents its
+ping, a new session `(X:x,Y':y1')` will be added in the Linux conntrack
+module, and outgoing packets belonging to this session will have their
+source IP and port translated to `X':x1'`.
+
+The test suite uses a script to monitor these new sessions. In order to
+simulate the Address-Dependent Filtering behaviour of a Restricted Cone
+NAT, the script adds an nftables rule to translate the destination
+endpoint of packets destined to `X':x1'` back to `X:x` if they have
+source IP `Y`, such that they are routed to Peer 1. However, since there
+is a bit of delay in this process, the rule is only added *after* Peer 1
+receives the ping from Peer 2. Because the rule does not exist yet when
+the Restricted Cone NAT receives the ping from Peer 2, it is still
+dropped.
+
+Just like with the problem of the peers only sending two pings, the
+delay in the filtering script only causes UDP hole punching to fail for
+the combination of one Restricted Cone NAT and one Symmetric NAT. This
+the case because of three properties of the filtering script:
+
+1.  The filtering script is only required to handle incoming packets
+    that come from an endpoint that is *different* from the original
+    session’s endpoint. This only happens if the mapping behaviour of
+    the peer’s NAT is not Endpoint-Independent, i.e., only with a
+    Symmetric NAT.
+2.  The filtering script only performs the conntrack monitoring process
+    if the filtering behaviour is *not* Address and Port-Dependent,
+    i.e., only with a Full Cone or Restricted Cone NAT. For Address and
+    Port Dependent Mapping behaviour, packets that do *not* come from
+    the original session’s endpoint should be dropped, so the process is
+    unnecessary.
+3.  The delay of the filtering script is only an issue for Restricted
+    Cone NATs. With Full Cone NAT, the source of packets from Peer 1 is
+    always translated in the same way, e.g. to `X':x1'`, regardless of
+    their destination. In the test suite, the first connection initiated
+    by Peer 1 is to the eduP2P control server. When this happens, the
+    filtering script adds a rule to translate the destination of all
+    packets destined to `X':x1'` back to `X:x`, regardless of the
+    packets’ source. Because the connection with the control server is
+    initiated quite some time before the peers start the UDP hole
+    punching process, the delay in adding the nftables rule does not
+    pose a problem.
+
+#### Solution
+
+There is a simple solution to solve the problems caused by these two
+factors: during the hole punching process, a larger amount of pings
+should be sent, with some time between each ping, e.g. 1 second. This
+way, the race condition dissappears; even if the peer behind the
+Symmetric NAT is the first to send a ping, it will send another after
+the peer behind the Restricted Cone NAT has sent its first ping.
+Furthermore, the period of time between each ping gives the NAT
+simulation enough time to update the nftables rules, so that the next
+incoming ping is no longer filtered.
+
+After these problems with eduP2P’s hole punching process became clear
+due to the system tests, the solution described above has been
+implemented in eduP2P, as mentioned in [this issue from the eduP2P
+GitHub repository](https://github.com/eduP2P/common/issues/78). The
+following diagram shows that the solution causes the hole punching
+process to succeed, despite the pings being sent in the incorrect order
+and the some delay in the filtering script:
+
+       sequenceDiagram
+          autonumber
+
+          actor p1 as Peer 1 (X:x)
+          participant rc as Restricted Cone NAT
+          participant sym as Symmetric NAT
+          actor p2 as Peer 2 (Y:y)
+
+          %% Ping 1 from Peer 2
+          p2->>sym: Ping from Y:y to X':x1'
+          activate p2
+          Note over p2: Wait 1s
+          Note over sym: SNAT Y:y #8594; Y':y2'
+          sym--xrc: Ping from Y':y2' to X':x1'
+          Note over rc: DROP: src IP #8800; Z
+
+          %% Ping 1 from Peer 1
+          p1->>rc: Ping from X:x to Y':y1'
+          activate p1
+          Note over p1: Wait 1s
+          Note over rc: SNAT X:x #8594; X':x1'
+          rc--xsym: Ping from X':x1' to Y':y1'
+          activate rc
+          Note over sym: DROP: src #8800; Z:z
+       
+          %% Ping 2 from Peer 2
+          deactivate p2
+          p2->>sym: Ping from Y:y to X':x1'
+          activate p2
+          Note over p2: Wait 1s
+          Note over sym: SNAT Y:y #8594; Y':y2'
+          sym--xrc: Ping from Y':y2' to X':x1'
+          Note over rc: DROP: src IP #8800; Z
+          Note over rc: Added rule: <br/> DNAT to X:x if src IP = Y, dst = X':x1'
+          deactivate rc
+
+          %% Ping 2 from Peer 2
+          deactivate p1
+          p1->>rc: Ping from X:x to Y':y1'
+          activate p1
+          Note over p1: Wait 1s
+          Note over rc: SNAT X:x #8594; X':x1'
+          rc--xsym: Ping from X':x1' to Y':y1'
+          activate rc
+          Note over sym: DROP: src #8800; Z:z
+          
+          %% Ping 2 from Peer 2
+          deactivate p2
+          p2->>sym: Ping from Y:y to X':x1'
+          activate p2
+          Note over p2: Wait 1s
+          Note over sym: SNAT Y:y #8594; Y':y2'
+          sym->>rc: Ping from Y':y2' to X':x1'
+          Note over rc: DNAT X':x1' #8594; X:x
+          rc->>p1: Ping from Y':y2' to X:x
+
+          %% Pong from Peer 1
+          deactivate p1
+          p1->>rc: Pong from X:x to Y':y2'
+          activate p1
+          Note over p1: Wait 1s
+          Note over rc: SNAT X:x #8594; X':x1'
+          rc->>sym: Pong from X':x1' to Y':y2'
+          Note over sym: DNAT Y':y2' #8594; Y:y
+          sym->>p2: Pong from X':x1' to Y':y2'
+          
+          %% Success
+          Note over p1,p2: UDP hole punching succeeded
+          deactivate p2
+          deactivate p1
+          
+       
+
+Messages 1 through 6 show how the previously explained race condition
+and filtering script delay cause the first three pings to be filtered.
+In messages 7 and 9, we see how the peers send another ping 1 second
+after their previous one. The ping from Peer 1 is still filtered because
+Peer 2 is behind a symmetric NAT. However, the ping from Peer 2 is let
+through the Restricted Cone NAT to reach Peer 1, since the test suite’s
+NAT filtering script added an nftables rule to do so. In response, Peer
+1 sends a pong back to Peer 2 in message 12. It should be noted that
+this is the first packet that Peer 1 sends to port `y2'` on the
+Symmetric NAT. Because Peer 2’s first ping to Peer 1 created a session
+(`Y:y`, `X':x1'`) on the Symmetric NAT where `Y:y` is mapped to
+`Y':y2'`, the pong from Peer 1 is let through the Symmetric NAT and
+reaches Peer 2. Therefore, UDP hole punching has succeeded.
+
+This solution improves the robustness of eduP2P’s UDP hole punching
+process. In the test suite, eduP2P can establish a direct connection
+between peers behind the combinations of the four RFC 3489 NAT types for
+which UDP hole punching is expected to succeed. Furthermore, it is also
+more likely to succeed now in real-life scenarios, where a NAT’s
+filtering behaviour might be slightly delayed like in the test suite.
+Finally, since more pings are sent during the hole punching process, it
+is also more likely to succeed in network conditions with packet loss.
+
+### Experiment with RFC 4787 NAT mapping & filtering behaviours
+
+TODO
+
+## Performance Test Results
+
+One interesting result found using the test suite’s performance test is
+that as the target bitrate of the connection increases, the percentage
+of packet loss gets quite high. This result was found in a performance
+test between peers in the router1 and router2 network namespaces, where
+the target bitrate ranged from 100 to 1000 Mbps, with a step size of 100
+Mbps. As the bitrate increases, the packet loss gets as high as 8%.
+
+To make sure the packet loss is caused by eduP2P, the performance test
+was repeated in the same conditions without eduP2P. Instead of starting
+the iperf3 server on a peer’s virtual IP address, the router’s real IP
+address was used. Additionally, the performance test was also repeated
+in the same conditions with both peers using WireGuard. The results in
+the graph below suggest that the problem does lie with eduP2P:
+
+![](./images/packet_loss_comparison.png)
+
+## Integration Test Results
 
 TODO
 
@@ -488,3 +949,21 @@ connection tracking</span>.” Available:
 </span><span class="csl-right-inline">“<span class="nocase">iperf3 -
 perform network throughput tests</span>.” Available:
 <https://manpages.org/iperf3></span>
+
+<span class="csl-left-margin">\[6\]
+</span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
+and J. Weinberger, “<span class="nocase">STUN - Simple Traversal of User
+Datagram Protocol (UDP) Through Network Address Translators
+(NATs)</span>.” in Request for comments. RFC 3489; RFC Editor, Mar.
+2003. doi: [10.17487/RFC3489](https://doi.org/10.17487/RFC3489).</span>
+
+<span class="csl-left-margin">\[7\]
+</span><span class="csl-right-inline">A. Wacker, G. Schiele, S.
+Holzapfel, and T. Weis, “A NAT traversal mechanism for peer-to-peer
+networks,” Oct. 2008, pp. 81–83. doi:
+[10.1109/P2P.2008.29](https://doi.org/10.1109/P2P.2008.29).</span>
+
+<span class="csl-left-margin">\[8\]
+</span><span class="csl-right-inline">“Understanding different NAT types
+and hole-punching.” Available:
+<https://support.dh2i.com/docs/Archive/kbs/general/understanding-different-nat-types-and-hole-punching/></span>
