@@ -10,6 +10,7 @@ import (
 	"golang.org/x/exp/maps"
 	"log/slog"
 	"net/netip"
+	"runtime"
 )
 
 type directWriteRequest struct {
@@ -51,6 +52,8 @@ func (dm *DirectManager) Run() {
 	}
 
 	go dm.sock.Run()
+
+	runtime.LockOSThread()
 
 	for {
 		select {
@@ -162,6 +165,8 @@ func (dr *DirectRouter) Run() {
 		L(dr).Warn("tried to run agent, while already running")
 		return
 	}
+
+	runtime.LockOSThread()
 
 	for {
 		select {
