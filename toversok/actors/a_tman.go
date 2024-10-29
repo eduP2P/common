@@ -233,8 +233,6 @@ func (tm *TrafficManager) ensurePeerState(peer key.NodePublic) {
 		tm.peerState[peer] = peer_state.MakeWaiting(tm, peer)
 		tm.Poke()
 	}
-
-	return
 }
 
 func (tm *TrafficManager) Close() {
@@ -366,7 +364,7 @@ func (tm *TrafficManager) SendPingRelay(relay int64, peer key.NodePublic, sessio
 
 	tm.pings[txid] = &stage.SentPing{
 		ToRelay: true,
-		RelayId: relay,
+		RelayID: relay,
 		At:      time.Now(),
 		To:      peer,
 	}

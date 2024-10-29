@@ -256,18 +256,18 @@ func getOrGenerateKey(file string, c *ishell.Context) (key.NodePrivate, error) {
 			}
 
 			return k, nil
-		} else {
-			return k, fmt.Errorf("cannot read key file %s: %w", file, err)
-		}
-	} else {
-		if err = json.Unmarshal(data, &k); err != nil {
-			return k, fmt.Errorf("failed to unmarshal private key: %w", err)
 		}
 
-		c.Println("loaded from", file)
-
-		return k, nil
+		return k, fmt.Errorf("cannot read key file %s: %w", file, err)
 	}
+
+	if err = json.Unmarshal(data, &k); err != nil {
+		return k, fmt.Errorf("failed to unmarshal private key: %w", err)
+	}
+
+	c.Println("loaded from", file)
+
+	return k, nil
 }
 
 // Proper Control commands
@@ -462,7 +462,7 @@ func fcCmd() *ishell.Cmd {
 
 			if err = fakeControl.addPeer(PeerDef{
 				Key:         *peerKey,
-				HomeRelayId: relay,
+				HomeRelayID: relay,
 				SessionKey:  session,
 				Endpoints:   endpoints,
 				VIPs: toversok.VirtualIPs{
@@ -928,7 +928,7 @@ func enCmd() *ishell.Cmd {
 type PeerDef struct {
 	Key key.NodePublic
 
-	HomeRelayId int64
+	HomeRelayID int64
 	SessionKey  key.SessionPublic
 	Endpoints   []netip.AddrPort
 
@@ -984,7 +984,7 @@ func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 
 	for _, peer := range s.peers {
 		if err := callbacks.AddPeer(
-			peer.Key, peer.HomeRelayId, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6,
+			peer.Key, peer.HomeRelayID, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6,
 		); err != nil {
 			slog.Error("AddPeer errored", "err", err, "peer", peer.Key.Debug())
 			return
@@ -1010,7 +1010,7 @@ func (s *StokControl) addPeer(
 
 	if s.callback != nil {
 		err = s.callback.AddPeer(
-			peer.Key, peer.HomeRelayId, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6,
+			peer.Key, peer.HomeRelayID, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6,
 		)
 	}
 

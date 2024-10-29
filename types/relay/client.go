@@ -261,7 +261,9 @@ func (c *Client) recvServerInfo() (*ServerInfo, error) {
 
 func (c *Client) Cancel(err error) {
 	c.ccc(err)
-	c.mc.SetDeadline(time.Now().Add(10 * time.Millisecond))
+	if err := c.mc.SetDeadline(time.Now().Add(10 * time.Millisecond)); err != nil {
+		slog.Error("could not set deadline in Cancel", "err", err)
+	}
 }
 
 func (c *Client) Close() {

@@ -12,6 +12,7 @@ import (
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/types/relay/relayhttp"
 	"log/slog"
+	"runtime"
 	"time"
 )
 
@@ -287,6 +288,8 @@ func (rm *RelayManager) Run() {
 		return
 	}
 
+	runtime.LockOSThread()
+
 	for {
 		select {
 		case <-rm.ctx.Done():
@@ -455,6 +458,8 @@ func (rr *RelayRouter) Run() {
 		L(rr).Warn("tried to run agent, while already running")
 		return
 	}
+
+	runtime.LockOSThread()
 
 	for {
 		select {

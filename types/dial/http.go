@@ -34,14 +34,18 @@ func HTTP[T any](ctx context.Context, opts Opts, url, protocol string, makeClien
 		return nil, fmt.Errorf("could not flush http request: %w", err)
 	}
 
-	netConn.SetReadDeadline(time.Now().Add(time.Second * 5))
+	if err := netConn.SetReadDeadline(time.Now().Add(time.Second * 5)); err != nil {
+		return nil, fmt.Errorf("could not set read deadline: %w", err)
+	}
 	resp, err := http.ReadResponse(brw.Reader, req)
 	if err != nil {
 		return nil, fmt.Errorf("could not read http response: %w", err)
 	}
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			return nil, fmt.Errorf("could not close http response body: %w", err)
+		}
 		return nil, fmt.Errorf("GET did not result in 101 response code: %w: %d \"%s\"", err, resp.StatusCode, b)
 	}
 

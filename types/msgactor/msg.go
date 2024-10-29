@@ -93,12 +93,6 @@ type OutConnUse struct {
 // ======================================================================================================
 // DirectManager msgs
 
-//type DManSendSessionMessage struct {
-//	AddrPort netip.AddrPort
-//
-//	rawFrame []byte
-//}
-
 type DManSetMTU struct {
 	ForAddrPort netip.AddrPort
 
@@ -111,14 +105,6 @@ type DManSetMTU struct {
 type RManRelayLatencyResults struct {
 	RelayLatency map[int64]time.Duration
 }
-
-//type RManSendSessionMessage struct {
-//	relay int64
-//
-//	dst key.NodePublic
-//
-//	rawFrame []byte
-//}
 
 // ======================================================================================================
 // DirectRouter msgs

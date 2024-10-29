@@ -18,9 +18,9 @@ func (w *WaitingForInfo) Name() string {
 func (w *WaitingForInfo) OnTick() PeerState {
 	if pi := w.tm.Stage().GetPeerInfo(w.peer); pi != nil && !pi.Session.IsZero() {
 		return LogTransition(w, &Inactive{StateCommon: w.StateCommon})
-	} else {
-		return nil
 	}
+
+	return nil
 }
 
 func (w *WaitingForInfo) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {

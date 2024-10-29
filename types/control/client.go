@@ -8,6 +8,7 @@ import (
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
+	"log/slog"
 	"net/netip"
 	"time"
 )
@@ -61,8 +62,14 @@ func (c *Client) Handshake(timeout time.Duration) error {
 	//  4. expect LogonAccept|LogonReject
 
 	if timeout != 0 {
-		c.cc.mc.SetDeadline(time.Now().Add(timeout))
-		defer c.cc.mc.SetDeadline(time.Time{})
+		if err := c.cc.mc.SetDeadline(time.Now().Add(timeout)); err != nil {
+			return fmt.Errorf("can't set deadline: %w", err)
+		}
+		defer func() {
+			if err := c.cc.mc.SetDeadline(time.Time{}); err != nil {
+				slog.Error("failed to reset deadline in defer", "err", err)
+			}
+		}()
 	}
 
 	if err := c.cc.Write(&msgcontrol.ClientHello{
@@ -99,7 +106,9 @@ func (c *Client) Handshake(timeout time.Duration) error {
 	}
 
 	// Disable timeout for this
-	c.cc.mc.SetDeadline(time.Time{})
+	if err := c.cc.mc.SetDeadline(time.Time{}); err != nil {
+		return fmt.Errorf("failed to reset deadline: %w", err)
+	}
 	msg, err := c.cc.Read(0)
 	if err != nil {
 		return fmt.Errorf("error when receiving after-logon message: %w", err)

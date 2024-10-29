@@ -14,13 +14,9 @@ type canTextMarshal interface {
 	encoding.TextMarshaler
 	encoding.TextUnmarshaler
 
-	// TODO maybe also allow/support BSON marshalling
-	//bson.ValueMarshaler
-	//bson.Unmarshaler
-
 	// TODO maybe also allow/support binary marshalling
-	// encoding.BinaryMarshaler
-	// encoding.BinaryUnmarshaler
+	//  encoding.BinaryMarshaler
+	//  encoding.BinaryUnmarshaler
 }
 
 //type canBsonMarshal interface {

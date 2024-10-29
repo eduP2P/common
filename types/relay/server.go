@@ -142,7 +142,9 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 	//  We could do the same, but this is simpler for now.
 	writer := brw.Writer
 
-	mc.SetDeadline(time.Now().Add(10 * time.Second))
+	if err := mc.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return fmt.Errorf("could not set initial deadline: %w", err)
+	}
 
 	if err := s.sendVersion(writer); err != nil {
 		return fmt.Errorf("send version: %w", err)
@@ -152,7 +154,9 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 		return fmt.Errorf("send server key: %w", err)
 	}
 
-	mc.SetDeadline(time.Now().Add(10 * time.Second))
+	if err := mc.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return fmt.Errorf("could not set after-serverkey deadline: %w", err)
+	}
 	clientKey, clientInfo, err := s.receiveClientKeyAndInfo(reader)
 	if err != nil {
 		return err
@@ -161,7 +165,9 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 	// TODO add verification here?
 
 	// We now trust the client, clear deadline.
-	mc.SetDeadline(time.Time{})
+	if err := mc.SetDeadline(time.Time{}); err != nil {
+		return fmt.Errorf("could not reset deadline: %w", err)
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

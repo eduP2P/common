@@ -26,7 +26,7 @@ func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, 
 	opts.SetDefaults()
 
 	c, err := dial.HTTP(ctx, opts, makeRelayURL(opts), relay.UpgradeProtocol, func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*relay.Client, error) {
-		return relay.EstablishClient(ctx, mc, brw, opts.EstablishTimeout, getPriv)
+		return relay.EstablishClient(parentCtx, mc, brw, opts.EstablishTimeout, getPriv)
 	})
 	if err != nil {
 		return nil, err

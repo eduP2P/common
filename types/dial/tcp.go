@@ -28,11 +28,12 @@ func WithTLS(ctx context.Context, opts Opts) (net.Conn, error) {
 func TLS(conn net.Conn, opts Opts) *tls.Conn {
 	cfg := new(tls.Config)
 
-	if opts.ExpectCertCN != "" {
+	switch {
+	case opts.ExpectCertCN != "":
 		cfg.ServerName = opts.ExpectCertCN
-	} else if opts.Domain != "" {
+	case opts.Domain != "":
 		cfg.ServerName = opts.Domain
-	} else {
+	default:
 		panic("TLS defined, but no domain provided")
 	}
 

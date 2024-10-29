@@ -9,7 +9,7 @@ import (
 
 type SentPing struct {
 	ToRelay  bool
-	RelayId  int64
+	RelayID  int64
 	AddrPort netip.AddrPort
 	At       time.Time
 	To       key.NodePublic

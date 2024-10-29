@@ -58,21 +58,21 @@ func SetUnion[T comparable](a, b []T) []T {
 func PtrOr[T any](v *T, def T) T {
 	if v == nil {
 		return def
-	} else {
-		return *v
 	}
+
+	return *v
 }
 
 func SliceOrEmpty[T any](v []T) []T {
 	if v == nil {
 		return []T{}
-	} else {
-		return v
 	}
+
+	return v
 }
 
 func SliceOrNil[T any](v []T) []T {
-	if v == nil || (v != nil && len(v) > 0) {
+	if (v != nil && len(v) > 0) || (v == nil) {
 		return v
 	} else {
 		// len(v) == 0

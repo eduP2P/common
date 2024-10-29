@@ -14,7 +14,7 @@ import (
 // rand fills b with cryptographically strong random bytes. Panics if
 // no random bytes are available.
 func rand(b []byte) {
-	if _, err := io.ReadFull(crand.Reader, b[:]); err != nil {
+	if _, err := io.ReadFull(crand.Reader, b); err != nil {
 		panic(fmt.Sprintf("unable to read random bytes from OS: %v", err))
 	}
 }

@@ -124,10 +124,8 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 			go sess.Run()
 		}
 
-		select {
-		case <-ctx.Done():
-			// connection dead, exit
-		}
+		// Wait until connection dead
+		<-ctx.Done()
 
 		return ctx.Err()
 
@@ -212,39 +210,37 @@ func (s *Server) ReEstablishOrMakeSession(cc *Conn, nodeKey key.NodePublic, sess
 		s.sessions[nodeKey] = retSess
 
 		return
-	} else {
-		// less simple path: we have a session in state for this nodekey
-
-		if sess.state != Dangling {
-			// We only accept resuming dangling sessions, everything else is incorrect.
-			err = incorrectState
-
-			if sess.state == Established || sess.state == ReEstablishing {
-				// The server may lag behind for a second, so if we wrap this error and return the session,
-				// the caller could knock that session to force it to Dangling.
-
-				err = fmt.Errorf("established state (%w): %w", err, stillEstablished)
-				retSess = sess
-			}
-
-			return
-		} else {
-			// Session is dangling, we can grab it
-
-			if sessId != nil && sess.ID != *sessId {
-				// Cant resume, the client expects a different session ID
-
-				err = sessionIdMismatch
-				return
-			}
-
-			retSess = sess
-
-			slog.Info("RESUME session", "peer", sess.Peer.Debug())
-
-			return
-		}
 	}
+
+	// less simple path: we have a session in state for this nodekey
+	if sess.state != Dangling {
+		// We only accept resuming dangling sessions, everything else is incorrect.
+		err = incorrectState
+
+		if sess.state == Established || sess.state == ReEstablishing {
+			// The server may lag behind for a second, so if we wrap this error and return the session,
+			// the caller could knock that session to force it to Dangling.
+
+			err = fmt.Errorf("established state (%w): %w", err, stillEstablished)
+			retSess = sess
+		}
+
+		return
+	}
+
+	// Session is dangling, we can grab it
+	if sessId != nil && sess.ID != *sessId {
+		// Cant resume, the client expects a different session ID
+
+		err = sessionIdMismatch
+		return
+	}
+
+	retSess = sess
+
+	slog.Info("RESUME session", "peer", sess.Peer.Debug())
+
+	return
 }
 
 func (s *Server) RemoveSession(sess *ServerSession) {
