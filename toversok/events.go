@@ -27,7 +27,7 @@ func (r RelayUpdate) EventName() string {
 type PeerAddition struct {
 	Key key.NodePublic
 
-	HomeRelayId int64
+	HomeRelayID int64
 	SessionKey  key.SessionPublic
 	Endpoints   []netip.AddrPort
 
@@ -41,7 +41,7 @@ func (p PeerAddition) EventName() string {
 type PeerUpdate struct {
 	Key key.NodePublic
 
-	HomeRelayId gonull.Nullable[int64]
+	HomeRelayID gonull.Nullable[int64]
 	SessionKey  gonull.Nullable[key.SessionPublic]
 	Endpoints   gonull.Nullable[[]netip.AddrPort]
 }

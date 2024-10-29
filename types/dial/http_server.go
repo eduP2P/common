@@ -42,8 +42,8 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 		}
 
 		// TODO re-add publickey frontloading?
-		//pubKey := s.PublicKey()
-		// "Relay-Public-Key: %s\r\n\r\n",pubKey.HexString()
+		//  pubKey := s.PublicKey()
+		//  "Relay-Public-Key: %s\r\n\r\n",pubKey.HexString()
 
 		fmt.Fprintf(brw, "HTTP/1.1 101 Switching Protocols\r\n"+
 			"Upgrade: %s\r\n"+

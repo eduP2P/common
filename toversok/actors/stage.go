@@ -207,8 +207,6 @@ func (s *Stage) reapConns() {
 		delete(s.outConn, peer)
 		delete(s.inConn, peer)
 	}
-
-	return
 }
 
 func (s *Stage) reapableConnsLocked() []key.NodePublic {

@@ -10,11 +10,12 @@ func Response(txID TxID, addrPort netip.AddrPort) []byte {
 	addr := addrPort.Addr()
 
 	var fam byte
-	if addr.Is4() {
+	switch {
+	case addr.Is4():
 		fam = 1
-	} else if addr.Is6() {
+	case addr.Is6():
 		fam = 2
-	} else {
+	default:
 		return nil
 	}
 	attrsLen := 8 + addr.BitLen()/8

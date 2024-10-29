@@ -43,7 +43,7 @@ func UnmarshalControlPublic(s string) (*ControlPublic, error) {
 
 	if err := json.Unmarshal([]byte(s), pub); err != nil {
 		return nil, err
-	} else {
-		return pub, nil
 	}
+
+	return pub, nil
 }

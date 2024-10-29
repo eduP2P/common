@@ -49,9 +49,9 @@ func UnmarshalPublic(s string) (*NodePublic, error) {
 
 	if err := json.Unmarshal([]byte(s), pub); err != nil {
 		return nil, err
-	} else {
-		return pub, nil
 	}
+
+	return pub, nil
 }
 
 func (n NodePublic) Marshal() string {

@@ -101,7 +101,7 @@ func (n *NodePrivate) UnmarshalText(b []byte) error {
 
 // UnveilPrivate is a function to get a NakedKey from a NodePrivate.
 //
-// Deprecated: nobody should be using this
+// //Deprecated: nobody should be using this
 func UnveilPrivate(private NodePrivate) NakedKey {
 	return private.key
 }
@@ -115,12 +115,12 @@ func UnmarshalPrivate(s string) (*NodePrivate, error) {
 
 	if err := json.Unmarshal([]byte(s), pub); err != nil {
 		return nil, err
-	} else {
-		return pub, nil
 	}
+
+	return pub, nil
 }
 
-func (k NodePrivate) Marshal() string {
-	b, _ := json.Marshal(k)
+func (n NodePrivate) Marshal() string {
+	b, _ := json.Marshal(n)
 	return string(b)
 }

@@ -55,5 +55,5 @@ func PutAddrPort(ap netip.AddrPort) []byte {
 	as16 := ap.Addr().As16()
 	binary.BigEndian.PutUint16(port, ap.Port())
 
-	return slices.Concat(as16[:], port[:])
+	return slices.Concat(as16[:], port)
 }

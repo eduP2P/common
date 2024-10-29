@@ -9,7 +9,6 @@ var (
 
 	// We need this to send keys over the wire via JSON
 	_ canTextMarshal = &NodePublic{}
-	//_ canBsonMarshal = &NodePublic{}
 
 	// We need this to persist node keys to disk.
 	_ canTextMarshal = &NodePrivate{}
@@ -24,7 +23,6 @@ var (
 
 	// We need this to send keys over the wire
 	_ canTextMarshal = &SessionPublic{}
-	//_ canBsonMarshal = &SessionPublic{}
 
 	_ privateKey[SessionPublic] = SessionPrivate{}
 
@@ -43,7 +41,6 @@ var (
 
 	// We need this to send keys over the wire
 	_ canTextMarshal = &ControlPublic{}
-	//_ canBsonMarshal = &ControlPublic{}
 
 	// We need this to save private control keys
 	_ canTextMarshal = &ControlPrivate{}

@@ -82,7 +82,7 @@ func (cc *ChannelConn) Close() error {
 // Tries to read a packet from the outgoing channel, returns nil if there's none waiting.
 func (cc *ChannelConn) tryGetOut() (pkt []byte) {
 	select {
-	case pkt, _ = <-cc.outgoing:
+	case pkt = <-cc.outgoing:
 	default:
 	}
 

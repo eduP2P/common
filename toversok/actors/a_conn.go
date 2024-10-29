@@ -148,6 +148,7 @@ func (oc *OutConn) doTrackHome() {
 
 		if pi == nil {
 			L(oc).Warn("tried to update home relay, peerinfo is gone", "peer", oc.peer.Debug())
+			return
 		}
 
 		oc.toRelay = pi.HomeRelay
