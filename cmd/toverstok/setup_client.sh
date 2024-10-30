@@ -241,8 +241,6 @@ function performance_test () {
             ;;
     esac
 
-    echo $bitrate
-
     # Run performance test
     connect_timeout=3
 

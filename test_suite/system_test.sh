@@ -130,7 +130,7 @@ done
 # Parse WireGuard interfaces string into individual interfaces
 wg_interface_regex="^([^:]*):([^:]*)$"
 validate_str $wg_interface_str $wg_interface_regex 
-wg_interfaces=(${BASH_REMATCH[1]} ${BASH_REMATCH[3]})
+wg_interfaces=(${BASH_REMATCH[1]} ${BASH_REMATCH[2]})
 
 # Prepare a string describing this system test
 NAT_TYPES_LONG=("Endpoint-Independent" "Address-Dependent" "Address and Port-Dependent")
