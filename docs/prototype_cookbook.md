@@ -1,6 +1,6 @@
 # Prototype Setup Cookbook
 
-This document will describe how to set up a working p2p network using the prototype Control Server (`cmd/control_server/`), Relay Server (`cmd/relay_server/`), and Client (`cmd/toverstok/`).
+This document will describe how to set up a working p2p network using the prototype Control Server (`cmd/control_server/`), Relay Server (`cmd/relay_server/`), and Client (`cmd/dev_client/`).
 
 ## General Architecture
 
@@ -143,16 +143,16 @@ Create at least this relay, and define it inside the "Relays" array inside `cont
 
 ## Running a Client
 
-For the client prototype, currently there is `cmd/toverstok/`, which provides a shell interface to setting up a client,
+For the client prototype, currently there is `cmd/dev_client/`, which provides a shell interface to setting up a client,
 and monitoring it, with custom values.
 
-More documentation can be found in [`cmd/toverstok/README.md`](../cmd/toverstok/README.md).
+More documentation can be found in [`cmd/dev_client/README.md`](../cmd/dev_client/README.md).
 
 Use that documentation to setup platform-specific wireguard, or receive platform-specific wireguard instructions.
 
 A few notes/helps/reminders:
 
-Use `key file` for ease and consistency; the private key of the client will be saved in a file called `toverstok.key`, in the local directory, by default. (Change this file location by supplying another argument with the path)
+Use `key file` for ease and consistency; the private key of the client will be saved in a file called `client.key`, in the local directory, by default. (Change this file location by supplying another argument with the path)
 
 Alternatively, run `key gen` to generate a private key for each client. Write these down, and keep track of which is which. Then, upon every boot of a client, run `key set` to set the private key of that client again.
 

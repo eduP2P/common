@@ -13,23 +13,23 @@
     - Control IP
     - Control Port
 
-3. Then, under `cmd/toverstok/`, run `go build` to produce a runnable binary.
+3. Then, under `cmd/dev_client/`, run `go build` to produce a runnable binary.
 
 4. Next, it depends on whether you wish to run wireguard externally, or in the same process as edup2p itself.
 
-    The instructions on how to set up external wireguard are detailed [here](../cmd/toverstok/README.md#wgctrl-configuration).
+    The instructions on how to set up external wireguard are detailed [here](../cmd/dev_client/README.md#wgctrl-configuration).
     
-    The instructions on how to set up in-process wireguard are detailed [here](../cmd/toverstok/README.md#userspace-wireguard-configuration).
+    The instructions on how to set up in-process wireguard are detailed [here](../cmd/dev_client/README.md#userspace-wireguard-configuration).
     
     The simplest option is to use in-process ("userspace") wireguard, since it will setup everything by itself.
     
     On windows, userspace wireguard is the only option (for now).
     
-    If using userspace wireguard, privilege escalation is required, see [the same segment](../cmd/toverstok/README.md#userspace-wireguard-configuration) for more information.
+    If using userspace wireguard, privilege escalation is required, see [the same segment](../cmd/dev_client/README.md#userspace-wireguard-configuration) for more information.
     
-    On MacOS and Linux, run toverstok with `sudo ./toverstok`.
+    On MacOS and Linux, run the dev client with `sudo ./dev_client`.
 
-    On Windows, run `toverstok.exe` in an elevated prompt.
+    On Windows, run `dev_client.exe` in an elevated prompt.
 
 5. Input the following lines, to set up and connect. Replace `CONTROL_*` with the key, IP, and port gotten above.
 

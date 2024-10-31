@@ -81,7 +81,7 @@ func main() {
 
 	shell.SetHomeHistoryPath(".tssh_history")
 
-	shell.Println("ToverStok Interactive Shell")
+	shell.Println("Toversok Development Interactive Shell")
 
 	logCmd := &ishell.Cmd{
 		Name: "log",
@@ -165,8 +165,8 @@ func keyCmd() *ishell.Cmd {
 			var file string
 
 			if len(c.Args) == 0 {
-				c.Println("no file specified, using ./toverstok.key")
-				file = "toverstok.key"
+				c.Println("no file specified, using ./client.key")
+				file = "client.key"
 			} else {
 				file = c.Args[0]
 			}
@@ -829,7 +829,7 @@ func enCmd() *ishell.Cmd {
 
 	c := &ishell.Cmd{
 		Name: "en",
-		Help: "toverstok engine and subcommands",
+		Help: "toversok engine and subcommands",
 		Func: func(c *ishell.Context) {
 			if engine == nil {
 				c.Println("engine: nil")
@@ -1062,4 +1062,10 @@ func (s *StokFirewall) QuarantineNodes(ips []netip.Addr) error {
 	slog.Info("StokFirewall QuarantineNodes called", "ips", ips)
 
 	return nil
+}
+
+func (s *StokFirewall) LocalAddresses() ([]netip.Addr, error) {
+	slog.Info("StokFirewall LocalAddresses called")
+
+	return []netip.Addr{}, nil
 }
