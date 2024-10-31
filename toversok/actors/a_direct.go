@@ -234,13 +234,13 @@ func (dr *DirectRouter) peerAKA(ap netip.AddrPort) (peer key.NodePublic, ok bool
 func (dr *DirectRouter) setAKA(ap netip.AddrPort, peer key.NodePublic) {
 	nap := types.NormaliseAddrPort(ap)
 
-	slog.Info("dr: setAKA", "ap", ap.String(), "nap", nap.String(), "peer", peer.Debug())
+	slog.Debug("dr: setAKA", "ap", ap.String(), "nap", nap.String(), "peer", peer.Debug())
 
 	dr.aka[nap] = peer
 }
 
 func (dr *DirectRouter) removeAKA(peer key.NodePublic) {
-	slog.Info("dr: removeAKA", "peer", peer.Debug())
+	slog.Debug("dr: removeAKA", "peer", peer.Debug())
 
 	maps.DeleteFunc(dr.aka,
 		func(_ netip.AddrPort, p key.NodePublic) bool {
