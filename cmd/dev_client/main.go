@@ -10,6 +10,7 @@ import (
 	"github.com/abiosoft/ishell/v2"
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/toversok/actors"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/relay"
@@ -31,7 +32,7 @@ import (
 var (
 	programLevel = new(slog.LevelVar) // Info by default
 
-	wgCtrl *WGCtrl
+	wgCtrl *types.WGCtrl
 	usrWg  *usrwg.UserSpaceWireGuardHost
 
 	wg toversok.WireGuardHost
@@ -744,11 +745,7 @@ func wgCmd() *ishell.Cmd {
 				device = names[choice]
 			}
 
-			wgCtrl = &WGCtrl{
-				client:       client,
-				name:         device,
-				localMapping: make(map[key.NodePublic]*mapping),
-			}
+			wgCtrl = types.NewWGCtrl(client, device)
 
 			wg = wgCtrl
 
