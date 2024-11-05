@@ -1,0 +1,9 @@
+echo log $log_lvl
+echo key file $id.key
+if [[ $wg_interface ]]; then echo "wg use ${wg_interface}"; else echo "wg usr"; fi
+echo pc key control:$control_pub_key
+echo pc ip $control_ip
+echo pc port $control_port
+echo pc use
+echo en create
+echo en start
