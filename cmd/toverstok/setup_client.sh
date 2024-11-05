@@ -211,12 +211,11 @@ function try_connect() {
 
 try_connect "http://${peer_ipv4}"
 
-# Peers try to connect directly after initial connection; if expecting a direct connection, give them some time to establish one
+# Peers try to establish a direct connection after initial connection; if expecting a direct connection, give them some time to establish one
 if [[ $test_target == "TS_PASS_DIRECT" ]]; then
     timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
 fi
 
-# Try connecting to peer's HTTP server hosted on its IPv4 address
 try_connect "http://[${peer_ipv6}]"
 
 # Wait until timeout or until peer connected to server (peer's IP will appear in server output)
