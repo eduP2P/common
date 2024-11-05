@@ -97,7 +97,7 @@ function cleanup () {
 trap cleanup EXIT 
 
 function build_go() {
-    for binary in toverstok control_server relay_server; do
+    for binary in dev_client control_server relay_server; do
         binary_dir="${repo_dir}/cmd/$binary"
         go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
     done
@@ -190,7 +190,7 @@ Starting system tests between two peers behind NATs with various combinations of
 
 if [[ $connectivity == true ]]; then
     # Set packet loss
-    cd ${repo_dir}/cmd/toverstok
+    cd ${repo_dir}/cmd/dev_client
     sudo ./set_packet_loss.sh $packet_loss
     cd $repo_dir/test_suite
 
