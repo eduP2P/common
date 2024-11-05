@@ -97,7 +97,7 @@ function cleanup () {
 trap cleanup EXIT 
 
 function build_go() {
-    for binary in dev_client control_server relay_server; do
+    for binary in test_client control_server relay_server; do
         binary_dir="${repo_dir}/cmd/$binary"
         go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
     done
@@ -190,7 +190,7 @@ Starting system tests between two peers behind NATs with various combinations of
 
 if [[ $connectivity == true ]]; then
     # Set packet loss
-    cd ${repo_dir}/cmd/dev_client
+    cd ${repo_dir}/cmd/test_client
     sudo ./set_packet_loss.sh $packet_loss
     cd $repo_dir/test_suite
 
@@ -227,11 +227,8 @@ fi
 
 if [[ $performance == true ]]; then
     echo -e "\nPerformance tests (without NAT)"
-    run_system_test -k packet_loss -v 0,0.5,1 -d 5 TS_PASS_DIRECT router1-router2 : wg0:
-    run_system_test -k bitrate -v 1,10,100 -d 5 TS_PASS_DIRECT router1-router2 : wg0:
-
-    # Create graphs for performance tests
-    python3 visualize_performance_tests.py $log_dir
+    run_system_test -k packet_loss -v 0,0.5,1 -d 1 TS_PASS_DIRECT router1-router2 : wg0:
+    run_system_test -k bitrate -v 1,10,100 -d 1 TS_PASS_DIRECT router1-router2 : wg0:
 fi
 
 if [[ -n $file ]]; then
@@ -251,3 +248,6 @@ function print_summary() {
 }
 
 print_summary
+
+# Create graphs for performance tests, if any were included
+python3 visualize_performance_tests.py $log_dir

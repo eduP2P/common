@@ -110,10 +110,19 @@ def file_iteration(test_dir : str, test_var : str) -> tuple[list[float], dict]:
 
     return test_var_values, extracted_data
 
+def maybe_plural(amount, noun):
+    if amount > 1:
+        return noun + 's'
+    else:
+        return noun
+    
 def test_iteration():
     paths = Path(LOG_DIR).rglob("performance_tests_*")
+    n_tests = 0
 
     for path in paths:
+        n_tests += 1
+
         test_path = str(path)
         test_dir = test_path.split('/')[-1]
         parent_path = '/'.join(test_path.split('/')[:-1])
@@ -127,5 +136,8 @@ def test_iteration():
 
         for metric in extracted_data.keys():
             create_graph(test_var, test_var_values, metric, extracted_data, parent_path)
+
+    if n_tests > 0:
+        print(f"Generated graphs to visualize {n_tests} {maybe_plural(n_tests, 'performance test')}")
 
 test_iteration()

@@ -208,7 +208,7 @@ for ((i=0; i<${#router_ns_list[@]}; i++)); do
 done
 
 # Start peers
-cd ${repo_dir}/cmd/dev_client
+cd ${repo_dir}/cmd/test_client
 
 function get_peer_performance_test_role() {
     i=$1
