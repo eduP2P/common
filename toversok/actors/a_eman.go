@@ -213,7 +213,7 @@ func (em *EndpointManager) finaliseSTUN(timeout bool) {
 	// Logging
 	if timeout {
 		if len(ep) > 0 {
-			L(em).Warn("STUN completed with endpoints", "endpoints", ep, "stun-not-responded", maps.Keys(em.stunRequests))
+			L(em).Warn("STUN completed with non-responsive servers", "endpoints", ep, "stun-not-responded", maps.Keys(em.stunRequests))
 		} else {
 			L(em).Warn("STUN failed, timed out with no endpoints")
 		}

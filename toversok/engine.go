@@ -82,6 +82,10 @@ func (e *Engine) Start() error {
 	return nil
 }
 
+func (e *Engine) Context() context.Context {
+	return e.ctx
+}
+
 // StalledEngineRestartInterval represents how many seconds to wait before restarting an engine,
 // after it has stalled/failed.
 const StalledEngineRestartInterval = time.Second * 2

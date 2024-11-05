@@ -1,7 +1,6 @@
-# ToverStok
-> *(Dutch) "Magic Wand"*
+# Dev Client
 
-A small application meant to drive the toversok library via shell interface.
+A small development application meant to drive the toversok library via shell interface.
 
 This application can provide a way to prototype/develop/test toversok/eduP2P clients.
 
@@ -68,7 +67,7 @@ key gen
 key file [filename]
     Sources a key from a specific file, will create the file if it doesn't exist.
     
-    Defaults to './toverstok.key'.
+    Defaults to './client.key'.
 
 key set ["privkey:HEX"]
     Set the private key from command line arguments, or alternatively line-input.
@@ -245,7 +244,7 @@ en start
 
 ## wgctrl configuration
 
-For toverstok, wgctrl can be used, which needs an externally running wireguard implementation.
+For the dev client, wgctrl can be used, which needs an externally running wireguard implementation.
 
 On MacOS, the wireguard-go binary can be used.
 
@@ -266,8 +265,8 @@ To shut down the sockets, run `sudo rm /var/run/wireguard/utun*`
 
 ### Linux - Kernel
 
-On linux, add the `NET_ADMIN` capability to the (compiled) toverstok binary with
-`setcap cap_net_admin=ep toverstok`, or alternatively run as root.
+On linux, add the `NET_ADMIN` capability to the (compiled) dev_client binary with
+`setcap cap_net_admin=ep dev_client`, or alternatively run as root.
 
 Create the wg0 interface with the following commands:
 1. Create the wg0 interface: `sudo ip link add wg0 type wireguard`
