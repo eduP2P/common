@@ -6,8 +6,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/edup2p/common/ext_wg"
 	"github.com/edup2p/common/toversok"
-	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/dial"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/usrwg"
@@ -312,7 +312,7 @@ func getWireguardHost() (toversok.WireGuardHost, error) {
 	}
 }
 
-func getWgControl(device string) (*types.WGCtrl, error) {
+func getWgControl(device string) (*ext_wg.WGCtrl, error) {
 	client, err := wgctrl.New()
 	if err != nil {
 		return nil, fmt.Errorf("could not initialise wgctrl: %w", err)
@@ -322,7 +322,7 @@ func getWgControl(device string) (*types.WGCtrl, error) {
 		return nil, fmt.Errorf("could not find/initialise wgctrl device: %w", err)
 	}
 
-	return types.NewWGCtrl(client, device), nil
+	return ext_wg.NewWGCtrl(client, device), nil
 }
 
 // A dummy firewall

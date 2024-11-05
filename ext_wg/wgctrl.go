@@ -1,8 +1,9 @@
-package types
+package ext_wg
 
 import (
 	"fmt"
 	"github.com/edup2p/common/toversok"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"go4.org/netipx"
 	"golang.org/x/exp/maps"
@@ -72,7 +73,7 @@ func (w *WGCtrl) Reset() error {
 }
 
 type mapping struct {
-	conn UDPConnCloseCatcher
+	conn types.UDPConnCloseCatcher
 
 	port uint16
 }
@@ -139,7 +140,7 @@ func (w *WGCtrl) Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefi
 	return w, nil
 }
 
-func (w *WGCtrl) ConnFor(node key.NodePublic) UDPConn {
+func (w *WGCtrl) ConnFor(node key.NodePublic) types.UDPConn {
 	return &w.ensureLocalConn(node).conn
 }
 
@@ -237,7 +238,7 @@ func (w *WGCtrl) rebindMapping(m *mapping) error {
 	conn, err := w.getWGConn(&m.port)
 
 	if err == nil {
-		m.conn = UDPConnCloseCatcher{UDPConn: conn}
+		m.conn = types.UDPConnCloseCatcher{UDPConn: conn}
 	}
 
 	return err
@@ -273,7 +274,7 @@ func mappingFromUDPConn(udp *net.UDPConn) *mapping {
 	ap := netip.MustParseAddrPort(udp.LocalAddr().String())
 
 	return &mapping{
-		conn: UDPConnCloseCatcher{UDPConn: udp},
+		conn: types.UDPConnCloseCatcher{UDPConn: udp},
 		port: ap.Port(),
 	}
 }
