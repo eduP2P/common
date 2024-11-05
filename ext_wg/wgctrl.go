@@ -1,4 +1,4 @@
-package main
+package ext_wg
 
 import (
 	"fmt"
@@ -42,6 +42,14 @@ type WGCtrl struct {
 	wgPort uint16
 
 	localMapping map[key.NodePublic]*mapping
+}
+
+func NewWGCtrl(client *wgctrl.Client, device string) *WGCtrl {
+	return &WGCtrl{
+		client:       client,
+		name:         device,
+		localMapping: make(map[key.NodePublic]*mapping),
+	}
 }
 
 func (w *WGCtrl) Reset() error {
