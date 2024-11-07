@@ -1,16 +1,9 @@
 #!/bin/bash
 
 usage_str="""
-Usage: ${0} [OPTIONAL ARGUMENTS] <PEER ID> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <PERFORMANCE TEST ROLE> [WIREGUARD INTERFACE]
-
-[OPTIONAL ARGUMENTS] can be provided for a performance test:
-    -k <packet_loss|bitrate>
-    -v <comma-separated string of positive real numbers>
-    -d <seconds>
+Usage: ${0} <PEER ID> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> [WIREGUARD INTERFACE]
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
-
-<PERFORMANCE TEST ROLE> should be either 'client', 'server' or 'none'
 
 If [WIREGUARD INTERFACE] is not provided, this peer will use userspace WireGuard"""
 
@@ -18,21 +11,8 @@ If [WIREGUARD INTERFACE] is not provided, this peer will use userspace WireGuard
 . ../../test_suite/util.sh
 
 # Validate optional arguments
-while getopts ":k:v:d:h" opt; do
+while getopts ":h" opt; do
     case $opt in
-        k)
-            performance_test_var=$OPTARG
-            validate_str $performance_test_var "^packet_loss|bitrate$"
-            ;;
-        v)
-            performance_test_values=$OPTARG
-            real_regex="[0-9]+(.[0-9]+)?"
-            validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
-            ;;
-        d)
-            performance_test_duration=$OPTARG
-            validate_str $performance_test_duration "^[0-9]+*$"
-            ;;
         h) 
             echo "$usage_str"
             exit 0
@@ -48,10 +28,10 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required positional parameters have been passed
-min_req=8
-max_req=9
+min_req=7
+max_req=8
 
-if [[ $# < $min_req || $# > max_req ]]; then
+if [[ $# < $min_req || $# > $max_req ]]; then
     print_err "expected $min_req or $max_req positional parameters, but received $#"
     exit 1
 fi
@@ -63,8 +43,7 @@ control_ip=$4
 control_port=$5
 log_lvl=$6
 log_dir=$7
-performance_test_role=$8
-wg_interface=$9
+wg_interface=$8
 
 # Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
@@ -79,14 +58,11 @@ out="test_client_out_${id}.txt"
 # Store test_client output in a temporary file
 (sudo ./test_client --control-host=$control_ip --control-port=$control_port --control-key=control:$control_pub_key --ext-wg-device=$wg_interface --log-level=$log_lvl --config=$id.json 2>&1 | tee $out &)
 
-function clean_exit () {
-    exit_code = $1
+function clean_exit() {
+    exit_code=$1
 
     # Remove temporary test_client output file
     sudo rm $out
-
-    # Terminate test_client
-    test_client_pid=$(pgrep test_client) && sudo kill $test_client_pid
 
     # Remove http server output files
     if [[ -n $http_ipv4_out ]]; then rm $http_ipv4_out; fi
@@ -96,11 +72,9 @@ function clean_exit () {
     if [[ -n $http_ipv4_pid ]]; then kill $http_ipv4_pid; fi
     if [[ -n $http_ipv6_pid ]]; then kill $http_ipv6_pid; fi
 
-    # Delete external WireGuard interface in case external WireGuard was used
-    if [[ -n $wg_interface ]]; then sudo ip link del $wg_interface; fi
-
     exit $exit_code
 }
+
 
 # Get own virtual IPs and peer's virtual IPs; method is different for exernal WireGuard vs userspace WireGuard
 if [[ -n $wg_interface ]]; then
@@ -199,64 +173,6 @@ try_connect "http://[${peer_ipv6}]"
 # Wait until timeout or until peer connected to server (peer's IP will appear in server output)
 timeout 10s tail -f -n +1 $http_ipv4_out | sed -n "/${peer_ipv4}/q"
 timeout 10s tail -f -n +1 $http_ipv6_out | sed -n "/${peer_ipv6}/q"
-
-# Optional performance test with iperf
-function performance_test () {
-    performance_test_val=$1
-    performance_test_dir=$2
-
-    # Default values
-    bitrate=$(( 10**6 )) # Default iperf UDP bitrate is 1 Mbps
-
-    # Assign performance_test_val to performance_test_var
-    case $performance_test_var in
-        "packet_loss")
-            ./set_packet_loss.sh $performance_test_val
-            ;;
-        "bitrate")
-            bitrate=$(( $performance_test_val * 10**6 )) # Convert to bits/sec
-            ;;
-    esac
-
-    # Run performance test
-    connect_timeout=3
-
-    case $performance_test_role in
-    "client") 
-        logfile=$performance_test_dir/$performance_test_var=$performance_test_val.json
-
-        # Retry until server is listening or until timeout
-        while ! iperf3 -c $peer_ipv4 -p 12345 -u -t $performance_test_duration -b $bitrate --json --logfile $logfile; do
-            sleep 1s
-            let "connect_timeout--"
-
-            if [[ $connect_timeout -eq 0 ]]; then
-                echo "TS_FAIL: timeout while trying to connect to peer's iperf server to test performance"
-                clean_exit 1
-            fi
-
-            rm $logfile # File is created and contains an error message, delete for next iteration
-        done 
-        ;;
-    "server") 
-        test_timeout=$(($connect_timeout + $performance_test_duration + 1))
-        timeout ${test_timeout}s iperf3 -s -B $ipv4 -p 12345 -1 &> /dev/null # -1 to close after first connection
-
-        if [[ $? -ne 0 ]]; then
-            echo "TS_FAIL: timeout while listening on iperf server to test performance"
-            clean_exit 1
-        fi
-        ;;
-esac
-}
-
-performance_test_dir=$log_dir/performance_tests_$performance_test_var
-performance_test_values=$(echo $performance_test_values | tr ',' ' ') # Replace commas by spaces to iterate over each value easily
-
-for performance_test_val in $performance_test_values; do
-    mkdir -p $performance_test_dir
-    performance_test $performance_test_val $performance_test_dir
-done
 
 echo "TS_PASS"
 clean_exit 0

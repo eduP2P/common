@@ -22,3 +22,23 @@ function validate_str() {
         exit 1
     fi
 }
+
+function repeat(){
+	n=$1
+	str=$2
+	range=$(seq 1 $n)
+
+	for i in $range; do 
+        echo -n $str
+    done
+}
+
+function progress_bar() {
+    progress=$1
+    total=$2
+
+    done=$(repeat $progress '▇')
+    todo=$(repeat $(($total - $progress)) '-')
+
+    echo "|${done}${todo}|"
+}

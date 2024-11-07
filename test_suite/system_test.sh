@@ -156,12 +156,8 @@ else
     nat_setup="$nat1_description <-> $nat2_description"
 fi
 
-# Prepare a string describing the test description
-if [[ -n $performance_test_var ]]; then
-    test_description="Test $test_idx (performance). $nat_setup, variable=$performance_test_var, target=$test_target, result="
-else
-    test_description="Test $test_idx (connectivity). $nat_setup, target=$test_target, result="
-fi
+# Prepare a string describing the test setup
+test_description="Test $test_idx. $nat_setup, target=$test_target, result="
 
 # Output test description 
 echo -n "$test_description"
@@ -171,11 +167,24 @@ new_dir="${log_dir}/${test_idx}_${nat1_description}_${nat2_description}"
 mkdir $new_dir
 log_dir=$new_dir
 
-# Cleanup function called at end of script
-function cleanup () {
+function clean_exit() {
+    exit_code=$1
+
+    # Kill the test_client processes
+    sudo pkill test_client
+
+    # Remove any external WireGuard interfaces used by the peers
+    for i in {0..1}; do
+        peer_ns=${peer_ns_list[$i]}
+        wg_interface=${wg_interfaces[$i]}
+        
+        if [[ -n $wg_interface ]]; then
+            sudo ip netns exec $peer_ns ip link del $wg_interface
+        fi
+    done    
+
     # Kill the conntrack processes started by the nat simulation scripts
-    conntrack_pids=$(pidof conntrack)
-    if [[ -n $conntrack_pids ]]; then sudo kill $conntrack_pids &> /dev/null; fi
+    sudo pkill conntrack
 
     # Log final nftables configuration and conntrack list of the routers
     for router_ns in ${router_ns_list[@]}; do
@@ -193,9 +202,10 @@ function cleanup () {
 
     # Reset nftables configuration of the public network
     sudo ip netns exec public nft flush chain inet filter forward
+
+    exit $exit_code
 }
 
-trap cleanup EXIT 
 
 # Start NAT simulation on each router
 cd ${repo_dir}/test_suite/nat_simulation
@@ -210,36 +220,16 @@ done
 # Start peers
 cd ${repo_dir}/cmd/test_client
 
-function get_peer_performance_test_role() {
-    i=$1
-    roles=("server" "client")
-
-    if [[ -n $performance_test_var ]]; then
-        echo ${roles[$i]}
-    else
-        echo "none"
-    fi
-}
-
-# Store PIDs of peer scripts
-peer_pids=()
 
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     peer_ns=${peer_ns_list[$i]}
     peer_logfile="$log_dir/$peer_id.txt"
-    performance_test_role=$(get_peer_performance_test_role $i)
-
-    if [[ $performance_test_role != "none" ]]; then
-        optional_args="-k $performance_test_var -v $performance_test_values -d $performance_test_duration"
-    fi
     
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
-    sudo ip netns exec $peer_ns ./setup_client.sh $optional_args `# Optional arguments` \
-    $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir $performance_test_role ${wg_interfaces[$i]} `# Positional parameters` \
-    &> >(sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile) & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
-
-    peer_pids+=($!)
+    sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
+    $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir ${wg_interfaces[$i]} `# Positional parameters` \
+    2>&1 | sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
 done
 
 # Constants for colored text in output
@@ -251,17 +241,15 @@ NC="\033[0m" # No color
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     export LOG_FILE=${log_dir}/$peer_id.txt # Export to use in bash -c
-    n_performance_tests=${#performance_test_values}
-    timeout_duration=$((30 + $n_performance_tests * $performance_test_duration))
-    timeout ${timeout_duration}s bash -c 'tail -n 1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
+    timeout 60s bash -c 'tail -n 1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
 
     # Branch on exit code of previous command
     case $? in
-        0|1) echo -e "${RED}TS_FAIL: error when searching for exit code in logs of $peer_id${NC}"; exit 1 ;; # 0 and 1 indicate tail/sed failure
+        0|1) echo -e "${RED}TS_FAIL: error when searching for exit code in logs of $peer_id${NC}"; clean_exit 1 ;; # 0 and 1 indicate tail/sed failure
         2) ;; # 2 indicates TS_PASS was found
-        3) echo -e "${RED}TS_FAIL: test failed for $peer_id; view this peer's logs for more information${NC}"; exit 1 ;; # 3 indicates TS_FAIL was found
-        124) echo -e "${RED}TS_FAIL: timeout when searching for exit code in logs of $peer_id${NC}"; exit 1 ;; # 124 is default timeout exit code
-        *) echo -e "${RED}TS_FAIL: unknown error${NC}"; exit 1 ;;
+        3) echo -e "${RED}TS_FAIL: test failed for $peer_id; view this peer's logs for more information${NC}"; clean_exit 1 ;; # 3 indicates TS_FAIL was found
+        124) echo -e "${RED}TS_FAIL: timeout when searching for exit code in logs of $peer_id${NC}"; clean_exit 1 ;; # 124 is default timeout exit code
+        *) echo -e "${RED}TS_FAIL: unknown error${NC}"; clean_exit 1 ;;
     esac
 done
 
@@ -275,10 +263,32 @@ fi
 # Output test result 
 if [[ $test_target != $test_result ]]; then
     echo -e "${RED}$test_result${NC}"
-    exit 1
+    clean_exit 1
 fi
 
 echo -e "${GREEN}$test_result${NC}"
 
-# Wait for peer scripts to exit (might still be doing cleanup after outputting exit code)
-wait ${peer_pids[@]} &> /dev/null
+# Run the optional performance tests using iperf3
+cd ${repo_dir}/test_suite
+
+if [[ -n $performance_test_var ]]; then 
+    # Peer 1 will act as the iperf3 server, so we need its virtual IP address
+    peer1_interface=${wg_interfaces[0]}
+
+    # If peer 1 WireGuard interface is empty, this peer uses userspace WireGuard with default name ts0
+    if [[ -z $peer1_interface ]]; then
+        peer1_interface="ts0"
+    fi
+
+    # Get the IPv4 address of the peer's interface
+    peer1_ns=${peer_ns_list[0]}
+    peer1_ip=$(sudo ip netns exec $peer1_ns ip address show $peer1_interface | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
+
+    sudo ./performance_test.sh $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $log_dir
+
+    if [[ $? -ne 0 ]]; then 
+        clean_exit 1
+    fi
+fi
+
+clean_exit 0

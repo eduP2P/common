@@ -189,10 +189,7 @@ Starting system tests between two peers behind NATs with various combinations of
     - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
 
 if [[ $connectivity == true ]]; then
-    # Set packet loss
-    cd ${repo_dir}/cmd/test_client
     sudo ./set_packet_loss.sh $packet_loss
-    cd $repo_dir/test_suite
 
     echo -e "\nTests with one peer behind a NAT"
     nat_types=("0-0" "0-1" "0-2" "2-2") # 0-0 = Full Cone, 0-1 = Restricted Cone,  0-2 = Port Restricted Cone, 2-2 = Symmetric
