@@ -9,8 +9,10 @@ import "net/netip"
 type Router interface {
 	Up() error
 	Set(*Config) error
+	Close() error
 }
 
 type Config struct {
-	Prefixes []netip.Prefix
+	LocalAddrs      []netip.Addr
+	RoutingPrefixes []netip.Prefix
 }

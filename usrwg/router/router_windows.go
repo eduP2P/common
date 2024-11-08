@@ -8,6 +8,11 @@ import (
 	"fmt"
 	"golang.org/x/sys/windows/svc"
 	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"syscall"
 
 	"github.com/dblohm7/wingoes/com"
 	"github.com/edup2p/common/usrwg/router/winnet"
@@ -47,23 +52,56 @@ func NewRouter(device tun.Device) (Router, error) {
 
 	mtu, _ := nativeTun.MTU()
 
+	luid := winipcfg.LUID(nativeTun.LUID())
+
+	guid, err := luid.GUID()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tun GUID: %w", err)
+	}
+
 	return &windowsRouter{
-		mtu:          mtu,
-		luid:         winipcfg.LUID(nativeTun.LUID()),
-		currPrefixes: make([]netip.Prefix, 0),
+		mtu:  mtu,
+		luid: luid,
+		firewall: &firewallTweaker{
+			tunGUID: *guid,
+		},
 	}, nil
 }
 
 type windowsRouter struct {
-	mtu          int
-	luid         winipcfg.LUID
-	currPrefixes []netip.Prefix
+	mtu        int
+	luid       winipcfg.LUID
+	currConfig *Config
+	firewall   *firewallTweaker
 }
 
 func (r *windowsRouter) Up() error {
-	//TODO implement me
-	//panic("implement me")
+	r.firewall.clear()
+
+	r.setFirewall()
+
 	return nil
+}
+
+func (r *windowsRouter) Close() error {
+	r.firewall.clear()
+
+	return nil
+}
+
+func (r *windowsRouter) setFirewall() {
+	if r.currConfig == nil {
+		return
+	}
+
+	var localAddrs []string
+	for _, la := range r.currConfig.RoutingPrefixes {
+		addr := la.Addr()
+		newPrefix, _ := addr.Prefix(addr.BitLen())
+		localAddrs = append(localAddrs, newPrefix.String())
+	}
+	r.firewall.set(localAddrs)
 }
 
 func (r *windowsRouter) Set(cfg *Config) (retErr error) {
@@ -144,13 +182,16 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 	// and IPv6 address we can use for this purpose.
 	var firstGateway4 netip.Addr
 	var firstGateway6 netip.Addr
-	addresses := make([]netip.Prefix, 0, len(cfg.Prefixes))
-	for _, addr := range cfg.Prefixes {
-		if (addr.Addr().Is4() && ipif4 == nil) || (addr.Addr().Is6() && ipif6 == nil) {
+	localPrefixes := make([]netip.Prefix, 0, len(cfg.LocalAddrs))
+	for _, addr := range cfg.LocalAddrs {
+		if (addr.Is4() && ipif4 == nil) || (addr.Is6() && ipif6 == nil) {
 			// Can't program addresses for disabled protocol.
 			continue
 		}
-		addresses = append(addresses, addr)
+
+		addr, _ := addr.Prefix(addr.BitLen())
+
+		localPrefixes = append(localPrefixes, addr)
 		if addr.Addr().Is4() && !firstGateway4.IsValid() {
 			firstGateway4 = addr.Addr()
 		} else if addr.Addr().Is6() && !firstGateway6.IsValid() {
@@ -163,7 +204,7 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 	var routes []*routeData
 	foundDefault4 := false
 	foundDefault6 := false
-	for _, route := range cfg.Prefixes {
+	for _, route := range cfg.RoutingPrefixes {
 		route = route.Masked()
 
 		if (route.Addr().Is4() && ipif4 == nil) || (route.Addr().Is6() && ipif6 == nil) {
@@ -181,7 +222,7 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 			// route source.
 			// TODO: taken from tailscale, replace with something else?
 			ip := netip.MustParsePrefix("fd7a:115c:a1e0:ab12:4843:cd96:6200::/104").Addr()
-			addresses = append(addresses, netip.PrefixFrom(ip, ip.BitLen()))
+			localPrefixes = append(localPrefixes, netip.PrefixFrom(ip, ip.BitLen()))
 			firstGateway6 = ip
 		} else if route.Addr().Is4() && !firstGateway4.IsValid() {
 			// TODO: do same dummy behavior as v6?
@@ -226,7 +267,7 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 
 	slog.Debug("windows routes", "routes", routes)
 
-	err = syncAddresses(iface, addresses)
+	err = syncAddresses(iface, localPrefixes)
 	if err != nil {
 		return fmt.Errorf("syncAddresses: %w", err)
 	}
@@ -256,10 +297,9 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 	}
 
 	var errAcc error
-	err = syncRoutes(iface, deduplicatedRoutes, cfg.Prefixes)
-	if err != nil && errAcc == nil {
-		log.Printf("setroutes: %v", err)
-		errAcc = err
+	err = syncRoutes(iface, deduplicatedRoutes, localPrefixes)
+	if err != nil {
+		errAcc = fmt.Errorf("syncRoutes: %w", err)
 	}
 
 	if ipif4 != nil {
@@ -276,7 +316,7 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 
 		err = ipif4.Set()
 		if err != nil && errAcc == nil {
-			errAcc = err
+			errAcc = fmt.Errorf("error setting ipif4: %w", err)
 		}
 	}
 
@@ -296,9 +336,15 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 			ipif6.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
 			err = ipif6.Set()
 			if err != nil && errAcc == nil {
-				errAcc = err
+				errAcc = fmt.Errorf("error setting ipif6: %w", err)
 			}
 		}
+	}
+
+	if errAcc == nil {
+		r.currConfig = cfg
+
+		r.setFirewall()
 	}
 
 	return errAcc
@@ -682,6 +728,7 @@ func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*routeData, dontDelete 
 
 	var errs []error
 	for _, a := range del {
+		slog.Debug("router: deleting route", "destination", a.Destination.String(), "nexthop", a.NextHop.String())
 		var err error
 		if a.Row == nil {
 			// DeleteRoute requires a routing table lookup, so only do that if
@@ -703,6 +750,7 @@ func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*routeData, dontDelete 
 	}
 
 	for _, a := range add {
+		slog.Debug("router: adding route", "destination", a.Destination.String(), "nexthop", a.NextHop.String())
 		err := ifc.LUID.AddRoute(a.Destination, a.NextHop, a.Metric)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("adding route %v: %w", &a.Destination, err))
@@ -710,4 +758,164 @@ func syncRoutes(ifc *winipcfg.IPAdapterAddresses, want []*routeData, dontDelete 
 	}
 
 	return errors.Join(errs...)
+}
+
+// firewallTweaker changes the Windows firewall. Normally this wouldn't be so complicated,
+// but it can be REALLY SLOW to change the Windows firewall for reasons not understood.
+// Like 4 minutes slow. But usually it's tens of milliseconds.
+// See https://github.com/tailscale/tailscale/issues/785.
+// So this tracks the desired state and runs the actual adjusting code asynchronously.
+type firewallTweaker struct {
+	tunGUID windows.GUID
+
+	mu        sync.Mutex
+	running   bool     // doAsyncSet goroutine is running
+	known     bool     // firewall is in known state (in lastVal)
+	wantLocal []string // next value we want, or "" to delete the firewall rule
+	lastLocal []string // last set value, if known
+
+	localRoutes     []netip.Prefix
+	lastLocalRoutes []netip.Prefix
+
+	// The path to the 'netsh.exe' binary, populated during the first call
+	// to runFirewall.
+	//
+	// not protected by mu; netshPath is only mutated inside netshPathOnce
+	netshPathOnce sync.Once
+	netshPath     string
+}
+
+func (ft *firewallTweaker) clear() { ft.set(nil) }
+
+// set takes CIDRs to allow, and the routes that point into the Tailscale tun interface.
+// Empty slices remove firewall rules.
+//
+// set takes ownership of cidrs, but not routes.
+func (ft *firewallTweaker) set(cidrs []string) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+
+	if len(cidrs) == 0 {
+		slog.Debug("firewall: marking for removal")
+	} else {
+		slog.Debug("firewall: marking allowed %v", cidrs)
+	}
+	ft.wantLocal = cidrs
+	if ft.running {
+		// The doAsyncSet goroutine will check ft.wantLocal/wantKillswitch
+		// before returning.
+		return
+	}
+	slog.Debug("firewall: starting netsh goroutine")
+	ft.running = true
+	go ft.doAsyncSet()
+}
+
+// getNetshPath returns the path that should be used to execute netsh.
+//
+// We've seen a report from a customer that we're triggering the "cannot run
+// executable found relative to current directory" protection that was added to
+// prevent running possibly attacker-controlled binaries. To mitigate this,
+// first try looking up the path to netsh.exe in the System32 directory
+// explicitly, and then fall back to the prior behaviour of passing "netsh" to
+// os/exec.Command.
+func (ft *firewallTweaker) getNetshPath() string {
+	ft.netshPathOnce.Do(func() {
+		// The default value is the old approach: just run "netsh" and
+		// let os/exec resolve that into a full path.
+		ft.netshPath = "netsh"
+
+		path, err := windows.KnownFolderPath(windows.FOLDERID_System, 0)
+		if err != nil {
+			slog.Warn("firewall: getNetshPath: error getting FOLDERID_System: %v", err)
+			return
+		}
+
+		expath := filepath.Join(path, "netsh.exe")
+		if _, err := os.Stat(expath); err == nil {
+			ft.netshPath = expath
+			return
+		} else if !os.IsNotExist(err) {
+			slog.Warn("firewall: getNetshPath: error checking for existence of %q: %v", expath, err)
+		}
+
+		// Keep default
+	})
+	return ft.netshPath
+}
+
+func (ft *firewallTweaker) runFirewall(args ...string) (time.Duration, error) {
+	t0 := time.Now()
+	args = append([]string{"advfirewall", "firewall"}, args...)
+	slog.Debug("firewall: running command", "args", args)
+	cmd := exec.Command(ft.getNetshPath(), args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		err = fmt.Errorf("%w: %v", err, string(b))
+	}
+	return time.Since(t0).Round(time.Millisecond), err
+}
+
+func (ft *firewallTweaker) doAsyncSet() {
+	ft.mu.Lock()
+	for { // invariant: ft.mu must be locked when beginning this block
+		val := ft.wantLocal
+		if ft.known && slices.Equal(ft.lastLocal, val) {
+			ft.running = false
+			slog.Debug("firewall: ending netsh goroutine")
+			ft.mu.Unlock()
+			return
+		}
+		needClear := !ft.known || len(ft.lastLocal) > 0 || len(val) == 0
+		ft.mu.Unlock()
+
+		err := ft.doSet(val, needClear)
+		if err != nil {
+			slog.Warn("firewall: set failed: %v", err)
+		}
+		time.Sleep(1 * time.Second)
+
+		ft.mu.Lock()
+		ft.lastLocal = val
+		ft.known = (err == nil)
+	}
+}
+
+// doSet creates and deletes firewall rules to make the system state
+// match the values of local, killswitch, clear and procRule.
+//
+// local is the list of local Tailscale addresses (formatted as CIDR
+// prefixes) to allow through the Windows firewall.
+// killswitch, if true, enables the wireguard-windows based internet
+// killswitch to prevent use of non-Tailscale default routes.
+// clear, if true, removes all tailscale address firewall rules before
+// adding local.
+// procRule, if true, installs a firewall rule that permits the Tailscale
+// process to dial out as it pleases.
+//
+// Must only be invoked from doAsyncSet.
+func (ft *firewallTweaker) doSet(local []string, clear bool) error {
+	if clear {
+		slog.Debug("firewall: clearing Toversok-In firewall rules...")
+		// We ignore the error here, because netsh returns an error for
+		// deleting something that doesn't match.
+		// TODO(bradfitz): care? That'd involve querying it before/after to see
+		// whether it was necessary/worked. But the output format is localized,
+		// so can't rely on parsing English. Maybe need to use OLE, not netsh.exe?
+		d, _ := ft.runFirewall("delete", "rule", "name=Toversok-In", "dir=in")
+		slog.Debug("firewall: cleared Toversok-In firewall rules in %v", d)
+	}
+	for _, cidr := range local {
+		slog.Debug("firewall: adding Toversok-In rule to allow %v ...", cidr)
+		var d time.Duration
+		d, err := ft.runFirewall("add", "rule", "name=Toversok-In", "dir=in", "action=allow", "localip="+cidr, "profile=private", "enable=yes")
+		if err != nil {
+			slog.Warn("firewall: error adding Toversok-In rule to allow %v: %v", cidr, err)
+			return err
+		}
+		slog.Debug("firewall: added Toversok-In rule to allow %v in %v", cidr, d)
+	}
+
+	return nil
 }

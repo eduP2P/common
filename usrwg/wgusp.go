@@ -43,7 +43,7 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 		}
 	}
 
-	tunDev, err := createTUN(1500)
+	tunDev, err := createTUN(1280)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
@@ -82,7 +82,10 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 		return nil, fmt.Errorf("failed to bring up wireguard device: %w", err)
 	}
 
-	if err = r.Set(&router.Config{Prefixes: []netip.Prefix{addr4, addr6}}); err != nil {
+	if err = r.Set(&router.Config{
+		LocalAddrs:      []netip.Addr{addr4.Addr(), addr6.Addr()},
+		RoutingPrefixes: []netip.Prefix{addr4, addr6},
+	}); err != nil {
 		return nil, fmt.Errorf("failed to set routing config: %w", err)
 	}
 
@@ -91,8 +94,9 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	}
 
 	usrwgc := &UserSpaceWireGuardController{
-		wgDev: wgDev,
-		bind:  bind,
+		wgDev:  wgDev,
+		bind:   bind,
+		router: r,
 	}
 
 	u.running = usrwgc
@@ -190,6 +194,7 @@ func (u *UserSpaceWireGuardController) Close() {
 	u.wgDev.Close()
 	// TODO return or log error
 	u.bind.Close()
+	u.router.Close()
 }
 
 //const _ toversok.WireGuardHost = UserspaceWireguardHost{}
