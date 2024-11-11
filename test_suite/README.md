@@ -75,9 +75,17 @@ In these tests, two clients attempt to establish a peer-to-peer
 connection using eduP2P. When these tests are executed via GitHub
 workflows, the test results can be found in the output of the
 “SystemTests” job under the step “Run system tests”, and the logs can be
-downloaded using the URL in the “Upload system test logs: step. The
-system tests can also be executed manually with [this
-script](system_tests.sh).
+downloaded using the URL in the “Upload system test logs: step.
+
+The system tests can also be executed manually using
+[system_tests.sh](system_tests.sh). For example, the command below
+executes connectivity tests, where the simulated packet loss is set to
+0%. Beforehand, it starts an eduP2P control and relay server on ports
+3340 and 9999 respectively. The script also generates logs, including
+the logs of the two eduP2P peers. The eduP2P client has multiple log
+levels, and in this command the ‘debug’ level is specified.
+
+    ./system_tests.sh -c 0 3340 9999 debug
 
 The system tests specifically verify whether the eduP2P peers are able
 to establish a connection when NAT is involved. To do so, the local host
@@ -423,20 +431,61 @@ configuring the following parameters:
   of time the performance tests take is this parameter multiplied by the
   amount of values assigned to the independent variable.
 
+- **Performance test baseline**: with this optional parameter, a
+  ‘baseline’ is added to the performance test results, created by
+  repeating the performance tests for:
+
+  1.  two peers that use WireGuard;
+  2.  two peers that use their physical IP addresses in the simulated
+      network setup.
+
+  With this baseline, it is easier to investigate whether any
+  performance deficiencies in eduP2P are truly the result of a problem
+  in eduP2P, or are instead caused by WireGuard (which is used
+  internally in eduP2P), or by a limitation of the test suite’s
+  simulated network setup.
+
+To run performance tests manually, [system_tests.sh](system_tests.sh)
+can be used with the `-f` option to specify a file containing system
+tests, which may use the above parameters to also execute a performance
+test.
+
+For example, suppose there is a file `performance_test.txt` with the
+following content:
+
+    run_system_test -k bitrate -v 100,200 -d 5 TS_PASS_DIRECT router1-router2 : :
+
+This file specifies that a system test should be run with a performance
+test afterwards, where the independent variable to be tested is bitrate,
+the values it should take are 100 and 200 Mbps, and the duration of the
+test for each value is 5 seconds. The other parameters are not relevant
+to the performance test itself, but are necessary to run the system test
+in the first place: - `TS_PASS_DIRECT` specifies the expected result of
+the system test, which is that a direct connection is established
+between the peers. - `router1-router2` specifies that the peers will
+reside in the `router1` and `router2` namespaces - The first colon acts
+as a separator between the NAT configurations of the peers. However,
+since the peers reside in the router namespaces and therefore have a
+public IP address, NAT is not used in this test. - The second colon acts
+as a separator between the external WireGuard configurations of the
+peers. In this test, these configurations are not provided, meaning the
+peers will use userspace WireGuard.
+
 Each performance test logs its results to a separate json file, which
 contains (among other data) the average bitrate, jitter and packet loss
-during the test. Using a [Python
-script](visualize_performance_tests.py), these performance metrics are
-extracted from the json files, and graphs are automatically created that
-plot the independent variable on the X axis against each performance
-metric on the Y axis. Below is an example of such a graph:
+during the test. Using the Python script
+[visualize_performance_tests.py](visualize_performance_tests.py), these
+performance metrics are extracted from the json files, and graphs are
+automatically created that plot the independent variable on the X axis
+against each performance metric on the Y axis. Below is an example of
+such a graph:
 
 ![](./images/performance_test_packet_loss.png)
 
 ## Integration Tests
 
 In these tests, the smaller components of the eduP2P client are tested,
-such as the lower layers described in [the document describing eduP2P’s
+such as the lower layers described in [the document explaining eduP2P’s
 architecture](../ARCHITECTURE.md):
 
 - The Session
