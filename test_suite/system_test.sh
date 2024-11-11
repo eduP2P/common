@@ -7,6 +7,8 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
     -k <packet_loss|bitrate>
     -v <comma-separated string of positive real numbers>
     -d <seconds>
+    -b
+        With this flag, eduP2P's performance is compared to the performance of a direct connection, and a connection using only WireGuard
     
 <NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
     1. <PEER 1>-<PEER 2>, for peers in the public network
@@ -33,7 +35,7 @@ If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corre
 performance_test_duration=0 # Default value in case -d is not used
 
 # Validate optional arguments
-while getopts ":k:v:d:h" opt; do
+while getopts ":k:v:d:bh" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
@@ -47,6 +49,9 @@ while getopts ":k:v:d:h" opt; do
         d)
             performance_test_duration=$OPTARG
             validate_str $performance_test_duration "^[0-9]+*$"
+            ;;
+        b)
+            baseline="-b"
             ;;
         h) 
             echo "$usage_str"
@@ -220,7 +225,6 @@ done
 # Start peers
 cd ${repo_dir}/cmd/test_client
 
-
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     peer_ns=${peer_ns_list[$i]}
@@ -229,7 +233,7 @@ for i in {0..1}; do
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
     $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir ${wg_interfaces[$i]} `# Positional parameters` \
-    2>&1 | sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found (sed is run in subshell so $! will return the pid of setup_client.sh)
+    2>&1 | sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found
 done
 
 # Constants for colored text in output
@@ -284,7 +288,7 @@ if [[ -n $performance_test_var ]]; then
     peer1_ns=${peer_ns_list[0]}
     peer1_ip=$(sudo ip netns exec $peer1_ns ip address show $peer1_interface | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
 
-    sudo ./performance_test.sh $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $log_dir
+    sudo ./performance_test.sh $baseline $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $log_dir
 
     if [[ $? -ne 0 ]]; then 
         clean_exit 1
