@@ -9,7 +9,6 @@ A CI test suite for the eduP2P prototype.
     2.  [System Tests](#system-tests)
     3.  [Performance Tests](#performance-tests)
     4.  [Integration Tests](#integration-tests)
-    5.  [System Test Results](#system-test-results)
 2.  [Results](#results)
     1.  [System Test Results](#system-test-results)
     2.  [Performance Test Results](#performance-test-results)
@@ -42,8 +41,8 @@ Furthermore, any machine running Go version 1.22+ should be able to run
 the integration tests. The following software needs to be installed
 before the full test suite can be run:
 
--   Go version 1.22+, which can be installed
-    [here](https://go.dev/doc/install) and is necessary to build eduP2P.
+- Go version 1.22+, which can be installed
+  [here](https://go.dev/doc/install) and is necessary to build eduP2P.
 
 ### System test-specific requirements
 
@@ -55,8 +54,8 @@ result in being prompted to enter your password.
 
 Furthermore, the system tests require a few command-line tools to be
 installed. The list of tools is found in
-[system\_test\_requirements.txt](system_test_requirements.txt), and can
-be installed by running the following command:
+[system_test_requirements.txt](system_test_requirements.txt), and can be
+installed by running the following command:
 
     xargs -a system_test_requirements.txt sudo apt-get install
 
@@ -65,8 +64,8 @@ be installed by running the following command:
 The performance tests are run as a part of the system tests, and require
 a Python script to visualize the results. The dependencies of this
 Python script are listed in
-[python\_requirements.txt](python_requirements.txt), and can be
-installed as follows:
+[python_requirements.txt](python_requirements.txt), and can be installed
+as follows:
 
     pip install -r python-requirements.txt
 
@@ -138,53 +137,51 @@ Below, an explanation of each namespace and the devices within them is
 given. Since the namespaces on the left and right side of the diagram
 are very similar, the namespaces on the right side are skipped.
 
--   **private1\_peer1:** to allow multiple peers in one private network
-    to use eduP2P with userspace WireGuard, each peer needs its own
-    network namespace. This is because eduP2P creates a TUN device
-    called `ts0` with userspace WireGuard, and only one such device can
-    exist per namespace.
+- **private1_peer1:** to allow multiple peers in one private network to
+  use eduP2P with userspace WireGuard, each peer needs its own network
+  namespace. This is because eduP2P creates a TUN device called `ts0`
+  with userspace WireGuard, and only one such device can exist per
+  namespace.
 
-    To make sure peers within a private network can still reach their
-    router and each other, each peer has a veth pair. Both devices in
-    the pair have the same name as the peer’s namespace, with one device
-    residing in this namespace, while the other resides in the private
-    network’s namespace.
+  To make sure peers within a private network can still reach their
+  router and each other, each peer has a veth pair. Both devices in the
+  pair have the same name as the peer’s namespace, with one device
+  residing in this namespace, while the other resides in the private
+  network’s namespace.
 
--   **private1:** each private network needs its own namespace to
-    properly isolate the private networks from the public network.
+- **private1:** each private network needs its own namespace to properly
+  isolate the private networks from the public network.
 
--   **router1:** a separate network namespace is necessary for each
-    router in order for NAT to be applied in the router. This test suite
-    uses nftables [\[2\]](#ref-man_nft) to apply NAT, and in this
-    framework NAT is only applied to the source IP of packets if these
-    packets are leaving the local machine. The network interface
-    `router1_pub` that applies NAT is in its own namespace, so that both
-    packets going to the private network and to the public network look
-    as if they are leaving the local machine, and hence have NAT applied
-    to them.
+- **router1:** a separate network namespace is necessary for each router
+  in order for NAT to be applied in the router. This test suite uses
+  nftables [\[2\]](#ref-man_nft) to apply NAT, and in this framework NAT
+  is only applied to the source IP of packets if these packets are
+  leaving the local machine. The network interface `router1_pub` that
+  applies NAT is in its own namespace, so that both packets going to the
+  private network and to the public network look as if they are leaving
+  the local machine, and hence have NAT applied to them.
 
-    To allow the router to communicate with the public network,
-    `router1_pub` forms a veth pair with the `router1` device in the
-    public network. Similarly, to allow the router to communicate with
-    the private network, there is a veth pair consisting of the devices
-    `router1_priv` in the router’s namespace, and `router1` in the
-    private network’s namespace.
+  To allow the router to communicate with the public network,
+  `router1_pub` forms a veth pair with the `router1` device in the
+  public network. Similarly, to allow the router to communicate with the
+  private network, there is a veth pair consisting of the devices
+  `router1_priv` in the router’s namespace, and `router1` in the private
+  network’s namespace.
 
--   **public:** this network namespace exists to isolate the whole
-    network setup from the machine’s root network namespace, such that
-    the only traffic flowing through the namespaces is traffic
-    concerning eduP2P. Besides a veth device for each router, this
-    namespace also contains a TUN device that acts as a network switch
-    between the routers, and TUN devices to simulate the control and
-    relay server of eduP2P.
+- **public:** this network namespace exists to isolate the whole network
+  setup from the machine’s root network namespace, such that the only
+  traffic flowing through the namespaces is traffic concerning eduP2P.
+  Besides a veth device for each router, this namespace also contains a
+  TUN device that acts as a network switch between the routers, and TUN
+  devices to simulate the control and relay server of eduP2P.
 
--   **control:** the goal of this namespace is to force all outgoing
-    traffic from the control server to be routed via the switch. If the
-    control server would reside in the public namespace, it could
-    communicate with the routers directly. The reason all traffic should
-    be routed via the switch is so that packet loss, which is a
-    configurable option in the system tests, can be easily simulated on
-    one central interface.
+- **control:** the goal of this namespace is to force all outgoing
+  traffic from the control server to be routed via the switch. If the
+  control server would reside in the public namespace, it could
+  communicate with the routers directly. The reason all traffic should
+  be routed via the switch is so that packet loss, which is a
+  configurable option in the system tests, can be easily simulated on
+  one central interface.
 
 This network setup allows eduP2P to be tested under the following
 conditions: - Two peers in different private networks behind NAT
@@ -408,24 +405,23 @@ as an optional part of the system tests. For each system test,
 performance tests may be run after a connection has been established by
 configuring the following parameters:
 
--   **Independent variable**: the user can choose an independent
-    variable during the performance tests. This variable will take
-    different values that are also configured by the user, and an iperf3
-    performance test will be performed for each value. This way, it is
-    possible to measure the effect of the independent variable on the
-    performance of eduP2P. Currently, the test suite implements the
-    following independent variables:
+- **Independent variable**: the user can choose an independent variable
+  during the performance tests. This variable will take different values
+  that are also configured by the user, and an iperf3 performance test
+  will be performed for each value. This way, it is possible to measure
+  the effect of the independent variable on the performance of eduP2P.
+  Currently, the test suite implements the following independent
+  variables:
 
-    1.  Packet loss: the percentage of packets that should be dropped
-        during the performance test.
-    2.  Bitrate: the speed at which iperf3 should try to send packets
-        during the performance test (in Mbps).
+  1.  Packet loss: the percentage of packets that should be dropped
+      during the performance test.
+  2.  Bitrate: the speed at which iperf3 should try to send packets
+      during the performance test (in Mbps).
 
--   **Performance test duration**: this parameter determines how long
-    each performance test should run for. For one system test, the total
-    amount of time the performance tests take is this parameter
-    multiplied by the amount of values assigned to the independent
-    variable.
+- **Performance test duration**: this parameter determines how long each
+  performance test should run for. For one system test, the total amount
+  of time the performance tests take is this parameter multiplied by the
+  amount of values assigned to the independent variable.
 
 Each performance test logs its results to a separate json file, which
 contains (among other data) the average bitrate, jitter and packet loss
@@ -443,8 +439,8 @@ In these tests, the smaller components of the eduP2P client are tested,
 such as the lower layers described in [the document describing eduP2P’s
 architecture](../ARCHITECTURE.md):
 
--   The Session
--   The actors in the Stage
+- The Session
+- The actors in the Stage
 
 Furthermore, the control server and relay server are also tested.
 
@@ -484,71 +480,27 @@ combination of the NAT mapping and filtering behaviour described in RFC
 noting the RFC 4787 mapping and filtering behaviour they are equivalent
 to:
 
--   **Full Cone NAT:** equivalent to a NAT with Endpoint-Independent
-    Mapping (EIM) and Endpoint-Independent Filtering (EIF).
--   **Restricted Cone NAT:** equivalent to a NAT with
-    Endpoint-Independent Mapping (EIM) and Address-Dependent Filtering
-    (ADF).
--   **Port Restricted Cone NAT:** equivalent to a NAT with
-    Endpoint-Independent Mapping (EIM) and Address and Port-Dependent
-    Filtering (ADPF).
--   **Symmetric NAT:** equivalent to a NAT with Address and
-    Port-Dependent Mapping (ADPM) and Address and Port-Dependent
-    Filtering (ADPF).
+- **Full Cone NAT:** equivalent to a NAT with Endpoint-Independent
+  Mapping (EIM) and Endpoint-Independent Filtering (EIF).
+- **Restricted Cone NAT:** equivalent to a NAT with Endpoint-Independent
+  Mapping (EIM) and Address-Dependent Filtering (ADF).
+- **Port Restricted Cone NAT:** equivalent to a NAT with
+  Endpoint-Independent Mapping (EIM) and Address and Port-Dependent
+  Filtering (ADPF).
+- **Symmetric NAT:** equivalent to a NAT with Address and Port-Dependent
+  Mapping (ADPM) and Address and Port-Dependent Filtering (ADPF).
 
 The expected results are shown in the table below. A cell is marked with
 an ‘X’ if UDP hole punching is successful in the scenario where one peer
 is behind the NAT indicated by the cell’s row header, and the other peer
 is behind the NAT indicated by the cell’s column header.
 
-<table style="width:98%;">
-<colgroup>
-<col style="width: 19%" />
-<col style="width: 13%" />
-<col style="width: 21%" />
-<col style="width: 28%" />
-<col style="width: 14%" />
-</colgroup>
-<thead>
-<tr>
-<th style="text-align: left;">NAT Type</th>
-<th style="text-align: left;">Full Cone</th>
-<th style="text-align: left;">Restricted Cone</th>
-<th style="text-align: left;">Port Restricted Cone</th>
-<th style="text-align: left;">Symmetric</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;"><strong>Full Cone</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>Restricted Cone</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>Port Restricted Cone</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>Symmetric</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"></td>
-</tr>
-</tbody>
-</table>
+| NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
+|:---|:---|:---|:---|:---|
+| **Full Cone** | X | X | X | X |
+| **Restricted Cone** | X | X | X | X |
+| **Port Restricted Cone** | X | X | X |  |
+| **Symmetric** | X | X |  |  |
 
 In the next section, the experiment involving the four types of NAT from
 RFC 3489 is repeated for eduP2P, in order to compare its results to the
@@ -561,54 +513,12 @@ filtering behaviour.
 The results of this experiment differed from the expected results shown
 in the table above:
 
-<table style="width:98%;">
-<colgroup>
-<col style="width: 19%" />
-<col style="width: 13%" />
-<col style="width: 21%" />
-<col style="width: 28%" />
-<col style="width: 14%" />
-</colgroup>
-<thead>
-<tr>
-<th style="text-align: left;">NAT Type</th>
-<th style="text-align: left;">Full Cone</th>
-<th style="text-align: left;">Restricted Cone</th>
-<th style="text-align: left;">Port Restricted Cone</th>
-<th style="text-align: left;">Symmetric</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;"><strong>Full Cone</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>Restricted Cone</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>Port Restricted Cone</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;"></td>
-</tr>
-<tr>
-<td style="text-align: left;"><strong>Symmetric</strong></td>
-<td style="text-align: left;">X</td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"></td>
-</tr>
-</tbody>
-</table>
+| NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
+|:---|:---|:---|:---|:---|
+| **Full Cone** | X | X | X | X |
+| **Restricted Cone** | X | X | X |  |
+| **Port Restricted Cone** | X | X | X |  |
+| **Symmetric** | X |  |  |  |
 
 Comparing the tables, we see that eduP2P is not able to establish a
 direct connection when one peer is behind a Port Restricted Cone NAT and
@@ -632,29 +542,31 @@ its first ping before the peer behind the Symmetric NAT sends its first
 ping. If the first pings are sent in the reverse order, the hole
 punching process will fail, as illustrated in the diagram below:
 
-       sequenceDiagram
-          autonumber
+``` mermaid
+   sequenceDiagram
+      autonumber
 
-          actor p1 as Peer 1 (X:x)
-          participant rc as Restricted Cone NAT
-          participant sym as Symmetric NAT
-          actor p2 as Peer 2 (Y:y)
+      actor p1 as Peer 1 (X:x)
+      participant rc as Restricted Cone NAT
+      participant sym as Symmetric NAT
+      actor p2 as Peer 2 (Y:y)
 
-          %% Ping 1 from Peer 2
-          p2->>sym: Ping from Y:y to X':x1'
-          Note over sym: SNAT Y:y #8594; Y':y2'
-          sym--xrc: Ping from Y':y2' to X':x1'
-          Note over rc: DROP: src IP #8800; Z
+      %% Ping 1 from Peer 2
+      p2->>sym: Ping from Y:y to X':x1'
+      Note over sym: SNAT Y:y #8594; Y':y2'
+      sym--xrc: Ping from Y':y2' to X':x1'
+      Note over rc: DROP: src IP #8800; Z
 
-          %% Ping 1 from Peer 1
-          p1->>rc: Ping from X:x to Y':y1'
-          Note over rc: SNAT X:x #8594; X':x1'
-          rc--xsym: Ping from X':x1' to Y':y1'
-          Note over sym: DROP: src #8800; Z:z
+      %% Ping 1 from Peer 1
+      p1->>rc: Ping from X:x to Y':y1'
+      Note over rc: SNAT X:x #8594; X':x1'
+      rc--xsym: Ping from X':x1' to Y':y1'
+      Note over sym: DROP: src #8800; Z:z
 
-          %% Fail
-          Note over p1,p2: UDP hole punching failed
-          
+      %% Fail
+      Note over p1,p2: UDP hole punching failed
+      
+```
 
 In this diagram, we denote the private endpoints of Peer 1 and Peer 2 by
 `X:x` and `Y:y` respectively. Furthermore, we denote the “STUN
@@ -705,31 +617,33 @@ Even if the pings are sent in the correct order, the hole punching
 process still fails in the test suite because of the second factor, as
 illustrated in the next diagram:
 
-       sequenceDiagram
-          autonumber
+``` mermaid
+   sequenceDiagram
+      autonumber
 
-          actor p1 as Peer 1 (X:x)
-          participant rc as Restricted Cone NAT
-          participant sym as Symmetric NAT
-          actor p2 as Peer 2 (Y:y)
+      actor p1 as Peer 1 (X:x)
+      participant rc as Restricted Cone NAT
+      participant sym as Symmetric NAT
+      actor p2 as Peer 2 (Y:y)
 
-          %% Ping 1 from Peer 1
-          p1->>rc: Ping from X:x to Y':y1'
-          Note over rc: SNAT X:x #8594; X':x1'
-          rc--xsym: Ping from X':x1' to Y':y1'
-          activate rc
-             Note over sym: DROP: src #8800; Z:z
+      %% Ping 1 from Peer 1
+      p1->>rc: Ping from X:x to Y':y1'
+      Note over rc: SNAT X:x #8594; X':x1'
+      rc--xsym: Ping from X':x1' to Y':y1'
+      activate rc
+         Note over sym: DROP: src #8800; Z:z
 
-             %% Ping 1 from Peer 2
-             p2->>sym: Ping from Y:y to X':x1'
-             Note over sym: SNAT Y:y #8594; Y':y2'
-             sym--xrc: Ping from Y':y2' to X':x1'
-             Note over rc: DROP: src IP #8800; Z
-             Note over rc: Added rule: <br/> DNAT to X:x if src IP = Y, dst = X':x1'
-          deactivate rc
+         %% Ping 1 from Peer 2
+         p2->>sym: Ping from Y:y to X':x1'
+         Note over sym: SNAT Y:y #8594; Y':y2'
+         sym--xrc: Ping from Y':y2' to X':x1'
+         Note over rc: DROP: src IP #8800; Z
+         Note over rc: Added rule: <br/> DNAT to X:x if src IP = Y, dst = X':x1'
+      deactivate rc
 
-          %% Fail
-          Note over p1,p2: UDP hole punching failed
+      %% Fail
+      Note over p1,p2: UDP hole punching failed
+```
 
 As seen in the diagram, the ping from Peer 2 to Peer 1 is still
 filtered, even though Peer 1 sent a ping first. When Peer 1 sents its
@@ -795,78 +709,80 @@ following diagram shows that the solution causes the hole punching
 process to succeed, despite the pings being sent in the incorrect order
 and the some delay in the filtering script:
 
-       sequenceDiagram
-          autonumber
+``` mermaid
+   sequenceDiagram
+      autonumber
 
-          actor p1 as Peer 1 (X:x)
-          participant rc as Restricted Cone NAT
-          participant sym as Symmetric NAT
-          actor p2 as Peer 2 (Y:y)
+      actor p1 as Peer 1 (X:x)
+      participant rc as Restricted Cone NAT
+      participant sym as Symmetric NAT
+      actor p2 as Peer 2 (Y:y)
 
-          %% Ping 1 from Peer 2
-          p2->>sym: Ping from Y:y to X':x1'
-          activate p2
-          Note over p2: Wait 1s
-          Note over sym: SNAT Y:y #8594; Y':y2'
-          sym--xrc: Ping from Y':y2' to X':x1'
-          Note over rc: DROP: src IP #8800; Z
+      %% Ping 1 from Peer 2
+      p2->>sym: Ping from Y:y to X':x1'
+      activate p2
+      Note over p2: Wait 1s
+      Note over sym: SNAT Y:y #8594; Y':y2'
+      sym--xrc: Ping from Y':y2' to X':x1'
+      Note over rc: DROP: src IP #8800; Z
 
-          %% Ping 1 from Peer 1
-          p1->>rc: Ping from X:x to Y':y1'
-          activate p1
-          Note over p1: Wait 1s
-          Note over rc: SNAT X:x #8594; X':x1'
-          rc--xsym: Ping from X':x1' to Y':y1'
-          activate rc
-          Note over sym: DROP: src #8800; Z:z
-       
-          %% Ping 2 from Peer 2
-          deactivate p2
-          p2->>sym: Ping from Y:y to X':x1'
-          activate p2
-          Note over p2: Wait 1s
-          Note over sym: SNAT Y:y #8594; Y':y2'
-          sym--xrc: Ping from Y':y2' to X':x1'
-          Note over rc: DROP: src IP #8800; Z
-          Note over rc: Added rule: <br/> DNAT to X:x if src IP = Y, dst = X':x1'
-          deactivate rc
+      %% Ping 1 from Peer 1
+      p1->>rc: Ping from X:x to Y':y1'
+      activate p1
+      Note over p1: Wait 1s
+      Note over rc: SNAT X:x #8594; X':x1'
+      rc--xsym: Ping from X':x1' to Y':y1'
+      activate rc
+      Note over sym: DROP: src #8800; Z:z
+   
+      %% Ping 2 from Peer 2
+      deactivate p2
+      p2->>sym: Ping from Y:y to X':x1'
+      activate p2
+      Note over p2: Wait 1s
+      Note over sym: SNAT Y:y #8594; Y':y2'
+      sym--xrc: Ping from Y':y2' to X':x1'
+      Note over rc: DROP: src IP #8800; Z
+      Note over rc: Added rule: <br/> DNAT to X:x if src IP = Y, dst = X':x1'
+      deactivate rc
 
-          %% Ping 2 from Peer 2
-          deactivate p1
-          p1->>rc: Ping from X:x to Y':y1'
-          activate p1
-          Note over p1: Wait 1s
-          Note over rc: SNAT X:x #8594; X':x1'
-          rc--xsym: Ping from X':x1' to Y':y1'
-          activate rc
-          Note over sym: DROP: src #8800; Z:z
-          
-          %% Ping 2 from Peer 2
-          deactivate p2
-          p2->>sym: Ping from Y:y to X':x1'
-          activate p2
-          Note over p2: Wait 1s
-          Note over sym: SNAT Y:y #8594; Y':y2'
-          sym->>rc: Ping from Y':y2' to X':x1'
-          Note over rc: DNAT X':x1' #8594; X:x
-          rc->>p1: Ping from Y':y2' to X:x
+      %% Ping 2 from Peer 2
+      deactivate p1
+      p1->>rc: Ping from X:x to Y':y1'
+      activate p1
+      Note over p1: Wait 1s
+      Note over rc: SNAT X:x #8594; X':x1'
+      rc--xsym: Ping from X':x1' to Y':y1'
+      activate rc
+      Note over sym: DROP: src #8800; Z:z
+      
+      %% Ping 2 from Peer 2
+      deactivate p2
+      p2->>sym: Ping from Y:y to X':x1'
+      activate p2
+      Note over p2: Wait 1s
+      Note over sym: SNAT Y:y #8594; Y':y2'
+      sym->>rc: Ping from Y':y2' to X':x1'
+      Note over rc: DNAT X':x1' #8594; X:x
+      rc->>p1: Ping from Y':y2' to X:x
 
-          %% Pong from Peer 1
-          deactivate p1
-          p1->>rc: Pong from X:x to Y':y2'
-          activate p1
-          Note over p1: Wait 1s
-          Note over rc: SNAT X:x #8594; X':x1'
-          rc->>sym: Pong from X':x1' to Y':y2'
-          Note over sym: DNAT Y':y2' #8594; Y:y
-          sym->>p2: Pong from X':x1' to Y':y2'
-          
-          %% Success
-          Note over p1,p2: UDP hole punching succeeded
-          deactivate p2
-          deactivate p1
-          
-       
+      %% Pong from Peer 1
+      deactivate p1
+      p1->>rc: Pong from X:x to Y':y2'
+      activate p1
+      Note over p1: Wait 1s
+      Note over rc: SNAT X:x #8594; X':x1'
+      rc->>sym: Pong from X':x1' to Y':y2'
+      Note over sym: DNAT Y':y2' #8594; Y:y
+      sym->>p2: Pong from X':x1' to Y':y2'
+      
+      %% Success
+      Note over p1,p2: UDP hole punching succeeded
+      deactivate p2
+      deactivate p1
+      
+   
+```
 
 Messages 1 through 6 show how the previously explained race condition
 and filtering script delay cause the first three pings to be filtered.
@@ -919,18 +835,30 @@ TODO
 
 ## Bibliography
 
+<div id="refs" class="references csl-bib-body" entry-spacing="0">
+
+<div id="ref-man_network_namespaces" class="csl-entry">
+
 <span class="csl-left-margin">\[1\]
-</span><span class="csl-right-inline">“<span class="nocase">network\_namespaces -
+</span><span class="csl-right-inline">“<span class="nocase">network_namespaces -
 overview of Linux network namespaces</span>.” in
 <span class="nocase">Linux Programmer’s Manual</span>. Michael Kerrisk.
 Available:
 <https://man7.org/linux/man-pages/man7/network_namespaces.7.html></span>
+
+</div>
+
+<div id="ref-man_nft" class="csl-entry">
 
 <span class="csl-left-margin">\[2\]
 </span><span class="csl-right-inline">P. McHardy and P. N. Ayuso,
 “<span class="nocase">nft - Administration tool of the nftables
 framework for packet filtering and classification</span>.” Available:
 <https://www.netfilter.org/projects/nftables/manpage.html></span>
+
+</div>
+
+<div id="ref-rfc4787" class="csl-entry">
 
 <span class="csl-left-margin">\[3\]
 </span><span class="csl-right-inline">C. F. Jennings and F. Audet,
@@ -939,16 +867,28 @@ Requirements for Unicast UDP</span>.” in Request for comments. RFC 4787;
 RFC Editor, Jan. 2007. doi:
 [10.17487/RFC4787](https://doi.org/10.17487/RFC4787).</span>
 
+</div>
+
+<div id="ref-man_conntrack" class="csl-entry">
+
 <span class="csl-left-margin">\[4\]
 </span><span class="csl-right-inline">H. Welte,
 “<span class="nocase">conntrack - command line interface for netfilter
 connection tracking</span>.” Available:
 <https://manpages.debian.org/jessie/conntrack/conntrack.8.en.html></span>
 
+</div>
+
+<div id="ref-man_iperf3" class="csl-entry">
+
 <span class="csl-left-margin">\[5\]
 </span><span class="csl-right-inline">“<span class="nocase">iperf3 -
 perform network throughput tests</span>.” Available:
 <https://manpages.org/iperf3></span>
+
+</div>
+
+<div id="ref-rfc3489" class="csl-entry">
 
 <span class="csl-left-margin">\[6\]
 </span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
@@ -957,13 +897,25 @@ Datagram Protocol (UDP) Through Network Address Translators
 (NATs)</span>.” in Request for comments. RFC 3489; RFC Editor, Mar.
 2003. doi: [10.17487/RFC3489](https://doi.org/10.17487/RFC3489).</span>
 
+</div>
+
+<div id="ref-wacker2008" class="csl-entry">
+
 <span class="csl-left-margin">\[7\]
 </span><span class="csl-right-inline">A. Wacker, G. Schiele, S.
 Holzapfel, and T. Weis, “A NAT traversal mechanism for peer-to-peer
 networks,” Oct. 2008, pp. 81–83. doi:
 [10.1109/P2P.2008.29](https://doi.org/10.1109/P2P.2008.29).</span>
 
+</div>
+
+<div id="ref-hole_punching_table" class="csl-entry">
+
 <span class="csl-left-margin">\[8\]
 </span><span class="csl-right-inline">“Understanding different NAT types
 and hole-punching.” Available:
 <https://support.dh2i.com/docs/Archive/kbs/general/understanding-different-nat-types-and-hole-punching/></span>
+
+</div>
+
+</div>
