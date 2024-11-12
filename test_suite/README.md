@@ -23,7 +23,7 @@ conditions involving Network Address Translation (NAT). Continuous
 Integration (CI) is used to automatically run the tests when the
 repository is updated. CI is implemented using GitHub Workflows, and the
 workflow running the tests can be found
-[here](.github/workflows/go.yml).
+[here](../.github/workflows/CI_test_suite.yml).
 
 The test suite contains three types of tests:
 
