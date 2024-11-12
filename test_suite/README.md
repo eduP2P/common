@@ -46,11 +46,11 @@ before the full test suite can be run:
 
 ### System test-specific requirements
 
-Running the system tests requires root privileges, since network
-namespaces are created to simulate isolated networks, and commands are
-executed in the context of these namespaces. Therefore, the system tests
-contain some commands run with sudo, and running the system tests may
-result in being prompted to enter your password.
+Running the system tests requires root privileges in order to execute
+commands in the context of network namespaces created during the system
+tests. Therefore, the system tests contain some commands run with sudo,
+and running the system tests may result in being prompted to enter your
+password.
 
 Furthermore, the system tests require a few command-line tools to be
 installed. The list of tools is found in
@@ -75,7 +75,7 @@ In these tests, two clients attempt to establish a peer-to-peer
 connection using eduP2P. When these tests are executed via GitHub
 workflows, the test results can be found in the output of the
 “SystemTests” job under the step “Run system tests”, and the logs can be
-downloaded using the URL in the “Upload system test logs: step.
+downloaded using the URL in the “Upload system test logs” step.
 
 The system tests can also be executed manually using
 [system_tests.sh](system_tests.sh). For example, the command below
@@ -88,11 +88,21 @@ levels, and in this command the ‘debug’ level is specified.
     ./system_tests.sh -c 0 3340 9999 debug
 
 The system tests specifically verify whether the eduP2P peers are able
-to establish a connection when NAT is involved. To do so, the local host
+to establish a connection when NAT is involved. To do so, the machine
 running the test suite must simulate a network setup where peers are
 located in different private networks, and their routers which act as
-the gateway to the public network apply NAT. This simulated setup is
-described in the next section.
+the gateway to the public network apply NAT.
+
+The test suite uses a simulated setup of multiple networks instead of a
+physical setup for two reasons:
+
+1.  The simulated setup can be run on a single machine, therefore making
+    the test suite easier to use.
+2.  A simulated setup acts as a more ideal environment to perform the
+    tests, since it is affected less by throughput limitations or
+    network congestion than on a physical network.
+
+The simulated network setup is described in detail in the next section.
 
 ### Network Simulation Setup
 
@@ -163,11 +173,11 @@ are very similar, the namespaces on the right side are skipped.
 - **router1:** a separate network namespace is necessary for each router
   in order for NAT to be applied in the router. This test suite uses
   nftables [\[2\]](#ref-man_nft) to apply NAT, and in this framework NAT
-  is only applied to the source IP of packets if these packets are
-  leaving the local machine. The network interface `router1_pub` that
-  applies NAT is in its own namespace, so that both packets going to the
-  private network and to the public network look as if they are leaving
-  the local machine, and hence have NAT applied to them.
+  is only applied to packets that are leaving the local machine. The
+  network interface `router1_pub` that applies NAT is in its own
+  namespace, so that both packets going to the private network and to
+  the public network look as if they are leaving the local machine, and
+  hence have NAT applied to them.
 
   To allow the router to communicate with the public network,
   `router1_pub` forms a veth pair with the `router1` device in the
@@ -180,8 +190,7 @@ are very similar, the namespaces on the right side are skipped.
   setup from the machine’s root network namespace, such that the only
   traffic flowing through the namespaces is traffic concerning eduP2P.
   Besides a veth device for each router, this namespace also contains a
-  TUN device that acts as a network switch between the routers, and TUN
-  devices to simulate the control and relay server of eduP2P.
+  TUN device that acts as a network switch between the routers.
 
 - **control:** the goal of this namespace is to force all outgoing
   traffic from the control server to be routed via the switch. If the
@@ -192,11 +201,13 @@ are very similar, the namespaces on the right side are skipped.
   one central interface.
 
 This network setup allows eduP2P to be tested under the following
-conditions: - Two peers in different private networks behind NAT
-devices. - Two peers in the same private network behind the same NAT
-device. - One or two peers in the public network. The network setup
-allows public “peers” to be simulated by making a router act as a peer,
-since the routers have a public IP address.
+conditions:
+
+- Two peers in different private networks behind NAT devices.
+- Two peers in the same private network behind the same NAT device.
+- One or two peers in the public network. The network setup allows
+  public “peers” to be simulated by making a router act as a peer, since
+  the routers have a public IP address.
 
 The next section explains the types of NAT in this network setup, and
 describes how they are implemented.
@@ -216,8 +227,8 @@ must keep track of this connection between the two endpoints, called a
 session, in order to properly translate the source address of packets
 sent by the internal endpoint, and the destination address of packets
 sent to the internal endpoint. This session is a tuple consisting of the
-IP addresses and ports of the internal endpoint and the IP address and
-port of the external endpoint.
+IP address and port of the internal endpoint and the IP address and port
+of the external endpoint.
 
 A NAT’s mapping behaviour dictates how mappings are reused when there
 are multiple sessions to different endpoints. We assume there already is
@@ -301,12 +312,13 @@ incoming packets destined to `X':x1'` are filtered, instead of being
 translated and sent to `X:x`. Just like for mapping, RFC 4787 describes
 three different types of behaviour with the same naming convention:
 
-1.  **Endpoint-Independent Filtering (EIF):** packets destined to `X:x`
-    are never filtered, regardless of their source IP address or port.
-2.  **Address-Dependent Filtering (ADF):** packets destined to `X:x` are
-    filtered only if their source IP address does not equal `Y`
+1.  **Endpoint-Independent Filtering (EIF):** packets destined to
+    `X':x1'` are never filtered, regardless of their source IP address
+    or port.
+2.  **Address-Dependent Filtering (ADF):** packets destined to `X':x1'`
+    are filtered only if their source IP address does not equal `Y`
 3.  **Address and Port-Dependent Filtering (ADPF):** packets destined to
-    `X:x` are filtered only if their source endpoint does not equal
+    `X':x1'` are filtered only if their source endpoint does not equal
     `Y:y1`.
 
 The image below illustrates the difference between the three filtering
@@ -460,16 +472,18 @@ test afterwards, where the independent variable to be tested is bitrate,
 the values it should take are 100 and 200 Mbps, and the duration of the
 test for each value is 5 seconds. The other parameters are not relevant
 to the performance test itself, but are necessary to run the system test
-in the first place: - `TS_PASS_DIRECT` specifies the expected result of
-the system test, which is that a direct connection is established
-between the peers. - `router1-router2` specifies that the peers will
-reside in the `router1` and `router2` namespaces - The first colon acts
-as a separator between the NAT configurations of the peers. However,
-since the peers reside in the router namespaces and therefore have a
-public IP address, NAT is not used in this test. - The second colon acts
-as a separator between the external WireGuard configurations of the
-peers. In this test, these configurations are not provided, meaning the
-peers will use userspace WireGuard.
+in the first place:
+
+- `TS_PASS_DIRECT` specifies the expected result of the system test,
+  which is that a direct connection is established between the peers.
+- `router1-router2` specifies that the peers will reside in the
+  `router1` and `router2` namespaces
+- The first colon acts as a separator between the NAT configurations of
+  the peers. However, since the peers reside in the router namespaces
+  and therefore have a public IP address, NAT is not used in this test.
+- The second colon acts as a separator between the external WireGuard
+  configurations of the peers. In this test, these configurations are
+  not provided, meaning the peers will use userspace WireGuard.
 
 Each performance test logs its results to a separate json file, which
 contains (among other data) the average bitrate, jitter and packet loss
@@ -519,7 +533,7 @@ hole punching when both peers are behind various types of NAT.
 When considering the four types of NAT described in RFC 3489
 [\[6\]](#ref-rfc3489), the results of using UDP hole punching to
 establish a connection between peers are well-established
-[\[7\]](#ref-wacker2008) [\[8\]](#ref-hole_punching_table).
+[\[7\]](#ref-wacker2008), [\[8\]](#ref-hole_punching_table).
 
 This test suite uses the RFC 4787 [\[3\]](#ref-rfc4787) terminology,
 which does not categorize NAT into these four types. However, each of
@@ -577,7 +591,7 @@ connection in this scenario required investigating the traffic between
 the two peers, and the logs generated by the system tests. The cause of
 the failure was a combination of two factors:
 
-1.  In eduP2P, each peer only sends two “pings” during the UDP hole
+1.  In eduP2P, each peer only sends two ‘pings’ during the UDP hole
     punching process.
 2.  In the test suite, the NAT simulation contains some delay due to the
     monitoring script used for NAT filtering.
@@ -723,7 +737,7 @@ the case because of three properties of the filtering script:
 2.  The filtering script only performs the conntrack monitoring process
     if the filtering behaviour is *not* Address and Port-Dependent,
     i.e., only with a Full Cone or Restricted Cone NAT. For Address and
-    Port Dependent Mapping behaviour, packets that do *not* come from
+    Port-Dependent Mapping behaviour, packets that do *not* come from
     the original session’s endpoint should be dropped, so the process is
     unnecessary.
 3.  The delay of the filtering script is only an issue for Restricted
@@ -756,7 +770,7 @@ implemented in eduP2P, as mentioned in [this issue from the eduP2P
 GitHub repository](https://github.com/eduP2P/common/issues/78). The
 following diagram shows that the solution causes the hole punching
 process to succeed, despite the pings being sent in the incorrect order
-and the some delay in the filtering script:
+and the delay in the filtering script:
 
 ``` mermaid
    sequenceDiagram
