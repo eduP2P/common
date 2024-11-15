@@ -81,11 +81,11 @@ The system tests can also be executed manually using
 [system_tests.sh](system_tests.sh). For example, the command below
 executes connectivity tests, where the simulated packet loss is set to
 0%. Beforehand, it starts an eduP2P control and relay server on ports
-3340 and 9999 respectively. The script also generates logs, including
+9999 and 3340 respectively. The script also generates logs, including
 the logs of the two eduP2P peers. The eduP2P client has multiple log
 levels, and in this command the ‘debug’ level is specified.
 
-    ./system_tests.sh -c 0 3340 9999 debug
+    ./system_tests.sh -c 0 9999 3340 debug
 
 The system tests specifically verify whether the eduP2P peers are able
 to establish a connection when NAT is involved. To do so, the machine
@@ -466,7 +466,7 @@ The following command runs tests from a file named
 `performance_test.txt` (the other parameters carry over from the system
 tests usage example):
 
-    ./system_tests.sh -f performance_test.txt 3340 9999 debug
+    ./system_tests.sh -f performance_test.txt 9999 3340 debug
 
 Suppose `performance_test.txt` contains the following line:
 
