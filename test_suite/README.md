@@ -460,30 +460,32 @@ configuring the following parameters:
 To run performance tests manually, [system_tests.sh](system_tests.sh)
 can be used with the `-f` option to specify a file containing system
 tests, which may use the above parameters to also execute a performance
-test.
+test after a system test passed.
 
-For example, suppose there is a file `performance_test.txt` with the
-following content:
+The following command runs tests from a file named
+`performance_test.txt` (the other parameters carry over from the system
+tests usage example):
+
+    ./system_tests.sh -f performance_test.txt 3340 9999 debug
+
+Suppose `performance_test.txt` contains the following line:
 
     run_system_test -k bitrate -v 100,200 -d 5 TS_PASS_DIRECT router1-router2 : :
 
-This file specifies that a system test should be run with a performance
-test afterwards, where the independent variable to be tested is bitrate,
-the values it should take are 100 and 200 Mbps, and the duration of the
-test for each value is 5 seconds. The other parameters are not relevant
-to the performance test itself, but are necessary to run the system test
-in the first place:
+Then, running the system tests with the `-f performance_test.txt` option
+will execute a performance test with the following parameters:
 
-- `TS_PASS_DIRECT` specifies the expected result of the system test,
-  which is that a direct connection is established between the peers.
-- `router1-router2` specifies that the peers will reside in the
-  `router1` and `router2` namespaces
-- The first colon acts as a separator between the NAT configurations of
-  the peers. However, since the peers reside in the router namespaces
-  and therefore have a public IP address, NAT is not used in this test.
-- The second colon acts as a separator between the external WireGuard
-  configurations of the peers. In this test, these configurations are
-  not provided, meaning the peers will use userspace WireGuard.
+- the independent variable to be tested is bitrate;
+- the values it should take are 100 and 200 Mbps;
+- the duration of the test for each value is 5 seconds.
+
+The other parameters in `performance_test.txt` are not relevant to the
+performance test itself, but are necessary to run the system test in the
+first place. Internally, these parameters are passed to the
+[system_test.sh](system_test.sh) script. This script, like all other
+bash scripts in this repository, has a usage specification which is
+printed when running `./system_test.sh -h`. The explanation of these
+other parameters can be found there.
 
 Each performance test logs its results to a separate json file, which
 contains (among other data) the average bitrate, jitter and packet loss
@@ -565,6 +567,102 @@ is behind the NAT indicated by the cell’s column header.
 | **Port Restricted Cone** | X | X | X |  |
 | **Symmetric** | X | X |  |  |
 
+As seen in the table, UDP hole punching succeeds unless one peer is
+behind a Port Restricted Cone NAT or Symmetric NAT, and the other peer
+is behind a Symmetric NAT. To explain why UDP hole punching is not
+possible in these three scenarios, a basic understanding UDP hole
+punching is necessary.
+
+In UDP hole punching, the peers send each other pings with the goal of
+“punching a hole” through the NAT boxes between the peers. To send these
+pings, the peers must know each other’s public IP address and port,
+i.e., the IP address and port used by the NAT box in front of the peer.
+This can be achieved with a STUN (Session Traversal Utilities for NAT)
+server. If a peer contacts a STUN server, this server will see this
+peer’s IP address and port after NAT has been applied to them, i.e., the
+peer’s “STUN endpoint”, and send it back to this peer. With both peers
+knowing their own STUN endpoint, they can exchange them to each other
+via a central server.
+
+We show why UDP hole punching is not possible in the three cases in the
+table below with a concrete example. We denote the peers performing UDP
+hole punching as Peer 1 and Peer 2, and their private endpoints by `X:x`
+and `Y:y` respectively. Furthermore, we denote the STUN endpoints of
+these peers by `X':x1'` and `Y':y1'` respectively, and assume they got
+these endpoints from the same STUN server with endpoint `Z:z`.
+
+In the case where Peer 1 is behind a Port Restricted Cone NAT and Peer 2
+is behind a Symmetric NAT, the hole punching process is illustrated in
+the following diagram:
+
+``` mermaid
+   sequenceDiagram
+      autonumber
+
+      actor p1 as Peer 1 (X:x)
+      participant prc as Port Restricted Cone NAT
+      participant sym as Symmetric NAT
+      actor p2 as Peer 2 (Y:y)
+
+      %% Ping 1 from Peer 1
+      p1->>prc: Ping from X:x to Y':y1'
+      Note over prc: SNAT X:x #8594; X':x1'
+      prc--xsym: Ping from X':x1' to Y':y1'
+      Note over sym: DROP: src #8800; Z:z
+
+      %% Ping 1 from Peer 2
+      p2->>sym: Ping from Y:y to X':x1'
+      Note over sym: SNAT Y:y #8594; Y':y2'
+      sym--xprc: Ping from Y':y2' to X':x1'
+      Note over prc: DROP: src #8800; Z:z, src #8800; Y':y1'
+```
+
+Since the Port Restricted Cone NAT has Endpoint-Independent Mapping
+behaviour, it translates the source endpoint `X:x` of Peer 1’s packet to
+`X':x1'`. On the Symmetric NAT, the packet’s destination endpoint
+`Y':y1` is mapped to a connection with the STUN server `Z:z`, and this
+NAT has an Address and Port-Dependent Filtering behaviour. For these two
+reasons, this NAT expects packets destined to `Y':y1` have source `Z:z`,
+and therefore drops the packet from Peer 1
+
+Since the Symmetric NAT has Address and Port-Dependent behaviour, it
+does not translate the source endpoint `Y:y` of Peer 2’s packet to its
+STUN endpoint `Y':y1'`; instead, it uses a new endpoint (`Y':y2'` in
+this example). Just like the Symmetric NAT, the Port Restricted Cone NAT
+has an Address and Port-Dependent Filtering behaviour and the packet’s
+destination is mapped to a connection with the STUN server. However, it
+is also mapped to a connection with `Y':y1'`, since Peer 1 has already
+sent a ping to `Y':y1'`. However, the packet is still dropped, because
+the port `y2'` used by Peer 2 does not equal the port `y1'` the Port
+Restricted Cone NAT expects.
+
+Of course, the scenario where Peer 1 is behind a Symmetric NAT and Peer
+2 is behind a Port Restricted Cone NAT is completely symmetrical to the
+previous case. The scenario where both peers are behind a symmetric NAT
+is also similar, as illustrated in the next diagram:
+
+``` mermaid
+   sequenceDiagram
+      autonumber
+
+      actor p1 as Peer 1 (X:x)
+      participant sym1 as Symmetric NAT
+      participant sym2 as Symmetric NAT
+      actor p2 as Peer 2 (Y:y)
+
+      %% Ping 1 from Peer 1
+      p1->>sym1: Ping from X:x to Y':y1'
+      Note over sym1: SNAT X:x #8594; X':x2'
+      sym1--xsym2: Ping from X':x2' to Y':y1'
+      Note over sym2: DROP: src #8800; Z:z
+
+      %% Ping 1 from Peer 2
+      p2->>sym2: Ping from Y:y to X':x1'
+      Note over sym2: SNAT Y:y #8594; Y':y2'
+      sym2--xsym1: Ping from Y':y2' to X':x1'
+      Note over sym1: DROP: src #8800; Z:z
+```
+
 In the next section, the experiment involving the four types of NAT from
 RFC 3489 is repeated for eduP2P, in order to compare its results to the
 table above. In the section after that, the experiment is extended such
@@ -573,8 +671,8 @@ filtering behaviour.
 
 ### Experiment with RFC 3489 NAT types
 
-The results of this experiment differed from the expected results shown
-in the table above:
+The results of repeating the UDP hole punching experiment with eduP2P
+are shown in the table below:
 
 | NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
 |:---|:---|:---|:---|:---|
@@ -583,13 +681,14 @@ in the table above:
 | **Port Restricted Cone** | X | X | X |  |
 | **Symmetric** | X |  |  |  |
 
-Comparing the tables, we see that eduP2P is not able to establish a
-direct connection when one peer is behind a Port Restricted Cone NAT and
-the other behind a Symmetric NAT, while this should be possible with UDP
-hole punching. Finding out why eduP2P fails to establish a direct
-connection in this scenario required investigating the traffic between
-the two peers, and the logs generated by the system tests. The cause of
-the failure was a combination of two factors:
+Comparing this table with the one in the previous section, we see that
+eduP2P is not able to establish a direct connection when one peer is
+behind a Port Restricted Cone NAT and the other behind a Symmetric NAT,
+while this should be possible with UDP hole punching. Finding out why
+eduP2P fails to establish a direct connection in this scenario required
+investigating the traffic between the two peers, and the logs generated
+by the system tests. The cause of the failure was a combination of two
+factors:
 
 1.  In eduP2P, each peer only sends two ‘pings’ during the UDP hole
     punching process.
@@ -628,17 +727,13 @@ punching process will fail, as illustrated in the diagram below:
 
       %% Fail
       Note over p1,p2: UDP hole punching failed
-      
 ```
 
-In this diagram, we denote the private endpoints of Peer 1 and Peer 2 by
-`X:x` and `Y:y` respectively. Furthermore, we denote the “STUN
-endpoints” of these peers by `X':x1'` and `Y':y1'` respectively. These
-STUN endpoints are the source IP and port used by the peers’ NAT boxes
-when they communicate with the STUN server, which is a part of eduP2P’s
-relay server and has endpoint `Z:z`. The STUN endpoints of the peers are
-exchanged via eduP2P’s control server, as the peers need each other’s
-STUN endpoints to perform hole punching.
+In this diagram, and all diagrams that follow, the example IP addressses
+and ports from the previous section are reused. Note that in eduP2P,
+each relay server contains a STUN server to discover the STUN endpoints
+of the peers, and these STUN endpoints are exchanged via the control
+server.
 
 Because Peer 1 is behind a Restricted Cone NAT (which has
 Endpoint-Independent Mapping behaviour), packets from Peer 1 to Peer 2’s
@@ -872,7 +967,156 @@ is also more likely to succeed in network conditions with packet loss.
 
 ### Experiment with RFC 4787 NAT mapping & filtering behaviours
 
-TODO
+The results of extending the UDP hole punching experiment to all
+combinations of RFC 4787 mapping (EIM, ADM, ADPM) and filtering (EIF,
+ADF, ADPF) behaviours are shown in the table below:
+
+| NAT Type | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| **EIM-EIF** | X | X | X | X | X | X | X | X | X |
+| **EIM-ADF** | X | X | X | X | X | X | X | X | X |
+| **EIM-ADPF** | X | X | X | X |  |  | X |  |  |
+| **ADM-EIF** | X | X | X | X | X | X | X | X | X |
+| **ADM-ADF** | X | X |  | X |  |  | X |  |  |
+| **ADM-ADPF** | X | X |  | X |  |  | X |  |  |
+| **ADPM-EIF** | X | X | X | X | X | X | X | X | X |
+| **ADPM-ADF** | X | X |  | X |  |  | X |  |  |
+| **ADPM-ADPF** | X | X |  | X |  |  | X |  |  |
+
+Based on these results, we can conclude that there are three
+(overlapping) types of NAT scenarios where the UDP hole punching process
+of eduP2P succeeds:
+
+1.  **One of the NATs is EIF**
+
+    If one of the two NATs has Endpoint-Independent Filtering behaviour,
+    UDP hole punching succeeds because such a NAT always lets the peer’s
+    pings through.
+
+2.  **One of the NATs is EIM-ADF**
+
+    If one of the two NATs has Endpoint-Independent Mapping behaviour
+    and Address-Dependent Filtering behaviour, UDP hole punching
+    succeeds because such a NAT lets the peer’s pings through after the
+    NAT itself has transmitted one ping.
+
+    This is because the pings the NAT transmits are destined to the
+    peer’s STUN endpoint, and will therefore let through packets that
+    have the IP of this endpoint as source IP. In this test suite, this
+    is always the case because the NATs only have one IP address.
+
+    However, it must be noted that for NATs that create mappings with
+    different source IPs, UDP hole punching may not always succeed if
+    one of the NATs is EIM-ADF.
+
+3.  **Both NATs are EIM**
+
+    If both NATs have Endpoint-Independent Mapping behaviour, both NATs
+    transmit the pings from the STUN endpoint of the peer behind it. The
+    peers’ STUN endpoint is also the destination of the pings in UDP
+    hole punching.
+
+    Therefore, after one NAT transmits the first ping destined to the
+    peer’s STUN endpoint, it will let the pings from this endpoint
+    through, regardless of the NAT’s filtering behaviour, and UDP hole
+    punching succeeds.
+
+For all NAT scenarios where eduP2P fails to establish a direct
+connection, it seems that this is caused by the fact that UDP hole
+punching does not work in that scenario, and not by a problem in eduP2P.
+To substantiate this claim, we examine the general UDP hole punching
+process for the two least restrictive NAT combinations in the above
+table where a direct connection could not be established:
+
+1.  **One peer behind an EIM-ADPF NAT, and the other behind an ADM-ADF
+    NAT.**
+
+    The UDP hole punching between the peers in this NAT scenario is
+    shown in the following diagram:
+
+    ``` mermaid
+    sequenceDiagram
+       autonumber
+
+       actor p1 as Peer 1 (X:x)
+       participant nat1 as EIM-ADPF
+       participant nat2 as ADM-ADF
+       actor p2 as Peer 2 (Y:y)
+
+       %% Ping 1 from Peer 1
+       p1->>nat1: Ping from X:x to Y':y1'
+       Note over nat1: SNAT X:x #8594; X':x1'
+       nat1--xnat2: Ping from X':x1' to Y':y1'
+       Note over nat2: DROP: src #8800; Z
+
+       %% Ping 1 from Peer 2
+       p2->>nat2: Ping from Y:y to X':x1'
+       Note over nat2: SNAT Y:y #8594; Y':y2'
+       nat2--xnat1: Ping from Y':y2' to X':x1'
+       Note over nat1: DROP: src #8800; Z:z, src #8800; Y':y1'
+
+       %% Ping 2 from Peer 1
+       p1->>nat1: Ping from X:x to Y':y1'
+       Note over nat1: SNAT X:x #8594; X':x1'
+       nat1--xnat2: Ping from X':x1' to Y':y1'
+       Note over nat2: DROP: src #8800; Z
+
+       %% Fail
+       Note over p1,p2: UDP hole punching failed
+    ```
+
+    The problem in this scenario is that Peer 1 is sending pings to
+    `Y':y1'`, while Peer 2 is sending them from `Y':y2'`. Peer 1’s NAT
+    will always drop the packets from Peer 2 because it has ADPF
+    behaviour and `y1'` is not equal to `y2'`. Peer 2’s NAT will accept
+    packets from source IP `X'` destined to `Y':y2'` after sending its
+    first ping from `Y':y2'` to `X':x1'`, but Peer 1 is sending packets
+    to `Y':y1'`, and this endpoint is only used for Peer 2’s connection
+    with the relay server `Z:z`.
+
+2.  **Both peers behind ADM-ADF NATs**
+
+    The UDP hole punching between the peers in this NAT scenario is
+    shown in the following diagram:
+
+    ``` mermaid
+    sequenceDiagram
+       autonumber
+
+       actor p1 as Peer 1 (X:x)
+       participant nat1 as ADM-ADF
+       participant nat2 as ADM-ADF
+       actor p2 as Peer 2 (Y:y)
+
+       %% Ping 1 from Peer 1
+       p1->>nat1: Ping from X:x to Y':y1'
+       Note over nat1: SNAT X:x #8594; X':x2'
+       nat1--xnat2: Ping from X':x2' to Y':y1'
+       Note over nat2: DROP: src #8800; Z
+
+       %% Ping 1 from Peer 2
+       p2->>nat2: Ping from Y:y to X':x1'
+       Note over nat2: SNAT Y:y #8594; Y':y2'
+       nat2--xnat1: Ping from Y':y2' to X':x1'
+       Note over nat1: DROP: src #8800; Z
+
+       %% Ping 2 from Peer 1
+       p1->>nat1: Ping from X:x to Y':y1'
+       Note over nat1: SNAT X:x #8594; X':x2'
+       nat1--xnat2: Ping from X':x2' to Y':y1'
+       Note over nat2: DROP: src #8800; Z
+
+       %% Fail
+       Note over p1,p2: UDP hole punching failed
+    ```
+
+    The problem in this scenario is that the source IP of the pings is
+    different from the peers’ STUN endpoints, and the ADF behaviour of
+    the NATs causes the first pings to be dropped. Therefore, the first
+    and subsequent pings in both directions are useless since they are
+    dropped by the receiving NAT, and also do not cause the transmitting
+    NAT to let through later pings sent to the STUN endpoint of the peer
+    behind this NAT.
 
 ## Performance Test Results
 
