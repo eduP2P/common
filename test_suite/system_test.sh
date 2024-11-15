@@ -3,6 +3,11 @@
 usage_str="""
 Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
+<TEST TARGET> is the expected result of the system test: 
+    1. TS_PASS_DIRECT: the peers have established a direct connection
+    2. TS_PASS_RELAY: the peers have established a connection via the eduP2P relay server
+    3. TS_FAIL: the peers failed to establish a connection
+    
 [OPTIONAL ARGUMENTS] can be provided for a performance test:
     -k <packet_loss|bitrate>
     -v <comma-separated string of positive real numbers>
@@ -233,7 +238,7 @@ for i in {0..1}; do
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
     $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir ${wg_interfaces[$i]} `# Positional parameters` \
-    2>&1 | sed -r "/TS_(PASS|FAIL)/q" > $peer_logfile & # Use sed to copy STDOUT and STDERR to a log file until the test suite's exit code is found
+    2>&1 | tee $peer_logfile &> /dev/null & # Redundant combination of tee and /dev/null redirect is necessary to avoid output indentation bug
 done
 
 # Constants for colored text in output
