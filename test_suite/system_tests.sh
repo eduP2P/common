@@ -76,7 +76,7 @@ log_lvl=$3
 
 # Make sure all arguments have been passed, and at least one optional argument is provided
 if [[ $# -ne 3  || !( -n $file || $connectivity == true || $performance == true )]]; then
-    print_err "expected 13 positional parameters, but received $#"
+    print_err "expected 3 positional parameters, but received $#"
     exit 1
 fi
 
