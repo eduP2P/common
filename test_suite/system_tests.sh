@@ -7,8 +7,10 @@ This script runs multiple system tests sequentially
 
 The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at least one should be provided:
     -c <packet loss>
-        Run the test suite's connectivity tests in different scenarios involving NAT
+        Run the test suite's connectivity tests with all combinations of RFC 3489 NATs
         The percentage of packets that should be dropped during the tests should be provided as a real number in the interval [0, 100)
+    -e 
+        Extends the connectivity tests to all combinations of RFC 4787 NATs
     -f <file>
         Run custom tests from an existing file. One test should be specified on a single line, and this line should be a call to the run_system_test function found in this script
     -p
@@ -21,7 +23,7 @@ The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at leas
 . ./util.sh
 
 # Validate optional arguments
-while getopts ":c:f:ph" opt; do
+while getopts ":c:ef:ph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -38,6 +40,9 @@ while getopts ":c:f:ph" opt; do
                 print_err "packet loss argument is not in the interval [0, 100)"
                 exit 1
             fi
+            ;;
+        e)
+            extended=true
             ;;
         f)
             file=$OPTARG
@@ -182,43 +187,88 @@ function run_system_test() {
 
 cd $repo_dir/test_suite
 
-echo """
-Starting system tests between two peers behind NATs with various combinations of mapping and filtering behaviour:
+function connectivity_test_logic() {
+    ns_config=$1
+    wg_config=$2
+    nat1_mapping=$3
+    nat1_filter=$4
+    nat2_mapping=$5
+    nat2_filter=$6
+
+    # Determine expected test result
+    if [[ $nat1_filter -eq 0 || $nat2_filter -eq 0 ]]; then
+        # An EIF NAT always lets the peer's pings through
+        test_target="TS_PASS_DIRECT"
+    elif [[ $nat1_mapping -eq 0 && $nat2_mapping -eq 0 ]]; then
+        # Two peers behind EIM NATs send pings to each other from their own STUN endpoint, to the other's STUN endpoint
+        # After sending one ping, the subsequent incoming pings from the peer's STUN endpoint will be accepted, regardless of the filtering behaviour
+        test_target="TS_PASS_DIRECT"
+    elif [[ $nat1_mapping -eq 0 && $nat1_filter -eq 1 || $nat2_mapping -eq 0 && $nat2_filter -eq 1 ]]; then
+        # An EIF-ADF NAT will always let the peer's pings through after sending its first ping
+        # This is not a general property of EIM-ADF NATs, but holds in this test suite because each NAT only has one IP address
+        test_target="TS_PASS_DIRECT"
+    else
+        test_target="TS_PASS_RELAY"
+    fi
+
+    rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
+
+    # Skip symmetrical cases
+    if [[ $nat2_mapping -gt $nat1_mapping || $nat2_mapping -eq $nat1_mapping && $nat2_filter -ge $nat1_filter ]]; then 
+        nat1=$nat1_mapping-$nat1_filter
+        nat2=$nat2_mapping-$nat2_filter
+
+        # Only test RFC 3489 NATs unless the extended flag was set
+        if [[ (${rfc_3489_nats[@]} =~ $nat1 && ${rfc_3489_nats[@]} =~ $nat2) || $extended == true ]]; then
+            nat_config=$nat1:$nat2
+            run_system_test $test_target $ns_config $nat_config $wg_config
+        fi
+    fi
+}
+
+if [[ $connectivity == true ]]; then
+    sudo ./set_packet_loss.sh $packet_loss
+    rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
+
+    echo """
+Starting connectivity tests between two peers (possibly) behind NATs with various combinations of mapping and filtering behaviour:
     - Endpoint-Independent Mapping/Filtering (EIM/EIF)
     - Address-Dependent Mapping/Filtering (ADM/ADF)
     - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
 
-if [[ $connectivity == true ]]; then
-    sudo ./set_packet_loss.sh $packet_loss
-
     echo -e "\nTests with one peer behind a NAT"
-    nat_types=("0-0" "0-1" "0-2" "2-2") # 0-0 = Full Cone, 0-1 = Restricted Cone,  0-2 = Port Restricted Cone, 2-2 = Symmetric
+    for nat_mapping in {0..2}; do
+        for nat_filter in {0..2}; do
+            nat=$nat_mapping-$nat_filter
 
-    for nat in ${nat_types[@]}; do
-        run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+            # Only test RFC 3489 NATs unless the extended flag was set
+            if [[ ${rfc_3489_nats[@]} =~ $nat || $extended == true ]]; then
+                run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+            fi
+        done
     done
 
     echo -e "\nTests with both peers behind a NAT"
-    n_nats=${#nat_types[@]}
-
-    for ((i=0; i<$n_nats; i++)); do
-        for ((j=$i; j<$n_nats; j++)); do
-            nat1=${nat_types[$i]}
-            nat2=${nat_types[$j]}
-
-            if [[ $nat1 == "2-2" && $nat2 == "2-2" || $nat1 == "0-2" && $nat2 == "2-2" ]]; then
-                test_target="TS_PASS_RELAY"
-            else
-                test_target="TS_PASS_DIRECT"
-            fi
-
-            run_system_test $test_target private1_peer1-router1:router2-private2_peer1 $nat1:$nat2 wg0:
+    for nat1_mapping in {0..2}; do
+        for nat1_filter in {0..2}; do
+            for nat2_mapping in {0..2}; do
+                for nat2_filter in {0..2}; do
+                    connectivity_test_logic private1_peer1-router1:router2-private2_peer1 wg0: $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter
+                done
+            done
         done
     done
 
     echo -e "\nTest hairpinning"
-    for nat in ${nat_types[@]}; do
-        run_system_test "TS_PASS_DIRECT" private1_peer1-router1-private1_peer2 $nat: wg0:
+    for nat_mapping in {0..2}; do
+        for nat_filter in {0..2}; do
+            nat=$nat_mapping-$nat_filter
+
+            # Only test RFC 3489 NATs unless the extended flag was set
+            if [[ ${rfc_3489_nats[@]} =~ $nat || $extended == true ]]; then
+                run_system_test TS_PASS_DIRECT private1_peer1-router1-private1_peer2 $nat: wg0:
+            fi
+        done
     done
 fi
 
