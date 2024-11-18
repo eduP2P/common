@@ -64,17 +64,19 @@ function clean_exit() {
     # Remove temporary test_client output file
     sudo rm $out
 
-    # Remove http server output files
-    if [[ -n $http_ipv4_out ]]; then rm $http_ipv4_out; fi
-    if [[ -n $http_ipv6_out ]]; then rm $http_ipv6_out; fi
+    # Remove http server output files if they exist
+    rm $http_ipv4_out &> /dev/null
+    rm $http_ipv6_out &> /dev/null
 
-    # Kill http servers 
-    if [[ -n $http_ipv4_pid ]]; then kill $http_ipv4_pid; fi
-    if [[ -n $http_ipv6_pid ]]; then kill $http_ipv6_pid; fi
+    # Kill http servers if they are running
+    kill $http_ipv4_pid &> /dev/null
+    kill $http_ipv6_pid &> /dev/null
 
     exit $exit_code
 }
 
+# Also call clean_exit when killed from parent script
+trap "clean_exit 1" SIGTERM
 
 # Get own virtual IPs and peer's virtual IPs; method is different for exernal WireGuard vs userspace WireGuard
 if [[ -n $wg_interface ]]; then

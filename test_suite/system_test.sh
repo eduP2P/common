@@ -213,9 +213,14 @@ function clean_exit() {
     # Reset nftables configuration of the public network
     sudo ip netns exec public nft flush chain inet filter forward
 
+    # Kill background processes, such as the setup_client.sh scripts
+    sudo kill $(jobs -p) &> /dev/null
+
     exit $exit_code
 }
 
+# Also call clean_exit when killed from parent script
+trap "clean_exit 1" SIGTERM
 
 # Start NAT simulation on each router
 cd ${repo_dir}/test_suite/nat_simulation
@@ -224,10 +229,10 @@ for ((i=0; i<${#router_ns_list[@]}; i++)); do
     router_ns=${router_ns_list[$i]}
     sudo ip netns exec $router_ns ./setup_nat_mapping.sh ${router_ns}_pub 10.0.$((i+1)).0/24 ${nat_map[$i]} "${adm_ips}"
     sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh ${router_ns}_pub ${router_ns}_priv 192.168.$((i+1)).254 10.0.$((i+1)).0/24 ${nat_filter[$i]} 2>&1 | \
-    tee ${log_dir}/$router_ns.txt > /dev/null & # combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
+    tee ${log_dir}/$router_ns.txt > /dev/null & # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
 
-# Start peers
+# Execute scripts to start the peers
 cd ${repo_dir}/cmd/test_client
 
 for i in {0..1}; do 
@@ -238,7 +243,7 @@ for i in {0..1}; do
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
     $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir ${wg_interfaces[$i]} `# Positional parameters` \
-    2>&1 | tee $peer_logfile &> /dev/null & # Redundant combination of tee and /dev/null redirect is necessary to avoid output indentation bug
+    2>&1 | tee $peer_logfile &> /dev/null &
 done
 
 # Constants for colored text in output
@@ -250,7 +255,7 @@ NC="\033[0m" # No color
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     export LOG_FILE=${log_dir}/$peer_id.txt # Export to use in bash -c
-    timeout 60s bash -c 'tail -n 1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
+    timeout 30s bash -c 'tail -n 1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
 
     # Branch on exit code of previous command
     case $? in

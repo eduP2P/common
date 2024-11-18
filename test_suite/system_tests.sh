@@ -91,11 +91,11 @@ repo_dir=$(cd ..; pwd)
 
 function cleanup () {
     # Kill the two servers if they have already been started by the script
-    control_pid=$(pgrep control_server) && sudo kill $control_pid
-    relay_pid=$(pgrep relay_server) && sudo kill $relay_pid
+    sudo pkill control_server
+    sudo pkill relay_server
 
-    # Kill any other background processes
-    kill $(jobs -p) &> /dev/null
+    # Kill the currently running system test
+    sudo kill $test_pid &> /dev/null
 }
 
 # Run cleanup when script exits
@@ -137,7 +137,6 @@ function extract_server_pub_key() {
 
     # If key variable is empty, server did not start successfully
     if [[ -z $pub_key ]]; then
-        echo "TS_FAIL: error when starting $server_type with IP ip and port $control_port"
         exit 1
     fi
 
@@ -159,7 +158,18 @@ function setup_servers() {
     relay_ip=$(sudo ip netns exec relay ip addr show relay | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
 
     control_pub_key=$(extract_server_pub_key "control_server" $control_ip $control_port)
+
+    if [[ $? -eq 1 ]]; then
+        echo "${RED}Error when starting control server with IP $control_ip and port $control_port${NC}"
+        exit 1
+    fi
+
     relay_pub_key=$(extract_server_pub_key "relay_server" $relay_ip $relay_port)
+
+    if [[ $? -eq 1 ]]; then
+        echo "${RED}Error when starting relay server with IP $relay_ip and port $relay_port${NC}"
+        exit 1
+    fi
 
     # Add relay server to control server config
     cd ${repo_dir}/cmd/control_server
@@ -178,7 +188,11 @@ n_failed=0
 # Usage: run_system_test [optional arguments of system_test.sh] <first 4 positional parameters of system_test.sh>
 function run_system_test() {
     let "n_tests++"
-    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port $relay_port "$adm_ips" $log_lvl $log_dir $repo_dir
+    
+    # Run in background and wait for test to finish to allow for interrupting from the terminal
+    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port $relay_port "$adm_ips" $log_lvl $log_dir $repo_dir &
+    test_pid=$!
+    wait $test_pid
 
     if [[ $? -ne 0 ]]; then
         let "n_failed++"
