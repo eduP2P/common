@@ -53,9 +53,11 @@ and running the system tests may result in being prompted to enter your
 password.
 
 Furthermore, the system tests require a few command-line tools to be
-installed. The following command can be run to do so:
+installed. The list of tools is found in
+[system_test_requirements.txt](system_test_requirements.txt), and can be
+installed by running the following command:
 
-    sudo apt-get install conntrack iperf3 iproute2 iputils-ping sed sudo wireguard-tools
+    xargs -a system_test_requirements.txt sudo apt-get install
 
 ### Performance test-specific requirements
 
