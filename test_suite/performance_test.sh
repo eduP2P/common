@@ -84,9 +84,6 @@ function performance_test () {
     ip netns exec $peer1 iperf3 -s -B $server_ip -p 12345 -1 --logfile /dev/null & # -1 to close after first connection
     server_pid=$!
 
-    # Give server some time to start
-    sleep 1s
-
     # Peer 2 is the iperf3 client
     log_file=$performance_test_var=$test_val.json
     log_path=$test_dir/$connection/$log_file
@@ -96,10 +93,12 @@ function performance_test () {
     case $performance_test_var in
         "packet_loss")
             ./set_packet_loss.sh 0 # Set packet loss to 0 for quick handshake
-            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 1000 --json --logfile $log_path --omit 1 & # Omit first second of the test without packet loss
+            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 1000 --json --logfile $log_path --omit 2 & # Omit first two seconds
             client_pid=$!
+
+            # Make sure packet loss is reset to the correct value before the test results are measured (sleep period is smaller than omit period above)
             sleep 1s
-            ./set_packet_loss.sh $test_val # Reset packet loss to intended value
+            ./set_packet_loss.sh $test_val
             ;;
         "bitrate")
             bitrate=$(( $test_val * 10**6 )) # Convert to bits/sec
