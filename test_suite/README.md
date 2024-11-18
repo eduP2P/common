@@ -55,9 +55,10 @@ password.
 Furthermore, the system tests require a few command-line tools to be
 installed. The list of tools is found in
 [system_test_requirements.txt](system_test_requirements.txt), and can be
-installed by running the following command:
+installed by running the following below (which itself requires sudo and
+xargs):
 
-    xargs -a system_test_requirements.txt sudo apt-get install
+        xargs -a system_test_requirements.txt sudo apt-get install
 
 ### Performance test-specific requirements
 

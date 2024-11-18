@@ -3,5 +3,4 @@ iperf3
 iproute2
 iputils-ping
 sed 
-sudo
 wireguard-tools
