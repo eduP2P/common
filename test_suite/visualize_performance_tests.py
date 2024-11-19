@@ -66,7 +66,7 @@ def create_graph(test_var : str, test_var_values : list[float], metric : str, ex
             plt.plot(test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
             x_label = test_var_label
         else:
-            measured_test_var_values = extracted_data[test_var]["values"][connection]
+            measured_test_var_values = sorted(extracted_data[test_var]["values"][connection])
             plt.plot(measured_test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
             x_label = extracted_data[test_var]["label"]
 
