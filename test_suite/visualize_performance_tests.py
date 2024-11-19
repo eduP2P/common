@@ -120,7 +120,13 @@ def connection_iteration(test_path : str, test_var : str) -> dict:
             "json_key" : "lost_percent",
             "unit" : "%",
             "values" : {}
-        }
+        },
+        "delay" : {
+            "label" : "Delay",
+            "json_key" : "delay_ms",
+            "unit" : "ms",
+            "values" : {}
+        },
     }
 
     paths = Path(test_path).glob("*")

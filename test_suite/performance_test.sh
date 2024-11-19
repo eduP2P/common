@@ -73,8 +73,49 @@ function clean_exit() {
     exit $exit_code
 }
 
+# Measure delay between peers using an HTTP server and curl
+function measure_delay() {
+    server_ip=$1
+
+    # Start HTTP server on Peer 1 to measure connection delay
+    ip netns exec $peer1 python3 -m http.server -b $server_ip 80 &> /dev/null &
+    http_pid=$!
+
+    # Variables to store average delay
+    avg_delay=0
+
+    # Repeat delay measurement 100 times
+    for i in {1..100}; do
+        delay_seconds=$(ip netns exec $peer2 curl -s -o /dev/null -w "%{time_total}\n" http://$server_ip)
+        delay_milliseconds=$(echo "$delay_seconds * 1000" | bc)
+        avg_delay=$(echo "$avg_delay + $delay_milliseconds" | bc)
+    done
+
+    # Stop HTTP server
+    kill $http_pid
+
+    # Calculate and print average delay
+    avg_delay=$(echo "$avg_delay * 0.001" | bc)
+    echo "$avg_delay"
+}
+
+# Use an inline Python script to store the delay in an iperf3 json file
+function store_delay() {
+    delay=$1
+    file=$2
+
+    python3 -c """
+import json
+
+with open('$file', 'r+') as f:
+    data = json.load(f)
+    data['end']['sum']['delay_ms'] = $delay
+    f.seek(0)
+    json.dump(data, f, indent=4)"""
+}
+
 # Function to do a performance test for one performance test value
-function performance_test () {
+function performance_test() {
     test_val=$1
     test_dir=$2
     connection=$3
@@ -93,7 +134,7 @@ function performance_test () {
     case $performance_test_var in
         "packet_loss")
             ./set_packet_loss.sh 0 # Set packet loss to 0 for quick handshake
-            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 1000 --json --logfile $log_path --omit 2 & # Omit first two seconds
+            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 3000 --json --logfile $log_path --omit 2 & # Omit first two seconds
             client_pid=$!
 
             # Make sure packet loss is reset to the correct value before the test results are measured (sleep period is smaller than omit period above)
@@ -118,6 +159,10 @@ function performance_test () {
 
     # Wait until server has closed
     wait $server_pid
+
+    # Measure delay and store it in the iperf3 log file
+    delay=$(measure_delay $server_ip)
+    store_delay $delay $log_path
 }
 
 # Set up WireGuard connection between the peers (for performance test baseline)
@@ -197,3 +242,4 @@ done
 bar=$(progress_bar $n_values $n_values)
 echo -e "\t$bar Performance testing with $performance_test_var finished"
 clean_exit 0
+
