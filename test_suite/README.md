@@ -484,9 +484,11 @@ The other parameters in `performance_test.txt` are not relevant to the
 performance test itself, but are necessary to run the system test in the
 first place. Internally, these parameters are passed to the
 [system_test.sh](system_test.sh) script. This script, like all other
-bash scripts in this repository, has a usage specification which is
-printed when running `./system_test.sh -h`. The explanation of these
-other parameters can be found there.
+bash scripts in this repository, has a usage specification at the top of
+the script. For `./system_test.sh -h`, this specification is also
+printed when running `./system_test.sh -h` (this is also the case for
+some other bash scripts, but not all). The explanation of these other
+parameters can be found there.
 
 Each performance test logs its results to a separate json file, which
 contains (among other data) the average bitrate, jitter and packet loss
