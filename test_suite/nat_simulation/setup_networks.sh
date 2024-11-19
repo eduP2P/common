@@ -1,6 +1,9 @@
 #!/bin/bash
 
-if [[ $1 = "help" ]]; then
+# Enable IP forwarding to allow for routing between namespaces
+sysctl -w net.ipv4.ip_forward=1 &> /dev/null
+
+if [[ $1 = "-h" ]]; then
     echo """
 Usage: ${0} 
 

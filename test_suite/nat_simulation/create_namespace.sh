@@ -15,6 +15,3 @@ ip netns list | grep -q $name && ip netns del $name
 
 # Add the namespace
 ip netns add $name
-
-# Turn on IP forwarding in the namespace to allow for routing between namespaces
-ip netns exec $name sysctl -w net.ipv4.ip_forward=1 &> /dev/null
