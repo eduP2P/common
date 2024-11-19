@@ -63,7 +63,7 @@ for ((i=1; i<=n_priv_nets; i++)); do
     ip netns exec $router_name ./setup_router.sh $router_name $priv_name $priv_subnet $router_priv_ip $router_pub_ip $switch_ip
 
     # Setup private network
-    ip netns exec $priv_name ./setup_private.sh $router_name $router_pub_ip
+    ip netns exec $priv_name ./setup_private.sh $router_name $router_pub_ip $priv_subnet
 
     # Setup peers in each private network
     for ((j=1; j<=n_peers; j++)); do
