@@ -60,11 +60,19 @@ def create_graph(test_var : str, test_var_values : list[float], metric : str, ex
         y = connection_measurements[connection]   
         ls=line_styles[i]  
         lw=line_widths[i]
-        plt.plot(test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
 
-    plt.xlabel(f"{test_var_label} ({test_var_unit})")
+        # Plot the measured independent variable values on the X axis instead of the target values, unless the measured values are already plotted on the Y axis
+        if metric == test_var:
+            plt.plot(test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
+            x_label = test_var_label
+        else:
+            measured_test_var_values = extracted_data[test_var]["values"][connection]
+            plt.plot(measured_test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
+            x_label = extracted_data[test_var]["label"]
+
+    plt.xlabel(f"{x_label} ({test_var_unit})")
     plt.ylabel(f"{metric_label} ({metric_unit})")
-    plt.title(f"{metric_label} for varying {test_var_label}")
+    plt.title(f"{metric_label} for varying {x_label}")
     plt.ticklabel_format(useOffset=False)
     plt.legend()
     
