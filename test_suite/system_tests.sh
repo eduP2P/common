@@ -3,7 +3,7 @@
 usage_str="""
 Usage: ${0} [OPTIONAL ARGUMENTS] <CONTROL SERVER PORT> <RELAY SERVER PORT> <LOG LEVEL>
 
-This script runs multiple system tests sequentially
+This script runs system tests between two eduP2P peers sequentially
 
 The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at least one should be provided:
     -c <packet loss>
@@ -13,17 +13,20 @@ The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at leas
         Extends the connectivity tests to all combinations of RFC 4787 NATs
     -f <file>
         Run custom tests from an existing file. One test should be specified on a single line, and this line should be a call to the run_system_test function found in this script
+    -l <info|debug|trace>
+        Specifies the log level used in the eduP2P client of the two peers
+        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)
     -p
-        Run the test suite's performance tests
-
-
-<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
+        Run the test suite's performance tests"""
 
 # Use functions and constants from util.sh
 . ./util.sh
 
+# Default log level
+log_lvl="debug"
+
 # Validate optional arguments
-while getopts ":c:ef:ph" opt; do
+while getopts ":c:ef:l:ph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -53,6 +56,13 @@ while getopts ":c:ef:ph" opt; do
                 exit 1
             fi
             ;;
+        l)  
+            log_lvl=$OPTARG
+
+            # Log level should be info/debug/trace
+            log_lvl_regex="^info|debug|trace?$"
+            validate_str $log_lvl $log_lvl_regex
+            ;;
         p)
             performance=true
             ;;
@@ -69,16 +79,6 @@ done
 
 # Shift positional parameters indexing by accounting for the optional arguments
 shift $((OPTIND-1))
-
-control_port=$1
-relay_port=$2
-log_lvl=$3
-
-# Make sure all arguments have been passed, and at least one optional argument is provided
-if [[ $# -ne 3  || !( -n $file || $connectivity == true || $performance == true )]]; then
-    print_err "expected 3 positional parameters, but received $#"
-    exit 1
-fi
 
 # Make sure at least one option argument is provided
 if [[ !( -n $file || $connectivity == true || $performance == true ) ]]; then
@@ -180,6 +180,9 @@ function setup_servers() {
     start_server "relay_server" $relay_ip $relay_port
 }
 
+# Choose ports for the control and relay servers, then start them
+control_port=9999
+relay_port=3340
 setup_servers
 
 n_tests=0
