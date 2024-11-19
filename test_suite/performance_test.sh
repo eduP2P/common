@@ -32,7 +32,7 @@ while getopts ":bh" opt; do
             exit 0
             ;;
         *)
-            print_err "invalid option -$opt"
+            print_err "invalid option"
             exit 1
             ;;
     esac
