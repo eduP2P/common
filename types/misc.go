@@ -138,3 +138,5 @@ func Map[T, U any](ts []T, f func(T) U) []U {
 	}
 	return us
 }
+
+type LogonCallback func(url string, deviceKey chan<- string) error

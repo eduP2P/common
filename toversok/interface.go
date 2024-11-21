@@ -42,6 +42,7 @@ type ControlHost interface {
 		parentCtx context.Context,
 		getNode func() *key.NodePrivate,
 		getSess func() *key.SessionPrivate,
+		login types.LogonCallback,
 	) (ifaces.ControlSession, error)
 }
 

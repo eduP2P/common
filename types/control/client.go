@@ -31,7 +31,7 @@ type Client struct {
 	// TODO
 }
 
-func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string) (*Client, error) {
+func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string, logon types.LogonCallback) (*Client, error) {
 	c := &Client{
 		ctx: parentCtx,
 
@@ -44,14 +44,14 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 		SessionID:  session,
 	}
 
-	if err := c.Handshake(timeout); err != nil {
+	if err := c.Handshake(timeout, logon); err != nil {
 		return nil, err
 	} else {
 		return c, nil
 	}
 }
 
-func (c *Client) Handshake(timeout time.Duration) error {
+func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) error {
 
 	// TODO
 	//  1. send ClientHello
@@ -114,10 +114,13 @@ func (c *Client) Handshake(timeout time.Duration) error {
 		return fmt.Errorf("error when receiving after-logon message: %w", err)
 	}
 
+	if a, ok := msg.(*msgcontrol.LogonAuthenticate); ok {
+		if msg, err = c.handleLogon(a.AuthenticateURL, logon); err != nil {
+			return fmt.Errorf("error when handling logon: %w", err)
+		}
+	}
+
 	switch m := msg.(type) {
-	case *msgcontrol.LogonAuthenticate:
-		// TODO
-		panic("authenticate logic not implemented")
 	case *msgcontrol.LogonReject:
 		return fmt.Errorf(
 			"logon rejected after-logon: %s; retry strategy: %w",
@@ -192,6 +195,61 @@ func (c *Client) Handshake(timeout time.Duration) error {
 	//default:
 	//	return fmt.Errorf("received unknown message type after-authenticate: %d", typ)
 	//}
+}
+
+var NeedsLogonError = errors.New("needs logon callback")
+
+func (c *Client) handleLogon(url string, logon types.LogonCallback) (msgcontrol.ControlMessage, error) {
+	if logon == nil {
+		// No way we can start or create a logon session, abort
+		return nil, fmt.Errorf("logonauthenticate requested when no interactive logon callback exists, aborting; %w", NeedsLogonError)
+	}
+
+	deviceKeyChan := make(chan string)
+	defer close(deviceKeyChan)
+
+	if err := logon(url, deviceKeyChan); err != nil {
+		return nil, fmt.Errorf("error when calling back logon: %w", err)
+	}
+
+	errChan, msgChan := make(chan error, 1), make(chan msgcontrol.ControlMessage, 1)
+	defer close(errChan)
+	defer close(msgChan)
+
+	go func() {
+		msg, err := c.cc.Read(0)
+		if err != nil {
+			errChan <- err
+		} else {
+			msgChan <- msg
+		}
+	}()
+
+	// TODO also add context error / close here
+	select {
+	case deviceKey := <-deviceKeyChan:
+		if err := c.cc.Write(&msgcontrol.LogonDeviceKey{
+			DeviceKey: deviceKey,
+		}); err != nil {
+			return nil, fmt.Errorf("error when sending device key: %w", err)
+		}
+
+		select {
+		case msg := <-msgChan:
+			return msg, nil
+		case err := <-errChan:
+			return nil, fmt.Errorf("error when receiving post-logon message: %w", err)
+		case <-c.ctx.Done():
+			return nil, fmt.Errorf("context closed: %w", c.ctx.Err())
+		}
+	case err := <-errChan:
+		return nil, fmt.Errorf("error when receiving post-logon message: %w", err)
+	case msg := <-msgChan:
+		return msg, nil
+
+	case <-c.ctx.Done():
+		return nil, fmt.Errorf("context closed: %w", c.ctx.Err())
+	}
 }
 
 var ClosedErr = errors.New("client closed")

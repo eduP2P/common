@@ -22,10 +22,10 @@ func makeControlURL(opts dial.Opts) string {
 	return fmt.Sprintf("%s://%s/control", proto, domain)
 }
 
-func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string) (*control.Client, error) {
+func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string, logon types.LogonCallback) (*control.Client, error) {
 	opts.SetDefaults()
 
 	return dial.HTTP(ctx, opts, makeControlURL(opts), control.UpgradeProtocol, func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*control.Client, error) {
-		return control.EstablishClient(ctx, mc, brw, opts.EstablishTimeout, getPriv, getSess, controlKey, session)
+		return control.EstablishClient(ctx, mc, brw, opts.EstablishTimeout, getPriv, getSess, controlKey, session, logon)
 	})
 }

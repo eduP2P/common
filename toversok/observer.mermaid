@@ -1,0 +1,23 @@
+stateDiagram-v2
+
+    NS: No Session
+    NS: (Data = None)
+
+    C: Creating Session
+    C: (Data = None)
+
+    NL: Needs Login
+    NL: (Data = current server-supplied URL)
+
+    E: Established Session
+    E: (Data = Peers and their state, connected relays, etc.)
+
+    [*] --> NS
+
+    NS --> C: Start() / Auto Restart
+    C --> NL: on LogonAuthenticate
+    C --> E: Logged on
+    NL --> E: after Login
+    C --> NS: Logon Rejected / Cannot Connect
+    NL --> NS: Logon Rejected
+    E --> NS: Session Killed

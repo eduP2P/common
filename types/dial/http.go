@@ -28,13 +28,16 @@ func HTTP[T any](ctx context.Context, opts Opts, url, protocol string, makeClien
 	req.Header.Set("Connection", "Upgrade")
 
 	if err := req.Write(brw); err != nil {
+		netConn.Close()
 		return nil, fmt.Errorf("could not write http request: %w", err)
 	}
 	if err := brw.Flush(); err != nil {
+		netConn.Close()
 		return nil, fmt.Errorf("could not flush http request: %w", err)
 	}
 
 	if err := netConn.SetReadDeadline(time.Now().Add(time.Second * 5)); err != nil {
+		netConn.Close()
 		return nil, fmt.Errorf("could not set read deadline: %w", err)
 	}
 	resp, err := http.ReadResponse(brw.Reader, req)
@@ -54,6 +57,7 @@ func HTTP[T any](ctx context.Context, opts Opts, url, protocol string, makeClien
 	c, err := makeClient(ctx, netConn, brw, opts)
 
 	if err != nil {
+		netConn.Close()
 		return nil, fmt.Errorf("failed to establish client: %w", err)
 	}
 

@@ -33,6 +33,7 @@ func SetupSession(
 	co ControlHost,
 	getExtSock func() types.UDPConn,
 	getNodePriv func() *key.NodePrivate,
+	logon types.LogonCallback,
 ) (*Session, error) {
 	ctx, ccc := context.WithCancelCause(engineCtx)
 
@@ -46,7 +47,7 @@ func SetupSession(
 		stage: nil,
 	}
 
-	cc, err := co.CreateClient(sess.ctx, getNodePriv, sess.getPriv)
+	cc, err := co.CreateClient(sess.ctx, getNodePriv, sess.getPriv, logon)
 	if err != nil {
 		sess.ccc(err)
 		return nil, fmt.Errorf("could not create control client: %w", err)

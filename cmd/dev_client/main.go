@@ -11,6 +11,7 @@ import (
 	"github.com/edup2p/common/ext_wg"
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/toversok/actors"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/relay"
@@ -833,7 +834,7 @@ func enCmd() *ishell.Cmd {
 			} else {
 				started := "not started"
 
-				if engine.Started() {
+				if engine.WillRestart() {
 					started = "started"
 				}
 
@@ -989,7 +990,7 @@ func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 	}
 }
 
-func (s *StokControl) CreateClient(parentCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate) (ifaces.ControlSession, error) {
+func (s *StokControl) CreateClient(parentCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate, login types.LogonCallback) (ifaces.ControlSession, error) {
 	return s, nil
 }
 
