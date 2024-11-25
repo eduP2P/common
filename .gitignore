@@ -194,7 +194,9 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,macos,go,goland+all,windows
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
+cmd/test_client/test_client
 
+# Peer keys and config files
 *.key
 cmd/test_client/*.json
 
@@ -208,8 +210,8 @@ cmd/relay_server/relay.json
 # Control/relay server and client binaries
 cmd/control_server/control_server
 cmd/relay_server/relay_server
-cmd/toverstok/dev_client
-cmd/toverstok/test_client
+cmd/dev_client/dev_client
+cmd/test_client/test_client
 
 # Go testing coverage files
 *.html
