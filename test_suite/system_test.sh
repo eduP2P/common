@@ -73,8 +73,8 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
-if [[ $# -ne 13 ]]; then
-    print_err "expected 13 positional parameters, but received $#"
+if [[ $# -ne 12 ]]; then
+    print_err "expected 12 positional parameters, but received $#"
     exit 1
 fi
 
@@ -86,11 +86,10 @@ test_idx=$5
 control_pub_key=$6
 control_ip=$7
 control_port=$8
-relay_port=$9
-adm_ips=${10}
-log_lvl=${11}
-log_dir=${12}
-repo_dir=${13}
+adm_ips=$9
+log_lvl=${10}
+log_dir=${11}
+repo_dir=${12}
 
 # Validate namespace configuration string
 ns_regex="([^-:]+)"
@@ -142,8 +141,7 @@ wg_interface_regex="^([^:]*):([^:]*)$"
 validate_str $wg_interface_str $wg_interface_regex 
 wg_interfaces=(${BASH_REMATCH[1]} ${BASH_REMATCH[2]})
 
-# Prepare a string describing this system test
-NAT_TYPES_LONG=("Endpoint-Independent" "Address-Dependent" "Address and Port-Dependent")
+# Prepare a string describing the NAT setup
 NAT_TYPES=("EI" "AD" "APD")
 
 function describe_nat() {
@@ -156,7 +154,6 @@ function describe_nat() {
     fi
 }
 
-# Prepare a string describing the NAT setup
 if [[ $hairpinning == true ]]; then
     nat1_description=$(describe_nat 0)
     nat_setup="$nat1_description with hairpinning"
@@ -242,7 +239,7 @@ for i in {0..1}; do
     
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
-    $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir ${wg_interfaces[$i]} `# Positional parameters` \
+    $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Positional parameters` \
     2>&1 | tee $peer_logfile &> /dev/null &
 done
 

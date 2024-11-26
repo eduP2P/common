@@ -8,7 +8,7 @@ nat_filter=$5
 
 # Make sure all arguments have been passed, and nat_filter is between 0 and 2
 if [[ $# -ne 5 || ! ($nat_filter =~ ^[0-2]$) ]]; then
-    echo ="""
+    echo """
 Usage: ${0} <PUBLIC NAT NETWORK INTERFACE> <PRIVATE NAT NETWORK INTERFACE> <PUBLIC IP> <PRIVATE SUBNET> <NAT FILTERING TYPE>
 
 <NAT FILTERING TYPE> may be one of the following numbers:

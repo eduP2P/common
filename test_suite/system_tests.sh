@@ -81,7 +81,7 @@ done
 shift $((OPTIND-1))
 
 # Make sure at least one option argument is provided
-if [[ !( -n $file || $connectivity == true || $performance == true ) ]]; then
+if [[ ! ( -n $file || $connectivity == true || $performance == true ) ]]; then
     print_err "at least one option should be set"
     exit 1
 fi
@@ -193,7 +193,7 @@ function run_system_test() {
     let "n_tests++"
     
     # Run in background and wait for test to finish to allow for interrupting from the terminal
-    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port $relay_port "$adm_ips" $log_lvl $log_dir $repo_dir &
+    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port "$adm_ips" $log_lvl $log_dir $repo_dir &
     test_pid=$!
     wait $test_pid
 
@@ -236,7 +236,7 @@ function connectivity_test_logic() {
         nat2=$nat2_mapping-$nat2_filter
 
         # Only test RFC 3489 NATs unless the extended flag was set
-        if [[ (${rfc_3489_nats[@]} =~ $nat1 && ${rfc_3489_nats[@]} =~ $nat2) || $extended == true ]]; then
+        if [[ (${rfc_3489_nats[*]} =~ $nat1 && ${rfc_3489_nats[*]} =~ $nat2) || $extended == true ]]; then
             nat_config=$nat1:$nat2
             run_system_test $test_target $ns_config $nat_config $wg_config
         fi
@@ -259,7 +259,7 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
             nat=$nat_mapping-$nat_filter
 
             # Only test RFC 3489 NATs unless the extended flag was set
-            if [[ ${rfc_3489_nats[@]} =~ $nat || $extended == true ]]; then
+            if [[ ${rfc_3489_nats[*]} =~ $nat || $extended == true ]]; then
                 run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
             fi
         done
@@ -282,7 +282,7 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
             nat=$nat_mapping-$nat_filter
 
             # Only test RFC 3489 NATs unless the extended flag was set
-            if [[ ${rfc_3489_nats[@]} =~ $nat || $extended == true ]]; then
+            if [[ ${rfc_3489_nats[*]} =~ $nat || $extended == true ]]; then
                 run_system_test TS_PASS_DIRECT private1_peer1-router1-private1_peer2 $nat: wg0:
             fi
         done

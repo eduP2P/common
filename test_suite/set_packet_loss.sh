@@ -10,7 +10,7 @@ packet_loss=$1
 # Make sure packet_loss is a real number, and get the amount of decimal digits
 real_regex="^[0-9]+[.]?([0-9]+)?$"
 
-if [[ $# -ne 1 || !( $packet_loss =~ $real_regex) ]]; then
+if [[ $# -ne 1 || ! ( $packet_loss =~ $real_regex) ]]; then
     echo $usage_str
     exit 1
 fi
