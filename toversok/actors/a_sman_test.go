@@ -4,20 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	msg2 "github.com/edup2p/common/types/msgsess"
 	"github.com/stretchr/testify/assert"
 )
-
-// Session key pair used in this test
-var testPriv key.SessionPrivate = key.NewSession()
-var testPub key.SessionPublic = testPriv.Public()
-
-func getTestPriv() *key.SessionPrivate {
-	return &testPriv
-}
 
 // Mock Session Message used in this test
 type MockSessionMessage struct {
