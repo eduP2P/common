@@ -108,7 +108,7 @@ The simulated network setup is described in detail in the next section.
 
 The eduP2P test suite simulates the following network setup:
 
-![](./images/network_setup.png)
+![](./images/system_tests/network_setup.png)
 
 The setup contains two private networks, with subnets `10.0.1.0/24` and
 `10.0.2.0/24` respectively. In the test suite, each private network
@@ -132,7 +132,7 @@ uses Linux network namespaces [\[1\]](#ref-man_network_namespaces). For
 example, in order to simulate the network setup above, multiple network
 namespaces are configured as in the following diagram:
 
-![](./images/network_namespaces.png)
+![](./images/system_tests/network_namespaces.png)
 
 Each network namespace is isolated, meaning that a network interface in
 one namespace is not aware of network interfaces in other namespaces. To
@@ -262,7 +262,7 @@ of behaviours:
 3.  **ADPM:** A new mapping is used for each packet, since all packets
     have different endpoints.
 
-![](./images/nat_mapping.png)
+![](./images/system_tests/nat_mapping.png)
 
 Note that in this test suite, the NAT’s IP pooling behaviour is not
 considered, as the routers in the simulated network setup only have one
@@ -335,7 +335,7 @@ these packets may be filtered, which is indicated by a dashed arrow:
     incoming packets to `X':x1'` are only accepted if they have source
     IP address `Y` and source port `y1`.
 
-![](./images/nat_filtering.png)
+![](./images/system_tests/nat_filtering.png)
 
 Packets destined to an IP address and port for which a mapping does not
 exist are also filtered, which the test suite implements using one
@@ -391,7 +391,7 @@ behaviours:
 The image below illustrates the second type of behaviour, which is the
 one recommended by RFC 4787 and implemented in the test suite.
 
-![](./images/nat_hairpinning.png)
+![](./images/system_tests/nat_hairpinning.png)
 
 The way hairpinning is implemented in the test suite is similar to the
 implementation of filtering. For a new session where `X1:x1` is mapped
@@ -418,6 +418,10 @@ same script that was used for applying filtering.
 The test suite contains performance tests to measure the bitrate, jitter
 and packet loss of a connection between two peers. These tests are
 implemented using the iperf3 tool [\[5\]](#ref-man_iperf3).
+Additionally, the delay of the connection is also measured by setting up
+an HTTP server one one peer, repeatedly connecting to this server from
+the other peer with curl [\[6\]](#ref-man_curl), and calculating the
+average connection time.
 
 To test the performance of eduP2P, a connection between two peers must
 first be established. Therefore, the performance tests are implemented
@@ -534,9 +538,9 @@ two eduP2P peers are able to establish a direct connection using UDP
 hole punching when both peers are behind various types of NAT.
 
 When considering the four types of NAT described in RFC 3489
-[\[6\]](#ref-rfc3489), the results of using UDP hole punching to
+[\[7\]](#ref-rfc3489), the results of using UDP hole punching to
 establish a connection between peers are well-established
-[\[7\]](#ref-wacker2008), [\[8\]](#ref-hole_punching_table).
+[\[8\]](#ref-wacker2008), [\[9\]](#ref-hole_punching_table).
 
 This test suite uses the RFC 4787 [\[3\]](#ref-rfc4787) terminology,
 which does not categorize NAT into these four types. However, each of
@@ -1121,21 +1125,98 @@ table where a direct connection could not be established:
 
 ## Performance Test Results
 
-One interesting result found using the test suite’s performance test is
-that as the target bitrate of the connection increases, the percentage
-of packet loss gets quite high. This result was found in a performance
-test between peers in the router1 and router2 network namespaces, where
-the target bitrate ranged from 100 to 1000 Mbps, with a step size of 100
-Mbps. As the bitrate increases, the packet loss gets as high as 8%.
+The results in this section were measured on my own laptop with the
+following specs:
 
-To make sure the packet loss is caused by eduP2P, the performance test
-was repeated in the same conditions without eduP2P. Instead of starting
-the iperf3 server on a peer’s virtual IP address, the router’s real IP
-address was used. Additionally, the performance test was also repeated
-in the same conditions with both peers using WireGuard. The results in
-the graph below suggest that the problem does lie with eduP2P:
+- CPU: AMD® Ryzen 7 4700u with radeon graphics
+- Number of cores: 8
+- RAM: 16 GiB
+- Operating System: Ubuntu 22.04.5 LTS
 
-![](./images/packet_loss_comparison.png)
+The results were generated using the [system_tests.sh](system_tests.sh)
+script with the `-f` option. In the below sections, the system test
+command contained in the files used with this option are given for
+reproducibility.
+
+### Results with varying bitrate and peers using external WireGuard
+
+Command used:
+
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b TS_PASS_DIRECT router1-router2 : wg0:wg0
+
+With this command, we compare the performance of eduP2P, WireGuard and a
+direct connection between two peers in the test suite’s network setup.
+One interesting result is that although the bitrate is set to increase
+until 4000 Mbps, none of the three connections actually reach this
+limit, as seen in the graph below:
+
+![](./images/performance_tests/ext_wg_x_bitrate_y_bitrate.png)
+
+With the direct connection, the maximum bitrate that can be reached on
+my machine is approximately 3600 Mbps, whereas eduP2P and WireGuard both
+end at a bitrate of approximately 2800 Mbps.
+
+As the measured bitrate increases, it becomes clear that there are large
+differences between the packet loss the three connections suffer, as
+seen in the following graph:
+
+![](./images/performance_tests/ext_wg_x_bitrate_y_packet_loss.png)
+
+The direct connection does not suffer any packet loss, whereas
+WireGuard’s packet loss slowly climbs up to approximately 3%, and the
+packet loss of eduP2P quickly increases to end at over 50%.
+
+Although the final amount of packet loss in eduP2P seems very alarming,
+it must be noted that the maximum bitrate used in this performance test
+is very high, and when eduP2P would be used in the real world it is
+unlikely that the network bandwidth limits would allow for such a high
+bitrate. However, the packet loss of eduP2P is also quite sizeable even
+for lower bitrates, which would be a problem in the real world.
+
+The reason that eduP2P suffers so much packet loss probablyy has to do
+with the fact that it uses Go channels internally to pass packets
+between its isolated components. For such high bitrates, these channels
+may become full, and consequently packets sent to these channels are
+dropped.
+
+It must also be noted that although the packet loss of the direct
+connection and WireGuard do not suffer much packet loss on my machine,
+this is not the case on every machine I tried this performance test on.
+When repeating this test on some virtual machines, there was also quite
+a lot of packet loss for these two connections. It seems that this
+packet loss was caused by these virtual machines only having one core,
+as repeating the test on a virtual machine while increasing the number
+of cores resulted in a decrease of packet loss. I suspect that not
+having enough cores causes packet loss because a core constantly has to
+switch between sending packets for one peer, and receiving them for the
+other, and it cannot switch fast enough as the bitrate increases.
+Therefore, it is recommended to run the performance test on a machine
+with more cores when encountering packet loss in the WireGuard or direct
+connection.
+
+Furthermore, the bitrate limits encountered in these results may also
+differ on other machines.
+
+### Results with varying bitrate and peers using userspace WireGuard
+
+Command used:
+
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+
+This command repeats the performance test of the previous section, with
+the only difference being that now both peers use userspace WireGuard
+instead of external WireGuard.
+
+One interesting difference compared to the previous results is that with
+userspace WireGuard, the eduP2P connection does reach the bitrate limit
+of 4000 Mbps:
+
+![](./images/performance_tests/usr_wg_x_bitrate_y_bitrate.png)
+
+With this increase in bitrate, the packet loss also increases even
+further, however:
+
+![](./images/performance_tests/usr_wg_x_bitrate_y_packet_loss.png)
 
 ## Integration Test Results
 
@@ -1196,9 +1277,18 @@ perform network throughput tests</span>.” Available:
 
 </div>
 
-<div id="ref-rfc3489" class="csl-entry">
+<div id="ref-man_curl" class="csl-entry">
 
 <span class="csl-left-margin">\[6\]
+</span><span class="csl-right-inline">“<span class="nocase">curl -
+transfer a URL</span>.” Available:
+<https://curl.se/docs/manpage.html></span>
+
+</div>
+
+<div id="ref-rfc3489" class="csl-entry">
+
+<span class="csl-left-margin">\[7\]
 </span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
 and J. Weinberger, “<span class="nocase">STUN - Simple Traversal of User
 Datagram Protocol (UDP) Through Network Address Translators
@@ -1209,7 +1299,7 @@ Datagram Protocol (UDP) Through Network Address Translators
 
 <div id="ref-wacker2008" class="csl-entry">
 
-<span class="csl-left-margin">\[7\]
+<span class="csl-left-margin">\[8\]
 </span><span class="csl-right-inline">A. Wacker, G. Schiele, S.
 Holzapfel, and T. Weis, “A NAT traversal mechanism for peer-to-peer
 networks,” Oct. 2008, pp. 81–83. doi:
@@ -1219,7 +1309,7 @@ networks,” Oct. 2008, pp. 81–83. doi:
 
 <div id="ref-hole_punching_table" class="csl-entry">
 
-<span class="csl-left-margin">\[8\]
+<span class="csl-left-margin">\[9\]
 </span><span class="csl-right-inline">“Understanding different NAT types
 and hole-punching.” Available:
 <https://support.dh2i.com/docs/Archive/kbs/general/understanding-different-nat-types-and-hole-punching/></span>
