@@ -505,25 +505,21 @@ such a graph:
 
 ## Integration Tests
 
-In these tests, the smaller components of the eduP2P client are tested,
-such as the lower layers described in [the document explaining eduP2P’s
-architecture](../ARCHITECTURE.md):
-
-- The Session
-- The actors in the Stage
-
-Furthermore, the control server and relay server are also tested.
+The goal of these tests is to verify the functionality of smaller
+components of eduP2P, such as the lower layers described in [the
+document explaining eduP2P’s architecture](../ARCHITECTURE.md). In their
+current state, the integration tests cover the main functionality of all
+eduP2P’s Stage actors.
 
 The tests are written in Go, using its `testing` package. When executed
 via GitHub workflows, the test results can be found in the output of the
 “IntegrationTests” job under the step “Run integration tests”, and a
 code coverage report can be downloaded using the URL in the “Upload
-integration test coverage report” step. The system tests can also be
-executed manually with [this script](system_tests.sh). To execute the
-tests and create the coverage report file `cover.html` manually, run the
-following commands:
+integration test coverage report” step. To execute the tests and create
+the coverage report file `cover.html` manually, run the following
+commands in the repository’s root directory:
 
-    go test -coverprofile cover.out -v ./...
+    go test -coverpkg=./... -coverprofile cover.out -v ./...
     go tool cover -html cover.out -o cover.html
 
 # Results
