@@ -28,8 +28,8 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required positional parameters have been passed
-min_req=7
-max_req=8
+min_req=6
+max_req=7
 
 if [[ $# < $min_req || $# > $max_req ]]; then
     print_err "expected $min_req or $max_req positional parameters, but received $#"
@@ -42,8 +42,7 @@ control_pub_key=$3
 control_ip=$4
 control_port=$5
 log_lvl=$6
-log_dir=$7
-wg_interface=$8
+wg_interface=$7
 
 # Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
@@ -158,7 +157,7 @@ function try_connect() {
     peer_addr=$1
 
     if ! curl --retry 3 --retry-all-errors -I -s -o /dev/null $peer_addr; then
-        echo "TS_FAIL: could not connect to peer's HTTP server with address: ${peer_ip}"
+        echo "TS_FAIL: could not connect to peer's HTTP server with address: ${peer_addr}"
         clean_exit 1
     fi
 }
