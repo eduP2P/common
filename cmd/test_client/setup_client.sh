@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage_str="""
-Usage: ${0} <PEER ID> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> [WIREGUARD INTERFACE]
+Usage: ${0} <PEER ID> <PEER NAMESPACE> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> [WIREGUARD INTERFACE]
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
 
@@ -18,8 +18,7 @@ while getopts ":h" opt; do
             exit 0
             ;;
         *)
-            print_err "invalid option"
-            exit 1
+            exit_with_error "invalid option"
             ;;
     esac
 done
@@ -28,21 +27,21 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required positional parameters have been passed
-min_req=6
-max_req=7
+min_req=7
+max_req=8
 
 if [[ $# < $min_req || $# > $max_req ]]; then
-    print_err "expected $min_req or $max_req positional parameters, but received $#"
-    exit 1
+    exit_with_error "expected $min_req or $max_req positional parameters, but received $#"
 fi
 
 id=$1
-test_target=$2
-control_pub_key=$3
-control_ip=$4
-control_port=$5
-log_lvl=$6
-wg_interface=$7
+peer_ns=$2
+test_target=$3
+control_pub_key=$4
+control_ip=$5
+control_port=$6
+log_lvl=$7
+wg_interface=$8
 
 # Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
@@ -51,10 +50,10 @@ if [[ -n $wg_interface ]]; then
     sudo ip link set $wg_interface up
 fi
 
-# Create temporary file to store test_client CLI output
+# Create temporary file to store test_client output
 out="test_client_out_${id}.txt"
 
-# Store test_client output in a temporary file
+# Run test_client and store its output in the temporary file
 (sudo ./test_client --control-host=$control_ip --control-port=$control_port --control-key=control:$control_pub_key --ext-wg-device=$wg_interface --log-level=$log_lvl --config=$id.json 2>&1 | tee $out &)
 
 function clean_exit() {
@@ -77,12 +76,15 @@ function clean_exit() {
 # Also call clean_exit when killed from parent script
 trap "clean_exit 1" SIGTERM
 
-# Get own virtual IPs and peer's virtual IPs; method is different for exernal WireGuard vs userspace WireGuard
+# Get own virtual IPs and peer's virtual IPs with external WireGuard
 if [[ -n $wg_interface ]]; then
-    # Store virtual IPs as "<IPv4> <IPv6>"" when they are logged
+    # Store virtual IPs as "<IPv4> <IPv6>" when they are logged
     ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
 
-    if [[ -z $ips ]]; then echo "TS_FAIL: could not find own virtual IPs in logs"; clean_exit 1; fi
+    if [[ -z $ips ]]; then 
+        echo "TS_FAIL: could not find own virtual IPs in logs"
+        clean_exit 1
+    fi
 
     # Split IPv4 and IPv6
     ipv4=$(echo $ips | cut -d ' ' -f1) 
@@ -115,8 +117,9 @@ if [[ -n $wg_interface ]]; then
     # Split IPv4 and IPv6, and remove network prefix length
     peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1 | cut -d '/' -f1) 
     peer_ipv6=$(echo $peer_ips | cut -d ' ' -f2 | cut -d '/' -f1)
+# Get own virtual IPs and peer's virtual IPs with userspace WireGuard
 else
-    # Wait until timeout or until TUN interface created with userspace WireGuard is updated to contain peer's virtual IPs
+    # Wait until timeout, or until automatically created TUN interface is updated to contain peer's virtual IPs
     timeout=10
     
     while ! ip address show ts0 | grep -Eq "inet [0-9.]+"; do
@@ -130,13 +133,16 @@ else
     done
 
     # Extract own virtual IPs from TUN interface
-    ipv4=$(ip address show ts0 | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
-    ipv6=$(ip address show ts0 | grep -Eo -m 1 "inet6 [0-9a-f:]+" | cut -d ' ' -f2)
+    ipv4=$(extract_ipv4 $peer_ns ts0)
+    ipv6=$(extract_ipv6 $peer_ns ts0)
 
     # Store peer IPs as "<IPv4> <IPv6>"" when they are logged
     peer_ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
 
-    if [[ -z $peer_ips ]]; then echo "TS_FAIL: could not find peer's virtual IPs in logs"; clean_exit 1; fi
+    if [[ -z $peer_ips ]]; then 
+        echo "TS_FAIL: could not find peer's virtual IPs in logs"
+        clean_exit 1
+    fi
 
     # Split IPv4 and IPv6
     peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1)

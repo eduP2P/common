@@ -1,7 +1,7 @@
 #!/bin/bash
 
 usage_str="""
-Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <RELAY SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
+Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
 <TEST TARGET> is the expected result of the system test: 
     1. TS_PASS_DIRECT: the peers have established a direct connection
@@ -10,10 +10,11 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
     
 [OPTIONAL ARGUMENTS] can be provided for a performance test:
     -k <packet_loss|bitrate>
-    -v <comma-separated string of positive real numbers>
+    -v <comma-separated string of positive real numbers (less than 100 for -k bitrate)>
     -d <seconds>
     -b
         With this flag, eduP2P's performance is compared to the performance of a direct connection, and a connection using only WireGuard
+        This flag should only be used when both peers reside in the 'public' network
     
 <NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
     1. <PEER 1>-<PEER 2>, for peers in the public network
@@ -30,7 +31,7 @@ Examples of valid NAT configurations: 0-1:1-2 (both peers in private networks), 
 
 If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard
 
-<IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and are necessary to simulate an Address-Dependent Mapping
+<IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and is necessary to simulate an Address-Dependent Mapping
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
 
@@ -46,14 +47,27 @@ while getopts ":k:v:d:bh" opt; do
             performance_test_var=$OPTARG
             validate_str $performance_test_var "^packet_loss|bitrate$"
             ;;
-        v)
+        v)  
             performance_test_values=$OPTARG
-            real_regex="[0-9]+(.[0-9]+)?"
-            validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
+
+            # Validate values as integers or reals depending on test variable
+            case $performance_test_var in
+                "bitrate")
+                    validate_str "$performance_test_values" "^[0-9]+(,[0-9]+)*$"
+                    ;;
+
+                "packet_loss")
+                    real_regex="[0-9]+(.[0-9]+)?"
+                    validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
+                    ;;
+                *)
+                    exit_with_error "-k should be specified before -v"
+                    ;;
+            esac
             ;;
         d)
             performance_test_duration=$OPTARG
-            validate_str $performance_test_duration "^[0-9]+*$"
+            validate_str $performance_test_duration "^[0-9]+$"
             ;;
         b)
             baseline="-b"
@@ -63,8 +77,7 @@ while getopts ":k:v:d:bh" opt; do
             exit 0
             ;;
         *)
-            print_err "invalid option"
-            exit 1
+            exit_with_error "invalid option"
             ;;
     esac
 done
@@ -74,8 +87,7 @@ shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
 if [[ $# -ne 12 ]]; then
-    print_err "expected 12 positional parameters, but received $#"
-    exit 1
+    exit_with_error "expected 12 positional parameters, but received $#"
 fi
 
 test_target=$1
@@ -92,7 +104,7 @@ log_dir=${11}
 repo_dir=${12}
 
 # Validate namespace configuration string
-ns_regex="([^-:]+)"
+ns_regex="([^-:]+)" # One or more occurence of every character except '-' and ':' (these are used to separate the namespaces)
 ns_config1_regex="^${ns_regex}-${ns_regex}$"
 ns_config2_regex="^${ns_regex}-${ns_regex}:${ns_regex}$"
 ns_config3_regex="^${ns_regex}-${ns_regex}-${ns_regex}$"
@@ -224,8 +236,14 @@ cd ${repo_dir}/test_suite/nat_simulation
 
 for ((i=0; i<${#router_ns_list[@]}; i++)); do
     router_ns=${router_ns_list[$i]}
-    sudo ip netns exec $router_ns ./setup_nat_mapping.sh ${router_ns}_pub 10.0.$((i+1)).0/24 ${nat_map[$i]} "${adm_ips}"
-    sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh ${router_ns}_pub ${router_ns}_priv 192.168.$((i+1)).254 10.0.$((i+1)).0/24 ${nat_filter[$i]} 2>&1 | \
+    router_pub="${router_ns}_pub"
+    router_priv="${router_ns}_priv"
+    router_pub_ip="192.168.$((i+1)).254"
+    priv_prefix="10.0.$((i+1)).0/24"
+
+    sudo ip netns exec $router_ns ./setup_nat_mapping.sh $router_pub $priv_prefix ${nat_map[$i]} "${adm_ips}"
+
+    sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh $router_pub $router_priv $router_pub_ip $priv_prefix ${nat_filter[$i]} 2>&1 | \
     tee ${log_dir}/$router_ns.txt > /dev/null & # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
 
@@ -239,14 +257,9 @@ for i in {0..1}; do
     
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
-    $peer_id $test_target $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Positional parameters` \
-    2>&1 | tee $peer_logfile &> /dev/null &
+    $peer_id $peer_ns $test_target $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Positional parameters` \
+    2>&1 | tee $peer_logfile &> /dev/null & # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
-
-# Constants for colored text in output
-RED="\033[0;31m"
-GREEN="\033[0;32m"
-NC="\033[0m" # No color
 
 # Throw error if one of the two peers did not exit with TS_PASS or timed out
 for i in {0..1}; do 
@@ -291,9 +304,9 @@ if [[ -n $performance_test_var ]]; then
         peer1_interface="ts0"
     fi
 
-    # Get the IPv4 address of the peer's interface
+    # Get the IPv4 address of the peer 1's interface
     peer1_ns=${peer_ns_list[0]}
-    peer1_ip=$(sudo ip netns exec $peer1_ns ip address show $peer1_interface | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
+    peer1_ip=$(extract_ipv4 $peer1_ns $peer1_interface)
 
     sudo ./performance_test.sh $baseline $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $log_dir
 

@@ -1,16 +1,19 @@
 #!/bin/bash
 
-# Enable IP forwarding to allow for routing between namespaces
-sysctl -w net.ipv4.ip_forward=1 &> /dev/null
-
 if [[ $1 = "-h" ]]; then
     echo """
 Usage: ${0} 
 
-Simulates a network setup containing two private networks connected via the public network, with their routers applying different forms of Network Address Translation (NAT). Each private network contains two peers using eduP2P
+Simulates a network setup containing two private networks connected via the public network. Each private network contains two peers using eduP2P
+To allow traffic to flow between the public and private networks, the scripts setup_nat_mapping.sh should also be executed
+To allow traffic to flow between peers in the same private network, the scripts setup_nat_filtering_hairpinning.sh should also be executed
+
 This script must be run with root permissions"""
     exit 1
 fi
+
+# Enable IP forwarding to allow for routing between namespaces
+sysctl -w net.ipv4.ip_forward=1 &> /dev/null
 
 # Create namespace to simulate the public network
 ./create_namespace.sh public
@@ -36,7 +39,7 @@ adm_ips=()
 # Add control and relay server to the list
 adm_ips+=($control_ip $relay_ip)
 
-# Two private networks that will have different NAT behaviour depending on the system test's parameters
+# Two private networks whose NAT mapping and filtering behaviour depends on the system test's parameters
 n_priv_nets=2
 
 # Two peers per network to test NAT hairpinning

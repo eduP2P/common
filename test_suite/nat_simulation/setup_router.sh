@@ -15,9 +15,6 @@ This script must be run with root permissions"""
     exit 1
 fi
 
-# Turn on loopback interface in namespace to allow pinging from inside namespace
-ip link set lo up
-
 # Create veth pair to place the router's private interface in the private and router namespaces
 router_priv="${router_name}_priv"
 ip link add $router_priv type veth peer $router_name netns $priv_name

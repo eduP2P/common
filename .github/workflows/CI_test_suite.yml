@@ -33,7 +33,7 @@ jobs:
 
     - name: Run system tests
       id: system-test
-      run: ./system_tests.sh -c 0 -p 9999 3340 debug
+      run: ./system_tests.sh -c 0
       working-directory: test_suite
       continue-on-error: true
 
@@ -59,7 +59,7 @@ jobs:
 
     - name: Run integration tests
       id: integration-test
-      run: go test -coverprofile cover.out -v ./...
+      run: go test -coverpkg=./... -coverprofile cover.out -v ./...
 
     - name: Create integration test coverage report
       run: go tool cover -html cover.out -o cover.html

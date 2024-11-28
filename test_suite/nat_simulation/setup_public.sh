@@ -10,9 +10,6 @@ fi
 
 switch_ip=$1
 
-# Turn on loopback interface in namespace to allow pinging from inside namespace
-ip link set lo up
-
 # Create TUN interface for switch
 ip tuntap add dev switch mode tun
 ip link set dev switch up

@@ -9,7 +9,7 @@ Configures the control.json file to include a relay server""")
     exit(1)
 
 # Read file to retrieve current config
-with open("control.json") as f:
+with open("control.json", "r") as f:
     config = json.load(f)
 
 # Update config 

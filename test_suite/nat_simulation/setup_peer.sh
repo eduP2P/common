@@ -13,9 +13,6 @@ priv_name=$2
 peer_ip=$3
 router_ip=$4
 
-# Turn on loopback interface in namespace to allow pinging from inside namespace
-ip link set lo up
-
 # Create veth pair to give peer access to its private network
 ip link add $peer_name type veth peer $peer_name netns $priv_name
 ip link set $peer_name up

@@ -1,16 +1,17 @@
 #!/bin/bash
 
-# Usage: execute ". /path/to/util.sh" in another script to be able to use this script's function in that other script
+# Usage: execute ". /path/to/util.sh" in another script to be able to use this script's functions and variables in that other script
 
 # Constants for colored text in output
 RED="\033[0;31m"
 GREEN="\033[0;32m"
 NC="\033[0m" # No color
 
-function print_err() {
+function exit_with_error() {
     err_reason=$1
 
     echo -e "${RED}Error: $err_reason; run $0 with the -h flag to receive usage information${NC}"
+    exit 1
 }
 
 function validate_str() {
@@ -18,8 +19,7 @@ function validate_str() {
     regex=$2
 
     if [[ ! $str =~ $regex ]]; then
-        print_err "the argument \"$str\" is invalid"
-        exit 1
+        exit_with_error "the argument \"$str\" is invalid"
     fi
 }
 
@@ -41,4 +41,22 @@ function progress_bar() {
     todo=$(repeat $(($total - $progress)) '-')
 
     echo "|${done}${todo}|"
+}
+
+function extract_ipv4() {
+    namespace=$1
+    interface=$2
+
+    ipv4=$(sudo ip netns exec $namespace ip address show $interface | grep -Eo "inet [0-9.]+" | cut -d ' ' -f2)
+
+    echo $ipv4
+}
+
+function extract_ipv6() {
+    namespace=$1
+    interface=$2
+
+    ipv6=$(sudo ip netns exec $namespace ip address show $interface | grep -Eo -m 1 "inet6 [0-9a-f:]+" | cut -d ' ' -f2) # -m 1 to avoid matching IPv6 Link-Local address
+    
+    echo $ipv6
 }

@@ -32,8 +32,7 @@ while getopts ":bh" opt; do
             exit 0
             ;;
         *)
-            print_err "invalid option"
-            exit 1
+            exit_with_error "invalid option"
             ;;
     esac
 done
@@ -43,8 +42,7 @@ shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
 if [[ $# -ne 7 ]]; then
-    print_err "expected 7 positional parameters, but received $#"
-    exit 1
+    exit_with_error "expected 7 positional parameters, but received $#"
 fi
 
 peer1=$1
@@ -68,7 +66,8 @@ function clean_exit() {
         kill $keep_alive_pid
     fi
 
-    chmod --recursive 777 $test_dir # undo the restrictive permissions which iperf3 sets on test_dir
+    # Undo the restrictive permissions which iperf3 sets on test_dir
+    chmod --recursive 777 $test_dir
 
     exit $exit_code
 }
@@ -170,19 +169,20 @@ function performance_test() {
 # Set up WireGuard connection between the peers (for performance test baseline)
 function wg_setup() {
     # Counter for virtual IP addresses
-    i=0
+    i=1
 
     # Generate private key and interface for each peer
     for ns in $peer1 $peer2; do
         wg_iface=wg_$ns
         priv_key=private_$ns
-        let "i++"
         
-        wg genkey | tee $priv_key &> /dev/null
+        wg genkey | tee $priv_key &> /dev/null # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting in a script run with sudo
         ip netns exec $ns ip link add $wg_iface type wireguard
         ip netns exec $ns ip addr add 10.0.0.$i/24 dev $wg_iface
-        ip netns exec $ns wg set $wg_iface private-key ./private_$ns
+        ip netns exec $ns wg set $wg_iface private-key ./$priv_key
         ip netns exec $ns ip link set $wg_iface up
+
+        let "i++"
     done
 
     # Store peers' public keys
@@ -190,8 +190,8 @@ function wg_setup() {
     pub2=$(wg pubkey < private_$peer2)
 
     # Store peers's listening ports
-    port1=$(sudo ip netns exec $peer1 wg show wg_$peer1 | grep -Eo "listening port: (\S+)" | cut -d ' ' -f3)
-    port2=$(sudo ip netns exec $peer2 wg show wg_$peer2 | grep -Eo "listening port: (\S+)" | cut -d ' ' -f3)
+    port1=$(sudo ip netns exec $peer1 wg show wg_$peer1 listen-port)
+    port2=$(sudo ip netns exec $peer2 wg show wg_$peer2 listen-port)
 
     # Add the peers to each others' WireGuard configurations
     ip netns exec $peer1 wg set wg_$peer1 peer $pub2 allowed-ips 10.0.0.2/32 endpoint 192.168.2.254:$port2
@@ -203,9 +203,9 @@ performance_test_dir=$log_dir/performance_tests_$performance_test_var
 
 # Replace commas by spaces to convert string to array
 performance_test_values=$(echo $performance_test_values | tr ',' ' ') 
-
-# Convert string to array
 performance_test_values=($performance_test_values)
+
+# Variables to display a progress bar
 n_values=${#performance_test_values[@]}
 progress=0
 
@@ -215,8 +215,7 @@ if [[ $baseline == true ]]; then
     peer2_pub_ip=$(ip netns exec $peer2 ip address | grep -Eo "inet 192.168.[0-9.]+" | cut -d ' ' -f2)
 
     if [[ -z $peer1_pub_ip || -z $peer2_pub_ip ]]; then
-        print_err "For at least one of the two peers, a public IP could not be found"
-        exit 1
+        exit_with_error "For at least one of the two peers, a public IP could not be found"
     fi
 
     wg_setup
@@ -229,7 +228,9 @@ fi
 # Iterate over performance test values
 for performance_test_val in ${performance_test_values[@]}; do
     bar=$(progress_bar $progress $n_values)
-    echo -ne "\t$bar Performance testing with $performance_test_var = $performance_test_val     \r" # Extra spaces at the end to overwrite previous value
+    echo -ne "\033[2K\t$bar Performance testing with $performance_test_var = $performance_test_val\r" # \033[2K = Ctrl+K, clears rest of line from cursor; \r returns to beginning of line
+
+    # Run performance test for eduP2P
     performance_test $performance_test_val $performance_test_dir "eduP2P" $peer1_ip
 
     # If -b is set, the performance test is repeated over a direct/WireGuard connection instead of over the eduP2P connection

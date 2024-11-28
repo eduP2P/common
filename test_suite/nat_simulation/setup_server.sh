@@ -12,9 +12,6 @@ switch_ip=$1
 server_ns=$2
 server_ip=$3
 
-# Turn on loopback interface in namespace to allow pinging from inside namespace
-ip link set lo up
-
 # Create veth pair for server
 ip link add $server_ns type veth peer $server_ns netns public
 ip link set dev $server_ns up
