@@ -173,6 +173,7 @@ function setup_servers() {
 
     # Add relay server to control server config
     cd ${repo_dir}/cmd/control_server
+    sudo chmod 666 control.json # Make config file accessible without sudo
     python3 configure_json.py $relay_pub_key $relay_ip $relay_port
 
     start_server "control_server" $control_ip $control_port
