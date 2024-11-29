@@ -1216,7 +1216,19 @@ further, however:
 
 ## Integration Test Results
 
-TODO
+Currently, the integration tests focus on the lowest level components
+making up the eduP2P client: the actors in the stage. These components,
+are all contained in the Go package called `actors`.
+
+The current tests cover 37.3% of the code in this package, and 12.1% of
+the total eduP2P codebase, as seen by running the following two
+commands:
+
+    go test -coverpkg=./toversok/actors ./...
+    go test -coverpkg=./... ./...
+
+As of yet, the integration tests have not uncovered any errors in
+eduP2P.
 
 ## Bibliography
 
