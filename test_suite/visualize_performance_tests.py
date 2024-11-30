@@ -161,8 +161,8 @@ def create_graph(test_var : str, test_var_values : list[float], metric : str, ex
         ls=line_styles[i]  
         lw=line_widths[i]
 
-        # Plot the measured independent variable values on the X axis instead of the target values, unless the measured values are already plotted on the Y axis
-        if metric == test_var:
+        # Plot the measured independent variable values on the X axis instead of the target values, unless the measured values or the delay are plotted on the Y axis (delay is not affected by the iperf3 measured values)
+        if metric == test_var or metric == "delay":
             plt.plot(test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
             x_label = test_var_label
         else:
