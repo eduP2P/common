@@ -33,6 +33,11 @@ func (r *linuxRouter) Up() error {
 	return nil
 }
 
+func (r *linuxRouter) Close() error {
+	// TODO implement me
+	return nil
+}
+
 func (r *linuxRouter) Set(c *Config) (retErr error) {
 	setErr := func(err error) {
 		if retErr == nil {
@@ -40,14 +45,14 @@ func (r *linuxRouter) Set(c *Config) (retErr error) {
 		}
 	}
 
-	for _, prefix := range prefixesToRemove(c.Prefixes, r.currPrefixes) {
+	for _, prefix := range prefixesToRemove(c.RoutingPrefixes, r.currPrefixes) {
 		if err := r.removeAddr(prefix); err != nil {
 			setErr(err)
 			slog.Warn("removeAddr failed", "for", prefix.String(), "err", err)
 		}
 	}
 
-	for _, prefix := range prefixesToAdd(c.Prefixes, r.currPrefixes) {
+	for _, prefix := range prefixesToAdd(c.RoutingPrefixes, r.currPrefixes) {
 		if err := r.addAddr(prefix); err != nil {
 			setErr(err)
 			slog.Warn("addAddr failed", "for", prefix.String(), "err", err)
@@ -55,7 +60,7 @@ func (r *linuxRouter) Set(c *Config) (retErr error) {
 	}
 
 	if retErr == nil {
-		r.currPrefixes = c.Prefixes
+		r.currPrefixes = c.RoutingPrefixes
 	}
 
 	return

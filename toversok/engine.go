@@ -56,8 +56,9 @@ type Engine struct {
 
 	nodePriv key.NodePrivate
 
-	ignitionMu sync.Mutex
-	started    bool
+	state         stateObserver
+	doAutoRestart bool
+	dirty         bool
 }
 
 // Start will fire up the Engine.
@@ -69,15 +70,43 @@ type Engine struct {
 //
 // After the engine has successfully started once, it will automatically restart on any failure.
 func (e *Engine) Start() error {
-	if e.started {
-		return nil
+	return e.start(true)
+}
+
+func (e *Engine) start(allowLogon bool) error {
+	if e.ctx.Err() != nil {
+		// If the engine has been cancelled, do nothing
+		return errors.New("engine context already closed")
 	}
 
-	if err := e.installSession(); err != nil {
+	if !e.state.change(NoSession, CreatingSession) {
+		return errors.New("cannot start; already running")
+	}
+
+	if e.sess != nil && e.sess.ctx.Err() == nil {
+		// Session is still running, even though that shouldn't be the case, as we checked for NoSession above
+		e.sess.ccc(errors.New("engine state desynced, shutting down"))
+	}
+
+	if e.dirty {
+		if err := e.wg.Reset(); err != nil {
+			e.slog().Error("dirty start: could not reset wireguard", "err", err)
+			e.state.set(NoSession)
+			return err
+		}
+
+		if err := e.fw.Reset(); err != nil {
+			e.slog().Error("dirty start: could not reset firewall", "err", err)
+			e.state.set(NoSession)
+			return err
+		}
+	}
+
+	e.dirty = true
+
+	if err := e.installSession(allowLogon); err != nil {
 		return fmt.Errorf("could not install session: %w", err)
 	}
-
-	e.started = true
 
 	return nil
 }
@@ -90,85 +119,164 @@ func (e *Engine) Context() context.Context {
 // after it has stalled/failed.
 const StalledEngineRestartInterval = time.Second * 2
 
-// Restart the current running engine, will return an error if this does not succeed.
-//
-// This does not start the engine, if it has not started.
-func (e *Engine) Restart() (err error) {
-	if !e.started {
-		// The engine is not supposed to start, stop trying to restart it.
-		return nil
-	}
-
-	if e.ctx.Err() != nil {
-		// If the engine has been cancelled, do nothing
-		return
-	}
-
-	e.ignitionMu.Lock()
-	defer e.ignitionMu.Unlock()
-
-	if e.sess.ctx.Err() == nil {
-		// Session is still running
-		e.sess.ccc(errors.New("restarting"))
-	}
-
-	if err = e.wg.Reset(); err != nil {
-		e.slog().Error("restart: could not reset wireguard", "err", err)
-		return
-	}
-
-	if err = e.fw.Reset(); err != nil {
-		e.slog().Error("restart: could not reset firewall", "err", err)
-		return
-	}
-
-	if err = e.installSession(); err != nil {
-		e.slog().Error("restart: could not install session", "err", err)
-		return
-	}
-
-	return nil
-}
-
 func (e *Engine) autoRestart() {
-	if err := e.Restart(); err != nil {
-		slog.Info("autoRestart: will retry in 10 seconds")
-		time.AfterFunc(StalledEngineRestartInterval, e.autoRestart)
+	if e.WillRestart() {
+		if err := e.start(false); err != nil {
+			slog.Info("autoRestart: will retry in 10 seconds")
+			time.AfterFunc(StalledEngineRestartInterval, e.autoRestart)
+		}
 	}
 }
 
 // Stop the engine.
 func (e *Engine) Stop() {
+	if !(e.state.change(Established, StoppingSession) || e.state.change(CreatingSession, StoppingSession) || e.state.change(NeedsLogin, StoppingSession)) {
+		// Already stopped or stopping
+		return
+	}
+
+	e.doAutoRestart = false
+
 	if e.sess.ctx.Err() != nil {
 		e.sess.ccc(errors.New("shutting down"))
 	}
 
-	e.wg.Reset()
-	e.fw.Reset()
-	e.started = false
+	var stillDirty bool
+
+	if err := e.wg.Reset(); err != nil {
+		e.slog().Warn("stop: error when resetting wireguard", "err", err)
+		stillDirty = true
+	}
+	if err := e.fw.Reset(); err != nil {
+		e.slog().Warn("stop: error when resetting firewall", "err", err)
+		stillDirty = true
+	}
+
+	if !stillDirty {
+		e.dirty = false
+	}
+
+	e.state.change(StoppingSession, NoSession)
 }
 
-func (e *Engine) installSession() error {
+// Assumes stateLock is held
+func (e *Engine) installSession(allowLogon bool) error {
+	// TODO check for logon somewhere and stop engine
+
+	var logon types.LogonCallback
+
+	if allowLogon {
+		logon = func(url string, _ chan<- string) error {
+			// TODO register/use device key channel
+
+			e.state.currentLoginUrl = url
+			e.state.change(CreatingSession, NeedsLogin)
+			return nil
+		}
+	}
+
 	var err error
-	e.sess, err = SetupSession(e.ctx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv)
+	e.sess, err = SetupSession(e.ctx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv, logon)
 	if err != nil {
 		return fmt.Errorf("failed to setup session: %w", err)
 	}
 
-	context.AfterFunc(e.sess.ctx, e.autoRestart)
+	if !(e.state.change(CreatingSession, Established) || e.state.change(NeedsLogin, Established)) {
+		e.ccc(errors.New("incorrect state transition"))
+		panic("incorrect state transition to established")
+	}
+
+	context.AfterFunc(e.sess.ctx, func() {
+		e.state.set(NoSession)
+		e.autoRestart()
+	})
 
 	e.sess.Start()
 
 	return err
 }
 
-// Started says whether the engine strives to be in a running state.
-func (e *Engine) Started() bool {
-	return e.started
+// WillRestart says whether the engine strives to be in a running state.
+func (e *Engine) WillRestart() bool {
+	return e.doAutoRestart
 }
 
 func (e *Engine) slog() *slog.Logger {
 	return slog.With("from", "engine")
+}
+
+func newStateObserver() stateObserver {
+	return stateObserver{}
+}
+
+type stateObserver struct {
+	mu              sync.Mutex
+	state           EngineState
+	currentLoginUrl string
+	callbacks       []func(state EngineState)
+}
+
+func (s *stateObserver) CurrentState() EngineState {
+	return s.state
+}
+
+func (s *stateObserver) RegisterStateChangeListener(f func(state EngineState)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.callbacks = append(s.callbacks, f)
+}
+
+var WrongStateErr = errors.New("wrong state")
+
+func (s *stateObserver) GetNeedsLoginState() (url string, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state == NeedsLogin {
+		return s.currentLoginUrl, nil
+	} else {
+		return "", WrongStateErr
+	}
+}
+
+func (s *stateObserver) GetEstablishedState() {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *stateObserver) change(oldState, newState EngineState) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state != oldState {
+		return false
+	}
+
+	slog.Debug("changing state", "oldState", oldState.String(), "newState", newState.String())
+
+	s.state = newState
+
+	s.asyncFireCallbacks(newState)
+
+	return true
+}
+
+func (s *stateObserver) set(newState EngineState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	slog.Debug("setting state", "newState", newState.String())
+
+	s.state = newState
+
+	s.asyncFireCallbacks(newState)
+}
+
+func (s *stateObserver) asyncFireCallbacks(state EngineState) {
+	for _, cb := range s.callbacks {
+		go cb(state)
+	}
 }
 
 // TODO add status update event channels (to display connection status, control status, session status, IP, etc.)
@@ -202,7 +310,7 @@ func NewEngine(
 		return nil, errors.New("cannot initialise toversok engine with zero privateKey")
 	}
 
-	return &Engine{
+	e := &Engine{
 		ctx:  ctx,
 		ccc:  ccc,
 		sess: nil,
@@ -215,8 +323,19 @@ func NewEngine(
 		co: co,
 
 		nodePriv: privateKey,
-		started:  false,
-	}, nil
+		state:    newStateObserver(),
+	}
+
+	e.Observer().RegisterStateChangeListener(func(state EngineState) {
+		if state == NeedsLogin {
+			url, err := e.Observer().GetNeedsLoginState()
+			if err != nil {
+				e.slog().Info("control wants logon", "url", url)
+			}
+		}
+	})
+
+	return e, nil
 }
 
 func (e *Engine) getNodePriv() *key.NodePrivate {
@@ -246,6 +365,15 @@ func (e *Engine) bindExt() (*net.UDPConn, error) {
 	ua := net.UDPAddrFromAddrPort(netip.AddrPortFrom(netip.IPv4Unspecified(), e.extPort)) // 42069
 
 	return net.ListenUDP("udp", ua)
+}
+
+func (e *Engine) Observer() Observer {
+	return &e.state
+}
+
+func (e *Engine) SupplyDeviceKey(key string) error {
+	// TODO
+	panic("not implemented")
 }
 
 //

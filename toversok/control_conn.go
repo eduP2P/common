@@ -26,11 +26,12 @@ type DefaultControlHost struct {
 }
 
 func (d *DefaultControlHost) CreateClient(
-	pCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate,
+	pCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate, logon types.LogonCallback,
 ) (ifaces.ControlSession, error) {
 	return CreateControlSession(pCtx, d.Opts, d.Key,
 		getNode,
 		getSess,
+		logon,
 	)
 }
 
@@ -68,13 +69,13 @@ type ResumableControlSession struct {
 	callbacks ifaces.ControlCallbacks
 }
 
-func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.ControlPublic, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate) (*ResumableControlSession, error) {
+func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.ControlPublic, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, logon types.LogonCallback) (*ResumableControlSession, error) {
 	// TODO authCallback func(url string)
 
 	rcsCtx, rcsCcc := context.WithCancelCause(ctx)
 
 	clientCtx := context.WithoutCancel(rcsCtx)
-	c, err := controlhttp.Dial(clientCtx, opts, getPriv, getSess, controlKey, nil)
+	c, err := controlhttp.Dial(clientCtx, opts, getPriv, getSess, controlKey, nil, logon)
 	if err != nil {
 		return nil, fmt.Errorf("could not create control session: %w", err)
 	}
@@ -179,12 +180,14 @@ func (rcs *ResumableControlSession) Run() {
 		for {
 			if time.Since(absenceStart) > MaxAbsence {
 				rcs.ccc(fmt.Errorf("max absence reached, bailing"))
+
+				return
 			}
 
 			clientCtx := context.WithoutCancel(rcs.ctx)
 
 			client, err = controlhttp.Dial(
-				clientCtx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session,
+				clientCtx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session, nil,
 			)
 
 			var r = msgcontrol.NoRetryStrategy
@@ -204,6 +207,11 @@ func (rcs *ResumableControlSession) Run() {
 					rcs.ccc(fmt.Errorf("got logonReject with incompatible reject strategy: %w", err))
 
 					return
+				}
+
+				if errors.Is(err, control.NeedsLogonError) {
+					// TODO dead/retry logic, signal that session is dead and needs manual logon
+					panic("not implemented")
 				}
 
 				// retry/resume
