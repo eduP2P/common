@@ -41,7 +41,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: system-test-logs
-        path: test_suite/logs/
+        path: test_suite/system_test_logs/
 
     - name: Fail job if system test failed (for clarity in GitHub UI)
       if: ${{ steps.system-test.outcome == 'failure' }}
