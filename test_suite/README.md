@@ -33,16 +33,18 @@ The test suite contains three types of tests:
 3.  Integration tests to verify the functionality of smaller parts of
     the system.
 
+These three types of tests, and their results, are described in more
+detail later in this document.
+
 ## Requirements
 
 The full test suite is known to work on Ubuntu 22.04 and Ubuntu 24.04,
 but will probably work on any GNU/Linux installation with a bash shell.
-Furthermore, any machine running Go version 1.22+ should be able to run
-the integration tests. The following software needs to be installed
-before the full test suite can be run:
-
-- Go version 1.22+, which can be installed
-  [here](https://go.dev/doc/install) and is necessary to build eduP2P.
+The only requirement common to all three types of tests is Go version
+1.22+, which can be installed [here](https://go.dev/doc/install) and is
+necessary to build eduP2P. This is also the only requirement for the
+test suite’s integration tests. The additional requirements to run the
+system and performance tests are listed in the next two subsections.
 
 ### System test-specific requirements
 
@@ -55,8 +57,8 @@ password.
 Furthermore, the system tests require a few command-line tools to be
 installed. The list of tools is found in
 [system_test_requirements.txt](system_test_requirements.txt), and can be
-installed by running the following below (which itself requires sudo and
-xargs):
+installed by running the following command (which itself requires the
+sudo and xargs packages):
 
         xargs -a system_test_requirements.txt sudo apt-get install
 
@@ -81,11 +83,11 @@ downloaded using the URL in the “Upload system test logs” step.
 The system tests can also be executed manually using
 [system_tests.sh](system_tests.sh). For example, the command below
 executes connectivity tests, where the simulated packet loss is set to
-0%. The script also generates logs, including the logs of the two eduP2P
-peers. The eduP2P client has multiple log levels, and in this command
-the ‘debug’ level is specified.
+2.5%. The script also generates logs, including the logs of the two
+eduP2P peers. The eduP2P client has multiple log levels, and in this
+command the ‘debug’ level is specified.
 
-    ./system_tests.sh -c 0 -l debug
+    ./system_tests.sh -c 2.5 -l debug
 
 The system tests specifically verify whether the eduP2P peers are able
 to establish a connection when NAT is involved. To do so, the machine
@@ -100,13 +102,14 @@ physical setup for two reasons:
     the test suite easier to use.
 2.  A simulated setup acts as a more ideal environment to perform the
     tests, since it is affected less by throughput limitations or
-    network congestion than on a physical network.
+    network congestion than a physical network.
 
 The simulated network setup is described in detail in the next section.
 
 ### Network Simulation Setup
 
-The eduP2P test suite simulates the following network setup:
+The eduP2P test suite simulates the network setup illustrated in the
+image below:
 
 ![](./images/system_tests/network_setup.png)
 
@@ -137,7 +140,8 @@ namespaces are configured as in the following diagram:
 Each network namespace is isolated, meaning that a network interface in
 one namespace is not aware of network interfaces in other namespaces. To
 allow communication between two namespaces, some network interfaces form
-virtual ethernet (veth) device pairs. Since packets on one device in
+virtual ethernet (veth) device pairs [\[2\]](#ref-man_veth), with each
+device in a different network namespace. Since packets on one device in
 such a pair also reach the other device in the pair, they can act as
 bridges between network namespaces.
 
@@ -162,17 +166,18 @@ are very similar, the namespaces on the right side are skipped.
   namespace.
 
   To make sure peers within a private network can still reach their
-  router and each other, each peer has a veth pair. Both devices in the
-  pair have the same name as the peer’s namespace, with one device
-  residing in this namespace, while the other resides in the private
-  network’s namespace.
+  router, each peer has a veth pair. Both devices in the pair have the
+  same name as the peer’s namespace, with one device residing in this
+  namespace, while the other resides in the private network’s namespace.
 
 - **private1:** each private network needs its own namespace to properly
   isolate the private networks from the public network.
 
+- 
+
 - **router1:** a separate network namespace is necessary for each router
   in order for NAT to be applied in the router. This test suite uses
-  nftables [\[2\]](#ref-man_nft) to apply NAT, and in this framework NAT
+  nftables [\[3\]](#ref-man_nft) to apply NAT, and in this framework NAT
   is only applied to packets that are leaving the local machine. The
   network interface `router1_pub` that applies NAT is in its own
   namespace, so that both packets going to the private network and to
@@ -188,9 +193,10 @@ are very similar, the namespaces on the right side are skipped.
 
 - **public:** this network namespace exists to isolate the whole network
   setup from the machine’s root network namespace, such that the only
-  traffic flowing through the namespaces is traffic concerning eduP2P.
-  Besides a veth device for each router, this namespace also contains a
-  TUN device that acts as a network switch between the routers.
+  traffic flowing through the namespaces is traffic generated by the
+  test suite. This namespace also contains a TUN device that acts as a
+  network switch between the routers and the eduP2P control and relay
+  servers.
 
 - **control:** the goal of this namespace is to force all outgoing
   traffic from the control server to be routed via the switch. If the
@@ -215,20 +221,23 @@ describes how they are implemented.
 ### Applying NAT
 
 To categorize different types of NAT, this test suite follows the
-terminology of RFC 4787 [\[3\]](#ref-rfc4787). This RFC outlines various
+terminology of RFC 4787 [\[4\]](#ref-rfc4787). This RFC outlines various
 NAT behaviours, of which the following are implemented in the test
-suite: mappings behaviours, filtering behaviours and hairpinning.
+suite: mapping behaviours, filtering behaviours and hairpinning.
 
 #### Mapping behaviours
 
 When an internal endpoint behind a NAT initiates a connection by sending
 a packet to an external endpoint outside its private network, the NAT
 must keep track of this connection between the two endpoints, called a
-session, in order to properly translate the source address of packets
-sent by the internal endpoint, and the destination address of packets
-sent to the internal endpoint. This session is a tuple consisting of the
-IP address and port of the internal endpoint and the IP address and port
-of the external endpoint.
+session, in order to properly translate the source address of outgoing
+packets sent by the internal endpoint, and the destination address of
+incoming packets sent to the internal endpoint. This session is a tuple
+consisting of the IP addresses and ports of both the internal and
+external endpoint. In order for NAT to be applied consistently within a
+session, each session is mapped to a IP address and port on the NAT
+device itself, which is used to translate the source of outgoing packets
+and thedestination of incoming packets.
 
 A NAT’s mapping behaviour dictates how mappings are reused when there
 are multiple sessions to different endpoints. We assume there already is
@@ -266,12 +275,13 @@ of behaviours:
 
 Note that in this test suite, the NAT’s IP pooling behaviour is not
 considered, as the routers in the simulated network setup only have one
-IP address.
+IP address. Therefore, the only difference between mappings is their
+ports.
 
-The test suite implements these three behaviours by using the nftables
-framework [\[2\]](#ref-man_nft) in the routers’ namespaces. For each of
-the three mapping behaviours, separate rules have to be applied in the
-`nat` table’s `postrouting` chain:
+The test suite implements the above three behaviours by using the
+nftables framework [\[3\]](#ref-man_nft) in the routers’ namespaces. For
+each of the three mapping behaviours, separate rules have to be applied
+in the `nat` table’s `postrouting` chain:
 
 1.  **EIM:** A rule is applied to all packets going to the public
     network with a source address from the private network. The target
@@ -283,9 +293,9 @@ the three mapping behaviours, separate rules have to be applied in the
     different endpoint.
 
     The mappings created with this rule are also automatically used to
-    translate the destination IP of packets entering private network,
-    since the Linux kernel’s conntrack module
-    [\[4\]](#ref-man_conntrack) keeps track of the sessions using these
+    translate the destination IP of packets going to the private
+    network, since the Linux kernel’s conntrack module
+    [\[5\]](#ref-man_conntrack) keeps track of the sessions using these
     mappings.
 
 2.  **ADM:** To simulate this type of mapping behaviour, multiple copies
@@ -340,7 +350,7 @@ these packets may be filtered, which is indicated by a dashed arrow:
 Packets destined to an IP address and port for which a mapping does not
 exist are also filtered, which the test suite implements using one
 nftables rule in the `filter` table’s `input` chain that applies to all
-packets, and accepts those that belong to an existing session. The
+packets, and only accepts those that belong to an existing session. The
 `input` chain’s default policy is set to drop, which means packets that
 do not belong to an existing session are filtered.
 
@@ -417,11 +427,11 @@ same script that was used for applying filtering.
 
 The test suite contains performance tests to measure the bitrate, jitter
 and packet loss of a connection between two peers. These tests are
-implemented using the iperf3 tool [\[5\]](#ref-man_iperf3).
+implemented using the iperf3 tool [\[6\]](#ref-man_iperf3).
 Additionally, the delay of the connection is also measured by setting up
-an HTTP server one one peer, repeatedly connecting to this server from
-the other peer with curl [\[6\]](#ref-man_curl), and calculating the
-average connection time.
+an HTTP server on one peer, repeatedly connecting to this server from
+the other peer with the curl tool [\[7\]](#ref-man_curl), and
+calculating the average connection time.
 
 To test the performance of eduP2P, a connection between two peers must
 first be established. Therefore, the performance tests are implemented
@@ -442,11 +452,6 @@ configuring the following parameters:
   2.  Bitrate: the speed at which iperf3 should try to send packets
       during the performance test (in Mbps).
 
-- **Performance test duration**: this parameter determines how long each
-  performance test should run for. For one system test, the total amount
-  of time the performance tests take is this parameter multiplied by the
-  amount of values assigned to the independent variable.
-
 - **Performance test baseline**: with this optional parameter, a
   ‘baseline’ is added to the performance test results, created by
   repeating the performance tests for:
@@ -461,10 +466,16 @@ configuring the following parameters:
   internally in eduP2P), or by a limitation of the test suite’s
   simulated network setup.
 
+- **Performance test duration**: this parameter determines how long each
+  performance test should run for. For one system test, the total amount
+  of time the performance tests take is this parameter multiplied by the
+  amount of values assigned to the independent variable. If the baseline
+  parameter is used, the duration is additionally multiplied by 3.
+
 To run performance tests manually, [system_tests.sh](system_tests.sh)
 can be used with the `-f` option to specify a file containing system
 tests, which may use the above parameters to also execute a performance
-test after a system test passed.
+test after a successful system test.
 
 The following command runs tests from a file named
 `performance_test.txt`:
@@ -487,10 +498,10 @@ performance test itself, but are necessary to run the system test in the
 first place. Internally, these parameters are passed to the
 [system_test.sh](system_test.sh) script. This script, like all other
 bash scripts in this repository, has a usage specification at the top of
-the script. For `./system_test.sh -h`, this specification is also
-printed when running `./system_test.sh -h` (this is also the case for
-some other bash scripts, but not all). The explanation of these other
-parameters can be found there.
+the script. For this script, the specification is also printed when
+running `./system_test.sh -h` (this is also the case for some other bash
+scripts, but not all). The explanation of these other parameters can be
+found in this usage specification.
 
 Each performance test logs its results to a separate json file, which
 contains (among other data) the average bitrate, jitter and packet loss
@@ -498,10 +509,9 @@ during the test. Using the Python script
 [visualize_performance_tests.py](visualize_performance_tests.py), these
 performance metrics are extracted from the json files, and graphs are
 automatically created that plot the independent variable on the X axis
-against each performance metric on the Y axis. Below is an example of
-such a graph:
-
-![](./images/performance_test_packet_loss.png)
+against each performance metric on the Y axis. Some of these graphs are
+shown in the [performance test results
+section](#performance-test-results)
 
 ## Integration Tests
 
@@ -534,11 +544,11 @@ two eduP2P peers are able to establish a direct connection using UDP
 hole punching when both peers are behind various types of NAT.
 
 When considering the four types of NAT described in RFC 3489
-[\[7\]](#ref-rfc3489), the results of using UDP hole punching to
+[\[8\]](#ref-rfc3489), the results of using UDP hole punching to
 establish a connection between peers are well-established
-[\[8\]](#ref-wacker2008), [\[9\]](#ref-hole_punching_table).
+[\[9\]](#ref-wacker2008), [\[10\]](#ref-hole_punching_table).
 
-This test suite uses the RFC 4787 [\[3\]](#ref-rfc4787) terminology,
+This test suite uses the RFC 4787 [\[4\]](#ref-rfc4787) terminology,
 which does not categorize NAT into these four types. However, each of
 these four types of NAT described in RFC 3489 uses a different
 combination of the NAT mapping and filtering behaviour described in RFC
@@ -582,8 +592,8 @@ This can be achieved with a STUN (Session Traversal Utilities for NAT)
 server. If a peer contacts a STUN server, this server will see this
 peer’s IP address and port after NAT has been applied to them, i.e., the
 peer’s “STUN endpoint”, and send it back to this peer. With both peers
-knowing their own STUN endpoint, they can exchange them to each other
-via a central server.
+knowing their own STUN endpoint, they can be exchanged via a central
+server.
 
 We show why UDP hole punching is not possible in the three cases in the
 table below with a concrete example. We denote the peers performing UDP
@@ -623,8 +633,8 @@ behaviour, it translates the source endpoint `X:x` of Peer 1’s packet to
 `X':x1'`. On the Symmetric NAT, the packet’s destination endpoint
 `Y':y1` is mapped to a connection with the STUN server `Z:z`, and this
 NAT has an Address and Port-Dependent Filtering behaviour. For these two
-reasons, this NAT expects packets destined to `Y':y1` have source `Z:z`,
-and therefore drops the packet from Peer 1
+reasons, this NAT expects packets destined to `Y':y1` to have source
+`Z:z`, and therefore drops the packet from Peer 1
 
 Since the Symmetric NAT has Address and Port-Dependent behaviour, it
 does not translate the source endpoint `Y:y` of Peer 2’s packet to its
@@ -666,9 +676,9 @@ is also similar, as illustrated in the next diagram:
 
 In the next section, the experiment involving the four types of NAT from
 RFC 3489 is repeated for eduP2P, in order to compare its results to the
-table above. In the section after that, the experiment is extended such
-that the NATs use every possible combination of RFC 4787 NAT mapping and
-filtering behaviour.
+table of expected results above. In the section after that, the
+experiment is extended such that the NATs use every possible combination
+of RFC 4787 NAT mapping and filtering behaviour.
 
 ### Experiment with RFC 3489 NAT types
 
@@ -730,7 +740,7 @@ punching process will fail, as illustrated in the diagram below:
       Note over p1,p2: UDP hole punching failed
 ```
 
-In this diagram, and all diagrams that follow, the example IP addressses
+In this diagram, and all diagrams that follow, the example IP addresses
 and ports from the previous section are reused. Note that in eduP2P,
 each relay server contains a STUN server to discover the STUN endpoints
 of the peers, and these STUN endpoints are exchanged via the control
@@ -836,17 +846,17 @@ the case because of three properties of the filtering script:
     Port-Dependent Mapping behaviour, packets that do *not* come from
     the original session’s endpoint should be dropped, so the process is
     unnecessary.
-3.  The delay of the filtering script is only an issue for Restricted
-    Cone NATs. With Full Cone NAT, the source of packets from Peer 1 is
-    always translated in the same way, e.g. to `X':x1'`, regardless of
-    their destination. In the test suite, the first connection initiated
-    by Peer 1 is to the eduP2P control server. When this happens, the
-    filtering script adds a rule to translate the destination of all
-    packets destined to `X':x1'` back to `X:x`, regardless of the
-    packets’ source. Because the connection with the control server is
-    initiated quite some time before the peers start the UDP hole
-    punching process, the delay in adding the nftables rule does not
-    pose a problem.
+3.  The delay of the filtering script is only an issue for if Peer 1 is
+    behind a non-EIM NAT. With an EIM NAT, the source of packets from
+    Peer 1 is always translated in the same way, e.g. to `X':x1'`,
+    regardless of their destination. In the test suite, the first
+    connection initiated by Peer 1 is to the eduP2P control server. When
+    this happens, the filtering script adds a rule to translate the
+    destination of all packets destined to `X':x1'` back to `X:x`,
+    regardless of the packets’ source. Because the connection with the
+    control server is initiated quite some time before the peers start
+    the UDP hole punching process, the delay in adding the nftables rule
+    does not pose a problem.
 
 #### Solution
 
@@ -862,11 +872,11 @@ incoming ping is no longer filtered.
 
 After these problems with eduP2P’s hole punching process became clear
 due to the system tests, the solution described above has been
-implemented in eduP2P, as mentioned in [this issue from the eduP2P
-GitHub repository](https://github.com/eduP2P/common/issues/78). The
-following diagram shows that the solution causes the hole punching
-process to succeed, despite the pings being sent in the incorrect order
-and the delay in the filtering script:
+implemented in eduP2P, as mentioned in [this issue in the eduP2P GitHub
+repository](https://github.com/eduP2P/common/issues/78). The following
+diagram shows that the solution causes the hole punching process to
+succeed, despite the pings being sent in the incorrect order and the
+delay in the filtering script:
 
 ``` mermaid
    sequenceDiagram
@@ -947,7 +957,7 @@ Messages 1 through 6 show how the previously explained race condition
 and filtering script delay cause the first three pings to be filtered.
 In messages 7 and 9, we see how the peers send another ping 1 second
 after their previous one. The ping from Peer 1 is still filtered because
-Peer 2 is behind a symmetric NAT. However, the ping from Peer 2 is let
+Peer 2 is behind a Symmetric NAT. However, the ping from Peer 2 is let
 through the Restricted Cone NAT to reach Peer 1, since the test suite’s
 NAT filtering script added an nftables rule to do so. In response, Peer
 1 sends a pong back to Peer 2 in message 12. It should be noted that
@@ -958,13 +968,14 @@ Symmetric NAT. Because Peer 2’s first ping to Peer 1 created a session
 reaches Peer 2. Therefore, UDP hole punching has succeeded.
 
 This solution improves the robustness of eduP2P’s UDP hole punching
-process. In the test suite, eduP2P can establish a direct connection
-between peers behind the combinations of the four RFC 3489 NAT types for
-which UDP hole punching is expected to succeed. Furthermore, it is also
-more likely to succeed now in real-life scenarios, where a NAT’s
-filtering behaviour might be slightly delayed like in the test suite.
-Finally, since more pings are sent during the hole punching process, it
-is also more likely to succeed in network conditions with packet loss.
+process in multiple ways. In the test suite, eduP2P can establish a
+direct connection between peers behind the combinations of the four RFC
+3489 NAT types for which UDP hole punching is expected to succeed.
+Furthermore, it is also more likely to succeed now in real-life
+scenarios, where a NAT’s filtering behaviour might be slightly delayed
+like in the test suite. Finally, since more pings are sent during the
+hole punching process, it is also more likely to succeed in network
+conditions with packet loss.
 
 ### Experiment with RFC 4787 NAT mapping & filtering behaviours
 
@@ -1040,8 +1051,8 @@ table where a direct connection could not be established:
        autonumber
 
        actor p1 as Peer 1 (X:x)
-       participant nat1 as EIM-ADPF
-       participant nat2 as ADM-ADF
+       participant nat1 as EIM-ADPF NAT
+       participant nat2 as ADM-ADF NAT
        actor p2 as Peer 2 (Y:y)
 
        %% Ping 1 from Peer 1
@@ -1085,8 +1096,8 @@ table where a direct connection could not be established:
        autonumber
 
        actor p1 as Peer 1 (X:x)
-       participant nat1 as ADM-ADF
-       participant nat2 as ADM-ADF
+       participant nat1 as ADM-ADF NAT
+       participant nat2 as ADM-ADF NAT
        actor p2 as Peer 2 (Y:y)
 
        %% Ping 1 from Peer 1
@@ -1169,26 +1180,25 @@ unlikely that the network bandwidth limits would allow for such a high
 bitrate. However, the packet loss of eduP2P is also quite sizeable even
 for lower bitrates, which would be a problem in the real world.
 
-The reason that eduP2P suffers so much packet loss probablyy has to do
+The reason that eduP2P suffers so much packet loss probably has to do
 with the fact that it uses Go channels internally to pass packets
 between its isolated components. For such high bitrates, these channels
 may become full, and consequently packets sent to these channels are
 dropped.
 
-It must also be noted that although the packet loss of the direct
-connection and WireGuard do not suffer much packet loss on my machine,
-this is not the case on every machine I tried this performance test on.
-When repeating this test on some virtual machines, there was also quite
-a lot of packet loss for these two connections. It seems that this
-packet loss was caused by these virtual machines only having one core,
-as repeating the test on a virtual machine while increasing the number
-of cores resulted in a decrease of packet loss. I suspect that not
-having enough cores causes packet loss because a core constantly has to
-switch between sending packets for one peer, and receiving them for the
-other, and it cannot switch fast enough as the bitrate increases.
-Therefore, it is recommended to run the performance test on a machine
-with more cores when encountering packet loss in the WireGuard or direct
-connection.
+It must also be noted that although the direct connection and WireGuard
+do not suffer much packet loss on my machine, this is not the case on
+every machine I tried this performance test on. When repeating this test
+on some virtual machines, there was also quite a lot of packet loss for
+these two connections. It seems that this packet loss was caused by
+these virtual machines only having one core, as repeating the test on a
+virtual machine while increasing the number of cores resulted in a
+decrease of packet loss. I suspect that not having enough cores causes
+packet loss because a core constantly has to switch between sending
+packets for one peer, and receiving them for the other, and it cannot
+switch fast enough as the bitrate increases. Therefore, it is
+recommended to run the performance test on a machine with more cores
+when encountering packet loss in the WireGuard or direct connection.
 
 Furthermore, the bitrate limits encountered in these results may also
 differ on other machines.
@@ -1217,7 +1227,7 @@ further, however:
 ## Integration Test Results
 
 Currently, the integration tests focus on the lowest level components
-making up the eduP2P client: the actors in the stage. These components,
+making up the eduP2P client: the actors in the stage. These components
 are all contained in the Go package called `actors`.
 
 The current tests cover 37.3% of the code in this package, and 12.1% of
@@ -1245,9 +1255,18 @@ Available:
 
 </div>
 
-<div id="ref-man_nft" class="csl-entry">
+<div id="ref-man_veth" class="csl-entry">
 
 <span class="csl-left-margin">\[2\]
+</span><span class="csl-right-inline">“<span class="nocase">veth -
+Virtual Ethernet Device</span>.” Available:
+<https://man7.org/linux/man-pages/man4/veth.4.html></span>
+
+</div>
+
+<div id="ref-man_nft" class="csl-entry">
+
+<span class="csl-left-margin">\[3\]
 </span><span class="csl-right-inline">P. McHardy and P. N. Ayuso,
 “<span class="nocase">nft - Administration tool of the nftables
 framework for packet filtering and classification</span>.” Available:
@@ -1257,7 +1276,7 @@ framework for packet filtering and classification</span>.” Available:
 
 <div id="ref-rfc4787" class="csl-entry">
 
-<span class="csl-left-margin">\[3\]
+<span class="csl-left-margin">\[4\]
 </span><span class="csl-right-inline">C. F. Jennings and F. Audet,
 “<span class="nocase">Network Address Translation (NAT) Behavioral
 Requirements for Unicast UDP</span>.” in Request for comments. RFC 4787;
@@ -1268,7 +1287,7 @@ RFC Editor, Jan. 2007. doi:
 
 <div id="ref-man_conntrack" class="csl-entry">
 
-<span class="csl-left-margin">\[4\]
+<span class="csl-left-margin">\[5\]
 </span><span class="csl-right-inline">H. Welte,
 “<span class="nocase">conntrack - command line interface for netfilter
 connection tracking</span>.” Available:
@@ -1278,7 +1297,7 @@ connection tracking</span>.” Available:
 
 <div id="ref-man_iperf3" class="csl-entry">
 
-<span class="csl-left-margin">\[5\]
+<span class="csl-left-margin">\[6\]
 </span><span class="csl-right-inline">“<span class="nocase">iperf3 -
 perform network throughput tests</span>.” Available:
 <https://manpages.org/iperf3></span>
@@ -1287,7 +1306,7 @@ perform network throughput tests</span>.” Available:
 
 <div id="ref-man_curl" class="csl-entry">
 
-<span class="csl-left-margin">\[6\]
+<span class="csl-left-margin">\[7\]
 </span><span class="csl-right-inline">“<span class="nocase">curl -
 transfer a URL</span>.” Available:
 <https://curl.se/docs/manpage.html></span>
@@ -1296,7 +1315,7 @@ transfer a URL</span>.” Available:
 
 <div id="ref-rfc3489" class="csl-entry">
 
-<span class="csl-left-margin">\[7\]
+<span class="csl-left-margin">\[8\]
 </span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
 and J. Weinberger, “<span class="nocase">STUN - Simple Traversal of User
 Datagram Protocol (UDP) Through Network Address Translators
@@ -1307,7 +1326,7 @@ Datagram Protocol (UDP) Through Network Address Translators
 
 <div id="ref-wacker2008" class="csl-entry">
 
-<span class="csl-left-margin">\[8\]
+<span class="csl-left-margin">\[9\]
 </span><span class="csl-right-inline">A. Wacker, G. Schiele, S.
 Holzapfel, and T. Weis, “A NAT traversal mechanism for peer-to-peer
 networks,” Oct. 2008, pp. 81–83. doi:
@@ -1317,7 +1336,7 @@ networks,” Oct. 2008, pp. 81–83. doi:
 
 <div id="ref-hole_punching_table" class="csl-entry">
 
-<span class="csl-left-margin">\[9\]
+<span class="csl-left-margin">\[10\]
 </span><span class="csl-right-inline">“Understanding different NAT types
 and hole-punching.” Available:
 <https://support.dh2i.com/docs/Archive/kbs/general/understanding-different-nat-types-and-hole-punching/></span>
