@@ -1,0 +1,6 @@
+conntrack
+iperf3
+iproute2
+iputils-ping
+sed 
+wireguard-tools
