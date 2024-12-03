@@ -17,8 +17,8 @@ const (
 	DirectRouterInboxChLen = 4
 
 	// Frame
-	SockRecvFrameChanBuffer = 10 * 16
-	InConnFrameChanBuffer   = 10 * 16
+	SockRecvFrameChanBuffer = 256
+	InConnFrameChanBuffer   = 512
 
 	RelayManFrameChLen      = 8
 	RelayManWriteChLen      = 8
