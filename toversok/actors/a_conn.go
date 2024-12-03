@@ -190,8 +190,9 @@ type InConn struct {
 
 	peer key.NodePublic
 
-	activityTimer *time.Timer
-	isActive      bool
+	activityTimer    *time.Timer
+	isActive         bool
+	timerLastHandled time.Time
 }
 
 func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
@@ -284,6 +285,11 @@ func (ic *InConn) ForwardPacket(pkt []byte) {
 
 // Bump the activity timer.
 func (ic *InConn) Bump() {
+	if !ic.timerLastHandled.Add(time.Second).Before(time.Now()) {
+		return
+	}
+	ic.timerLastHandled = time.Now()
+
 	if !ic.activityTimer.Stop() {
 		select {
 		case <-ic.activityTimer.C:
