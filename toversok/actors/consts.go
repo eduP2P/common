@@ -30,7 +30,7 @@ const (
 
 	// Misc
 
-	TManTickerInterval = time.Second
+	TManTickerInterval = time.Millisecond * 250
 
 	EManTickerInterval = time.Second * 60
 
