@@ -111,6 +111,8 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 				slog.Warn("rejected session with unknown error", "err", err)
 			}
 
+			slog.Debug("rejected peer", "reason", reject.Reason, "peer", sess.Peer.Debug())
+
 			if err := cc.Write(reject); err != nil {
 				return fmt.Errorf("error when sending reject: %w", err)
 			} else {
