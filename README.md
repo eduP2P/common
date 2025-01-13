@@ -8,6 +8,8 @@ Library usage can be found in [`toversok/`](./toversok/README.md).
 
 A proof-of-concept minimal implementation (wrapping the library) can be found in [`cmd/dev_client/`](cmd/dev_client/README.md).
 
+Documentation for the test suite can be found in [`test_suite/`](./test_suite/README.md)
+
 **eduP2P is currently in the proof-of-concept stage**, no fully fledged clients exists yet, but there is a working
 terminal-based development program in `cmd/dev_client/`, as mentioned above.
 
