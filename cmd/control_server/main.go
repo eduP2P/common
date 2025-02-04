@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"github.com/edup2p/common/types/control"
 	"github.com/edup2p/common/types/control/controlhttp"
 	"github.com/edup2p/common/types/key"
@@ -14,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -29,6 +31,10 @@ var (
 	configPath = flag.String("c", "", "config file path")
 	//stunPort   = flag.Int("stun-port", stunserver.DefaultPort, "The UDP port on which to serve STUN. The listener is bound to the same IP (if any) as specified in the -a flag.")
 
+	publicFacingBaseString = flag.String("u", "", "public facing base URL (required)")
+	publicFacingBase       *url.URL
+	password               = flag.String("p", "", "password")
+
 	programLevel = new(slog.LevelVar) // Info by default
 )
 
@@ -41,6 +47,21 @@ func main() {
 	programLevel.Set(-8)
 
 	flag.Parse()
+
+	if *publicFacingBaseString == "" {
+		slog.Error("publicly facing base URL is required (-u)")
+		os.Exit(1)
+	} else if *password == "" {
+		slog.Error("password is required (-p)")
+		os.Exit(1)
+	}
+
+	var err error
+
+	if publicFacingBase, err = url.Parse(*publicFacingBaseString); err != nil {
+		slog.Error("could not parse public facing base URL", "err", err)
+		os.Exit(1)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -55,21 +76,28 @@ func main() {
 
 	// TODO below is dup from relayserver main.go; dedup in a common library?
 
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		browserHeaders(w)
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-		w.WriteHeader(200)
-
-		io.WriteString(w, ToverSokControlDefaultHTML)
-	}))
+	mux.Handle("/", handleStaticHTML(ToverSokControlDefaultHTML))
 
 	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		browserHeaders(w)
 		io.WriteString(w, "User-agent: *\nDisallow: /\n")
 	}))
 	mux.Handle("/generate_204", http.HandlerFunc(serverCaptivePortalBuster))
+
+	mux.Handle("/auth/land", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s, ok := r.URL.Query()["session"]
+		if !ok || len(s) != 1 {
+			http.Error(w, "session query param is required", http.StatusBadRequest)
+			return
+		}
+
+		session := s[0]
+
+		sendStaticHTML(fmt.Sprintf(AuthLandingHTML, session), w, r)
+	}))
+	mux.Handle("/auth/do", http.HandlerFunc(cserver.HandleAuthRequest))
+	mux.Handle("/auth/fail", handleStaticHTML(AuthIncorrectHTML))
+	mux.Handle("/auth/success", handleStaticHTML(AuthSuccessHTML))
 
 	httpsrv := &http.Server{
 		Addr:    *addr,
@@ -86,10 +114,10 @@ func main() {
 		httpsrv.Shutdown(ctx)
 	}()
 
-	// TODO setup TLS with autocert
+	// TODO setup TLS with autocert?
 
 	slog.Info("control: serving", "addr", *addr)
-	err := httpsrv.ListenAndServe()
+	err = httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("control: error %s", err)
@@ -105,6 +133,70 @@ type ControlServer struct {
 	server *control.Server
 }
 
+func (cs *ControlServer) HandleAuthRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/auth/land", 302)
+		return
+	}
+
+	p := r.FormValue("password")
+	s := r.FormValue("session")
+	slog.Info("auth request", "url", r.URL.String(), "pass", p, "session", s)
+
+	if p == *password {
+		// Success
+
+		if err := cs.server.AcceptAuthentication(control.SessID(s)); err != nil {
+			http.Error(w, "Authentication error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/auth/success", 302)
+	} else {
+		// Fail
+		http.Redirect(w, r, "/auth/fail", 302)
+	}
+
+}
+
+func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID) {
+	println("OnSessionCreate")
+
+	if cs.isKnown(key.NodePublic(cid)) {
+		if err := cs.server.AcceptAuthentication(id); err != nil {
+			slog.Error("error accepting authentication", "id", id, "err", err)
+		}
+
+		return
+	}
+
+	url, _ := url.Parse(string("/auth/land?session=" + id))
+	if err := cs.server.SendAuthURL(id, publicFacingBase.ResolveReference(url).String()); err != nil {
+		slog.Error("error sending auth URL", "id", id, "err", err)
+	}
+}
+
+func (cs *ControlServer) OnSessionResume(id control.SessID, id2 control.ClientID) {
+	println("OnSessionResume")
+	return // noop
+}
+
+func (cs *ControlServer) OnDeviceKey(id control.SessID, key string) {
+	println("OnDeviceKey")
+	return // noop
+}
+
+func (cs *ControlServer) OnSessionFinalize(id control.SessID, id2 control.ClientID) (netip.Prefix, netip.Prefix) {
+	println("OnSessionFinalize")
+
+	return cs.getIPs(key.NodePublic(id2))
+}
+
+func (cs *ControlServer) OnSessionDestroy(id control.SessID, id2 control.ClientID) {
+	println("OnSessionDestroy")
+	return // noop
+}
+
 func LoadServer(ctx context.Context) *ControlServer {
 	cfg := loadConfig()
 
@@ -113,9 +205,59 @@ func LoadServer(ctx context.Context) *ControlServer {
 		cfg: cfg,
 	}
 
-	s.server = control.NewServer(cfg.ControlKey, s.getIPs, cfg.Relays)
+	println("creating new server")
+	s.server = control.NewServer(cfg.ControlKey, cfg.Relays)
+	println("created new server")
+
+	s.server.RegisterCallbacks(s)
+	println("loaded callbacks")
+
+	s.loadExistingNodes()
+	println("loaded nodes")
 
 	return s
+}
+
+func (cs *ControlServer) loadExistingNodes() {
+	var clients []control.ClientID
+
+	for node := range cs.cfg.IPMapping {
+		clients = append(clients, control.ClientID(node))
+	}
+
+	// scuffed full graph of all known nodes
+	for _, client := range clients {
+		for _, client2 := range clients {
+			if client == client2 {
+				continue
+			}
+
+			if err := cs.server.UpsertVisibilityPair(client, client2, control.VisibilityPair{}); err != nil {
+				panic(err)
+			}
+		}
+	}
+}
+
+func (cs *ControlServer) addNewNode(node key.NodePublic) {
+	for node2 := range cs.cfg.IPMapping {
+		if node == node2 {
+			continue
+		}
+
+		if err := cs.server.UpsertVisibilityPair(control.ClientID(node), control.ClientID(node2), control.VisibilityPair{}); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (cs *ControlServer) isKnown(node key.NodePublic) bool {
+	cs.cfgMu.Lock()
+	defer cs.cfgMu.Unlock()
+
+	_, ok := cs.cfg.IPMapping[node]
+
+	return ok
 }
 
 func (cs *ControlServer) getIPs(node key.NodePublic) (netip.Prefix, netip.Prefix) {
@@ -136,6 +278,8 @@ func (cs *ControlServer) getIPs(node key.NodePublic) (netip.Prefix, netip.Prefix
 		cs.cfg.IPMapping[node] = mapping
 
 		writeConfig(cs.cfg, *configPath)
+
+		cs.addNewNode(node)
 	}
 
 	return netip.PrefixFrom(mapping.IP4, cs.cfg.IP4.Bits()), netip.PrefixFrom(mapping.IP6, cs.cfg.IP6.Bits())
@@ -205,6 +349,22 @@ func (cs *ControlServer) ip6Used(a netip.Addr) bool {
 	return false
 }
 
+func handleStaticHTML(doc string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sendStaticHTML(doc, w, r)
+	}
+}
+
+func sendStaticHTML(doc string, w http.ResponseWriter, r *http.Request) {
+	browserHeaders(w)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	w.WriteHeader(200)
+
+	io.WriteString(w, doc)
+}
+
 const ToverSokControlDefaultHTML = `
 <html>
 	<body>
@@ -222,6 +382,63 @@ func browserHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
+
+const AuthLandingHTML = `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Authenticate P2P Device</title>
+</head>
+<body>
+<h1>Authenticate P2P Device</h1>
+
+<form action="/auth/do" method="post">
+    <label for="pass">Password:</label>
+    <input type="password" id="pass" name="password" required />
+    <input type="hidden" id="session" name="session" value="%s"/>
+    
+    <input type="submit" value="Authenticate" />
+</form>
+</body>
+
+<script>
+    (new URL(window.location.href)).searchParams.forEach((x, y) =>
+        document.getElementById(y).value = x)
+</script>
+</html>`
+
+const AuthSuccessHTML = `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Successfully authenticated!</title>
+</head>
+<body>
+<h1>
+    Successfully authenticated!
+</h1>
+
+<h2>
+    You can now close this browser tab, and return to your client.
+</h2>
+</body>
+</html>`
+
+const AuthIncorrectHTML = `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Incorrect Password</title>
+</head>
+<body>
+<h1>Incorrect Password</h1>
+
+<p>Return to the previous page and try again.</p>
+</body>
+</html>`
 
 type Config struct {
 	ControlKey key.ControlPrivate

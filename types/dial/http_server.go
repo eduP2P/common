@@ -41,6 +41,8 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 			return
 		}
 
+		defer netConn.Close()
+
 		// TODO re-add publickey frontloading?
 		//  pubKey := s.PublicKey()
 		//  "Relay-Public-Key: %s\r\n\r\n",pubKey.HexString()

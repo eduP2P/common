@@ -2,8 +2,10 @@ sequenceDiagram
     Client ->> Control: ClientHello
     Control ->> Client: ServerHello
     Client ->> Control: Logon
-    opt authenticate
-        Control ->> Client: LogonAuthenticate
+    critical authenticate
+        opt auth url
+            Control ->> Client: LogonAuthenticate
+        end
         opt device key
             Client ->> Control: LogonDeviceKey
         end
