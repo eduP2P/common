@@ -5,19 +5,26 @@ Usage: ${0} [OPTIONAL ARGUMENTS]
 
 This script runs system tests between two eduP2P peers sequentially
 
-The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at least one should be provided:
-    -c <packet loss>
-        Run the test suite's connectivity tests with all combinations of RFC 3489 NATs
-        The percentage of packets that should be dropped during the tests should be provided as a real number in the interval [0, 100)
-    -e 
-        Extends the connectivity tests to all combinations of RFC 4787 NAT mapping and filtering behaviour
+The following options determine the type of tests run:
+    -e
+        Run extended connectivity tests (all combinations of RFC 4787 NAT mapping and filtering behaviour)
     -f <file>
         Run custom tests from an existing file. One test should be specified on a single line, and this line should be a call to the run_system_test function found in this script
+    -p
+        Run some examples of the test suite's performance tests
+
+If none of these options are provided, a shortened version of the connectivity tests is run (all combinations of RFC 3489 NATs)
+
+The following options can be used to configure additional parameters during the tests:
+    -c <packet loss>
+        Simulate packet loss by making the central network switch randomly drop a percentage of packets
+        This percentage should be provided as a real number in the interval [0, 100)
+    -d <delay>
+        Add delay to packets transmitted by the eduP2P clients, control server and relay server
+        The delay should be provided as an integer that represents the one-way delay in milliseconds
     -l <info|debug|trace>
         Specifies the log level used in the eduP2P client of the two peers
-        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)
-    -p
-        Run some examples of the test suite's performance tests"""
+        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)"""
 
 # Use functions and constants from util.sh
 . ./util.sh
@@ -26,7 +33,7 @@ The type of tests that are run depends on [OPTIONAL ARGUMENTS], of which at leas
 log_lvl="debug"
 
 # Validate optional arguments
-while getopts ":c:ef:l:ph" opt; do
+while getopts ":c:d:ef:l:ph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -42,6 +49,13 @@ while getopts ":c:ef:l:ph" opt; do
             if [[ $in_interval -eq 0 ]]; then
                 exit_with_error "packet loss argument is not in the interval [0, 100)"
             fi
+            ;;
+        d)
+            delay=$OPTARG
+
+            # Make sure delay is an integer
+            int_regex="^[0-9]+$"
+            validate_str $delay $int_regex
             ;;
         e)
             extended=true
@@ -76,11 +90,6 @@ done
 
 # Shift positional parameters indexing by accounting for the optional arguments
 shift $((OPTIND-1))
-
-# Make sure at least one option argument is provided
-if [[ ! ( -n $file || $connectivity == true || $performance == true ) ]]; then
-    exit_with_error "at least one option should be set"
-fi
 
 # Store repository's root directory for later use
 repo_dir=$(cd ..; pwd)
@@ -243,8 +252,25 @@ function connectivity_test_logic() {
 
 cd $repo_dir/test_suite
 
-if [[ $connectivity == true ]]; then
+if [[ -n $packet_loss ]]; then
     sudo ./set_packet_loss.sh $packet_loss
+fi
+
+if [[ -n $delay ]]; then
+    sudo ./set_delay.sh $delay
+fi
+
+if [[ $performance == true ]]; then
+    echo -e "\nPerformance tests (without NAT)"
+    run_system_test -k bitrate -v 25,50,75,100 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k packet_loss -v 0,1.5,3,4.5 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+elif [[ -n $file ]]; then
+    echo -e "\nTests from file: $file"
+    
+    while read test_cmd; do
+        eval $test_cmd
+    done < $file
+else
     rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
 
     echo """
@@ -287,20 +313,6 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
             fi
         done
     done
-fi
-
-if [[ $performance == true ]]; then
-    echo -e "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 25,50,75,100 -d 3 -b TS_PASS_DIRECT router1-router2 : :
-    run_system_test -k packet_loss -v 0,1.5,3,4.5 -d 3 -b TS_PASS_DIRECT router1-router2 : :
-fi
-
-if [[ -n $file ]]; then
-    echo -e "\nTests from file: $file"
-    
-    while read test_cmd; do
-        eval $test_cmd
-    done < $file
 fi
 
 function print_summary() {
