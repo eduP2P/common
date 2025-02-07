@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 pub_nat_iface=$1
 priv_nat_iface=$2

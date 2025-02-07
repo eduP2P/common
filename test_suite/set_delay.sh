@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 usage_str="""
 Usage: ${0} <DELAY>

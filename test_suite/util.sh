@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Usage: execute ". /path/to/util.sh" in another script to be able to use this script's functions and variables in that other script
 

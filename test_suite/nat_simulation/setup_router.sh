@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 router_name=$1
 priv_name=$2
