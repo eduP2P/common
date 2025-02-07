@@ -87,13 +87,14 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 
 		for ctx.Err() == nil {
 			msg := msgcontrol.LogonDeviceKey{}
-			// FIXME this creates a 1 second delay after auth
 			err := s.conn.Expect(&msg, time.Millisecond*100)
 
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					continue
 				}
+
+				slog.Error("got error in devicekey expect goroutine", "err", err)
 
 				errChan <- err
 
@@ -322,7 +323,7 @@ func (s *ServerSession) Run() {
 
 	// TODO wait here for information?
 
-	err = s.server.atomicGetVisibilityPairs(s.Peer, func(m map[ClientID]VisibilityPair) error {
+	err = s.server.sessLockedDoVisibilityPairs(s.Peer, func(m map[ClientID]VisibilityPair) error {
 		s.state = Established
 
 		var ops []PairOperation

@@ -136,9 +136,10 @@ func (rcs *ResumableControlSession) Run() {
 				break
 			}
 
-			msg, err := c.Recv(time.Second * 5)
+			msg, err := c.Recv(500 * time.Millisecond)
 
 			if types.IsContextDone(rcs.ctx) {
+				slog.Info("control session ended, closing client")
 				rcs.client.Close()
 				return
 			}
@@ -164,6 +165,7 @@ func (rcs *ResumableControlSession) Run() {
 						// TODO bail here?
 					}
 				} else {
+					slog.Debug("callbacks not ready, queuing message")
 					rcs.QueueIn(msg)
 				}
 			}

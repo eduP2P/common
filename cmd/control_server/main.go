@@ -163,9 +163,11 @@ func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID
 	println("OnSessionCreate")
 
 	if cs.isKnown(key.NodePublic(cid)) {
-		if err := cs.server.AcceptAuthentication(id); err != nil {
-			slog.Error("error accepting authentication", "id", id, "err", err)
-		}
+		go func() {
+			if err := cs.server.AcceptAuthentication(id); err != nil {
+				slog.Error("error accepting authentication", "id", id, "err", err)
+			}
+		}()
 
 		return
 	}

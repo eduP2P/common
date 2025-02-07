@@ -144,9 +144,11 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 		}
 
 		// Wait until connection dead
-		<-ctx.Done()
+		// TODO this needs to be tied to the connection, which before we used r.Context() for, but is now useless
+		//  due to https://github.com/golang/go/issues/32314
+		<-sess.Ctx.Done()
 
-		return ctx.Err()
+		return sess.Ctx.Err()
 
 		//// for now, send a reject
 		//if err := cc.Write(&msgcontrol.LogonReject{
@@ -380,7 +382,7 @@ func (s *Server) RemoveSession(sess *ServerSession) {
 	if sess.state != Authenticate {
 		// others peers know of this session, send remove
 
-		err := s.atomicGetVisibilityPairs(sess.Peer, func(m map[ClientID]VisibilityPair) error {
+		err := s.sessLockedDoVisibilityPairs(sess.Peer, func(m map[ClientID]VisibilityPair) error {
 			var ops []PairOperation
 
 			for id2 := range m {

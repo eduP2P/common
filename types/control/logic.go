@@ -218,10 +218,14 @@ func (s *Server) GetVisibilityPairs(id ClientID) (map[ClientID]VisibilityPair, e
 	return pairs, nil
 }
 
-func (s *Server) atomicGetVisibilityPairs(id key.NodePublic, f func(map[ClientID]VisibilityPair) error) error {
+func (s *Server) atomicDoVisibilityPairs(id key.NodePublic, f func(map[ClientID]VisibilityPair) error) error {
 	s.sessLock.RLock()
 	defer s.sessLock.RUnlock()
 
+	return s.sessLockedDoVisibilityPairs(id, f)
+}
+
+func (s *Server) sessLockedDoVisibilityPairs(id key.NodePublic, f func(map[ClientID]VisibilityPair) error) error {
 	s.pendingLock.Lock()
 	defer s.pendingLock.Unlock()
 

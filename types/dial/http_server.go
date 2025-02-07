@@ -56,7 +56,13 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 
 		remoteIPPort, _ := netip.ParseAddrPort(netConn.RemoteAddr().String())
 
-		err = s.Accept(r.Context(), netConn, brw, remoteIPPort)
+		ctx := context.Background()
+		// ctx := r.Context()
+		// TODO cannot use request context due to https://github.com/golang/go/issues/32314
+		//  it is also expected that the client application takes care of closenotify and the likes,
+		//  after the connection has been hijacked
+
+		err = s.Accept(ctx, netConn, brw, remoteIPPort)
 
 		s.Logger().Info("client exited", "reason", err)
 	})
