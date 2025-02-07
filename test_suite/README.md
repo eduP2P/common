@@ -70,7 +70,7 @@ Python script are listed in
 [python_requirements.txt](python_requirements.txt), and can be installed
 as follows:
 
-    pip install -r python-requirements.txt
+    pip install -r python_requirements.txt
 
 ## System Tests
 
