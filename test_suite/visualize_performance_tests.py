@@ -23,6 +23,10 @@ TEST_VARS = {
     "packet_loss" : {
         "label" : "Simulated packet loss",
         "unit" : "%"
+    },
+    "delay" : {
+        "label" : "Delay",
+        "unit" : "ms"
     }
 }
 

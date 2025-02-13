@@ -11,9 +11,11 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <NAMESPACE PEER 1> <NAMESPACE PEER 2> <VIRTUAL 
 Executes performance tests between the peers using iperf3, where peer 1 acts as the server and peer 2 as the client
 This script must be executed with root permissions
 
-<PERFORMANCE TEST VARIABLE> can be either 'packet_loss' or 'bitrate'
+<PERFORMANCE TEST VARIABLE> can be either 'bitrate', 'delay' or 'packet_loss'
 
-<PERFORMANCE TEST VALUES> should be a comma-separated string of positive real numbers (smaller than 100 in case of packet_loss, since its unit is %)
+<PERFORMANCE TEST VALUES> should be a comma-separated string of positive real numbers 
+    In case of packet_loss, which has % as unit, the real numbers should be smaller than 100
+    In case of delay, the decimal precision is ignored
 
 <PERFORMANCE TEST DURATION> should be a positive integer specifiying the amount of seconds the performance test for each value will take 
 """
@@ -120,6 +122,8 @@ function performance_test() {
     connection=$3
     server_ip=$4
 
+    default_bitrate=100000000 # Used unless bitrate is the independent variable
+
     # Peer 1 is the iperf3 server
     ip netns exec $peer1 iperf3 -s -B $server_ip -p 12345 -1 --logfile /dev/null & # -1 to close after first connection
     server_pid=$!
@@ -135,7 +139,7 @@ function performance_test() {
     case $performance_test_var in
         "packet_loss")
             ./set_packet_loss.sh 0 # Set packet loss to 0 for quick handshake
-            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 3000 --json --logfile $log_path -b 100000000 --omit 2 & # Omit first two seconds
+            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 3000 --json --logfile $log_path -b $default_bitrate --omit 2 & # Omit first two seconds
             client_pid=$!
 
             # Make sure packet loss is reset to the correct value before the test results are measured (sleep period is smaller than omit period above)
@@ -145,6 +149,11 @@ function performance_test() {
         "bitrate")
             bitrate=$(( $test_val * 10**6 )) # Convert to bits/sec
             ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 3000 --json --logfile $log_path -b $bitrate &
+            client_pid=$!
+            ;;
+        "delay")
+            ./set_delay.sh $test_val
+            ip netns exec $peer2 iperf3 -c $server_ip -p 12345 -u -t $performance_test_duration --connect-timeout 3000 --json --logfile $log_path -b $default_bitrate &
             client_pid=$!
             ;;
     esac

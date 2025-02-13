@@ -9,7 +9,7 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
     3. TS_FAIL: the peers failed to establish a connection
     
 [OPTIONAL ARGUMENTS] can be provided for a performance test:
-    -k <packet_loss|bitrate>
+    -k <bitrate|delay|packet_loss>
     -v <comma-separated string of positive real numbers (less than 100 for -k bitrate)>
     -d <seconds>
     -b
@@ -45,25 +45,17 @@ while getopts ":k:v:d:bh" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
-            validate_str $performance_test_var "^packet_loss|bitrate$"
+            validate_str $performance_test_var "^bitrate|delay|packet_loss$"
             ;;
         v)  
             performance_test_values=$OPTARG
 
-            # Validate values as integers or reals depending on test variable
-            case $performance_test_var in
-                "bitrate")
-                    validate_str "$performance_test_values" "^[0-9]+(,[0-9]+)*$"
-                    ;;
+            if [[ -z $performance_test_var ]]; then
+                exit_with_error "-k should be specified before -v"
+            fi
 
-                "packet_loss")
-                    real_regex="[0-9]+(.[0-9]+)?"
-                    validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
-                    ;;
-                *)
-                    exit_with_error "-k should be specified before -v"
-                    ;;
-            esac
+            real_regex="[0-9]+(.[0-9]+)?"
+            validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
             ;;
         d)
             performance_test_duration=$OPTARG
