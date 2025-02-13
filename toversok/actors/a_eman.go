@@ -8,6 +8,7 @@ import (
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/types/stun"
 	"golang.org/x/exp/maps"
+	"net"
 	"net/netip"
 	"slices"
 	"time"
@@ -92,6 +93,7 @@ func (em *EndpointManager) Run() {
 			return
 		case <-em.ticker.C:
 			em.startSTUN()
+			em.getLocalEndpoints()
 		case <-em.stunTimeout.C:
 			em.onSTUNTimeout()
 		case m := <-em.inbox:
@@ -104,6 +106,7 @@ func (em *EndpointManager) Run() {
 				// Quickly update endpoints now that we have STUN for the first time
 				if !em.didStartup {
 					em.startSTUN()
+					em.getLocalEndpoints()
 					em.didStartup = true
 				}
 
@@ -363,6 +366,60 @@ func (em *EndpointManager) collectRelaySTUNEndpoints() map[netip.AddrPort]int64 
 	}
 
 	return relayEndpoints
+}
+
+func (em *EndpointManager) getLocalEndpoints() {
+	// TODO disregard own address, obviously
+
+	localEndpoints := em.collectLocalEndpoints()
+
+	L(em).Debug("local endpoints collected", "endpoints", localEndpoints)
+
+	if len(localEndpoints) > 0 {
+		em.s.setLocalEndpoints(localEndpoints)
+	}
+}
+
+func (em *EndpointManager) collectLocalEndpoints() []netip.Addr {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		L(em).Error("collectLocalEndpoints: failed to list interfaces", "error", err)
+		return nil
+	}
+
+	var ips []netip.Addr
+
+	// handle err
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			L(em).Warn("collectLocalEndpoints: could not get addresses from interface", "error", err, "iface", i.Name)
+			continue
+		}
+		// handle err
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip.IsLoopback() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+
+			nip, ok := netip.AddrFromSlice(ip)
+			if !ok {
+				L(em).Warn("collectLocalEndpoints: could not get addr from slice", "ip", ip)
+				continue
+			}
+
+			ips = append(ips, types.NormaliseAddr(nip))
+		}
+	}
+
+	return ips
 }
 
 func (em *EndpointManager) Close() {
