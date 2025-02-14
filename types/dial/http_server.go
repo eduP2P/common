@@ -56,7 +56,7 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 
 		remoteIPPort, _ := netip.ParseAddrPort(netConn.RemoteAddr().String())
 
-		ctx := context.Background()
+		ctx := context.TODO()
 		// ctx := r.Context()
 		// TODO cannot use request context due to https://github.com/golang/go/issues/32314
 		//  it is also expected that the client application takes care of closenotify and the likes,
