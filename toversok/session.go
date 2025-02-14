@@ -9,7 +9,9 @@ import (
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
+	"log/slog"
 	"net/netip"
+	"sync"
 )
 
 // Session represents one single session; a session key is generated here, and used inside a Stage
@@ -19,6 +21,10 @@ type Session struct {
 
 	wg WireGuardController
 	fw FirewallController
+
+	quarantineMu     sync.Mutex
+	quarantinedPeers map[key.NodePublic]bool
+	peerAddrs        map[key.NodePublic][]netip.Addr
 
 	//control ifaces.ControlSession
 
@@ -81,9 +87,59 @@ func (s *Session) getPriv() *key.SessionPrivate {
 	return &s.sessionKey
 }
 
+func (s *Session) registerPeerAddrs(peer key.NodePublic, ip4, ip6 netip.Addr) {
+	s.quarantineMu.Lock()
+	defer s.quarantineMu.Unlock()
+
+	s.peerAddrs[peer] = []netip.Addr{ip4, ip6}
+}
+
+func (s *Session) upsertQuarantine(peer key.NodePublic) {
+	s.quarantineMu.Lock()
+	defer s.quarantineMu.Unlock()
+
+	if !s.quarantinedPeers[peer] {
+		s.quarantinedPeers[peer] = true
+		s.triggerQuarantineUpdate()
+	}
+}
+
+func (s *Session) delQuarantine(peer key.NodePublic) {
+	s.quarantineMu.Lock()
+	defer s.quarantineMu.Unlock()
+
+	if s.quarantinedPeers[peer] {
+		s.quarantinedPeers[peer] = false
+		s.triggerQuarantineUpdate()
+	}
+}
+
+// (assumes locked quarantineMu)
+func (s *Session) triggerQuarantineUpdate() {
+	var addrs []netip.Addr
+
+	for peer, isQuarantined := range s.quarantinedPeers {
+		if isQuarantined {
+			addrs = append(addrs, s.peerAddrs[peer]...)
+		}
+	}
+
+	if err := s.fw.QuarantineNodes(addrs); err != nil {
+		slog.Error("could not update firewall with quarantined peers", "err", err, "addrs", addrs)
+	}
+}
+
 // CONTROL CALLBACKS
 
 func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr, prop msgcontrol.Properties) error {
+	s.registerPeerAddrs(peer, ip4, ip6)
+
+	if prop.Quarantine {
+		s.upsertQuarantine(peer)
+	} else {
+		s.delQuarantine(peer)
+	}
+
 	if err := s.wg.UpdatePeer(peer, PeerCfg{
 		VIPs: VirtualIPs{
 			IPv4: ip4,
@@ -113,11 +169,17 @@ func (s *Session) RemovePeer(peer key.NodePublic) error {
 	return nil
 }
 
-// PASSTHROUGH
-
 func (s *Session) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error {
+	if prop != nil {
+		if prop.Quarantine {
+			s.upsertQuarantine(peer)
+		}
+	}
+
 	return s.stage.UpdatePeer(peer, homeRelay, endpoints, session, prop)
 }
+
+// PASSTHROUGH
 
 func (s *Session) UpdateRelays(relay []relay.Information) error {
 	return s.stage.UpdateRelays(relay)
