@@ -7,6 +7,7 @@ import (
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
 	"net/netip"
 )
@@ -82,7 +83,7 @@ func (s *Session) getPriv() *key.SessionPrivate {
 
 // CONTROL CALLBACKS
 
-func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr) error {
+func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr, prop msgcontrol.Properties) error {
 	if err := s.wg.UpdatePeer(peer, PeerCfg{
 		VIPs: VirtualIPs{
 			IPv4: ip4,
@@ -93,7 +94,7 @@ func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []neti
 		return fmt.Errorf("failed to update wireguard: %w", err)
 	}
 
-	if err := s.stage.AddPeer(peer, homeRelay, endpoints, session, ip4, ip6); err != nil {
+	if err := s.stage.AddPeer(peer, homeRelay, endpoints, session, ip4, ip6, prop); err != nil {
 		return fmt.Errorf("failed to update stage: %w", err)
 	}
 
@@ -114,8 +115,8 @@ func (s *Session) RemovePeer(peer key.NodePublic) error {
 
 // PASSTHROUGH
 
-func (s *Session) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error {
-	return s.stage.UpdatePeer(peer, homeRelay, endpoints, session)
+func (s *Session) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error {
+	return s.stage.UpdatePeer(peer, homeRelay, endpoints, session, prop)
 }
 
 func (s *Session) UpdateRelays(relay []relay.Information) error {

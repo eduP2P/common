@@ -246,6 +246,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 			m.SessKey,
 			m.IPv4,
 			m.IPv6,
+			m.Properties,
 		)
 	case *msgcontrol.PeerUpdate:
 		var endpoints []netip.AddrPort
@@ -258,6 +259,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 			m.HomeRelay,
 			endpoints,
 			m.SessKey,
+			m.Properties,
 		)
 	case *msgcontrol.PeerRemove:
 		delete(rcs.knownPeers, m.PubKey)

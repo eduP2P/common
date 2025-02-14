@@ -7,6 +7,7 @@ import (
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
+	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/types/stage"
 	"golang.org/x/exp/maps"
@@ -460,7 +461,7 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr, prop msgcontrol.Properties) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {
@@ -486,7 +487,7 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 
 var errNoPeerInfo = errors.New("could not find peer info to update")
 
-func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error {
+func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error {
 	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
 		if homeRelay != nil {
 			info.HomeRelay = *homeRelay

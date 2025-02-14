@@ -14,6 +14,7 @@ import (
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/usrwg"
 	"golang.org/x/exp/maps"
@@ -931,6 +932,8 @@ type PeerDef struct {
 	Endpoints   []netip.AddrPort
 
 	VIPs toversok.VirtualIPs
+
+	Properties msgcontrol.Properties
 }
 
 type StokControl struct {
@@ -982,7 +985,7 @@ func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 
 	for _, peer := range s.peers {
 		if err := callbacks.AddPeer(
-			peer.Key, peer.HomeRelayID, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6,
+			peer.Key, peer.HomeRelayID, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6, peer.Properties,
 		); err != nil {
 			slog.Error("AddPeer errored", "err", err, "peer", peer.Key.Debug())
 			return
@@ -1008,7 +1011,7 @@ func (s *StokControl) addPeer(
 
 	if s.callback != nil {
 		err = s.callback.AddPeer(
-			peer.Key, peer.HomeRelayID, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6,
+			peer.Key, peer.HomeRelayID, peer.Endpoints, peer.SessionKey, peer.VIPs.IPv4, peer.VIPs.IPv6, peer.Properties,
 		)
 	}
 

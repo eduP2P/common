@@ -2,6 +2,7 @@ package ifaces
 
 import (
 	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
 	"net/netip"
 )
@@ -13,10 +14,11 @@ type ControlCallbacks interface {
 		peer key.NodePublic,
 		homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic,
 		ip4 netip.Addr, ip6 netip.Addr,
+		prop msgcontrol.Properties,
 	) error
 
 	// UpdatePeer has the server inform of one of more updates to the client. All parameters other than peer are nullable.
-	UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error
+	UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error
 
 	// RemovePeer has the server inform the client to stop observing another peer.
 	RemovePeer(peer key.NodePublic) error
