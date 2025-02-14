@@ -29,6 +29,9 @@ type ServerSession struct {
 	Ctx context.Context
 	Ccc context.CancelCauseFunc
 
+	greetedMu sync.Mutex
+	greeted   map[key.SessionPublic]bool
+
 	getConnChan chan *Conn
 	conn        *Conn
 
@@ -191,17 +194,30 @@ func (s *ServerSession) Knock() (dangling bool) {
 }
 
 // Greet another session, send PeerAddition
-func (s *ServerSession) Greet(otherSess *ServerSession) {
+func (s *ServerSession) Greet(otherSess *ServerSession, prop msgcontrol.Properties) {
 	s.Slog().Debug("Greet", "from", otherSess.Peer.Debug())
 
 	s.conn.Write(&msgcontrol.PeerAddition{
-		PubKey:    otherSess.Peer,
-		SessKey:   otherSess.Sess,
-		IPv4:      otherSess.IPv4.Addr(),
-		IPv6:      otherSess.IPv6.Addr(),
-		Endpoints: otherSess.CurrentEndpoints,
-		HomeRelay: otherSess.HomeRelay,
+		PubKey:     otherSess.Peer,
+		SessKey:    otherSess.Sess,
+		IPv4:       otherSess.IPv4.Addr(),
+		IPv6:       otherSess.IPv6.Addr(),
+		Endpoints:  otherSess.CurrentEndpoints,
+		HomeRelay:  otherSess.HomeRelay,
+		Properties: prop,
 	})
+
+	s.greetedMu.Lock()
+	defer s.greetedMu.Unlock()
+
+	s.greeted[otherSess.Sess] = true
+}
+
+func (s *ServerSession) Greeted(sess key.SessionPublic) bool {
+	s.greetedMu.Lock()
+	defer s.greetedMu.Unlock()
+
+	return s.greeted[sess]
 }
 
 func (s *ServerSession) UpdateEndpoints(peer key.NodePublic, endpoints []netip.AddrPort) {
@@ -234,6 +250,15 @@ func (s *ServerSession) UpdateHomeRelay(peer key.NodePublic, homeRelay int64) {
 	s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:    peer,
 		HomeRelay: &homeRelay,
+	})
+}
+
+func (s *ServerSession) UpdateProperties(peer key.NodePublic, prop msgcontrol.Properties) {
+	s.Slog().Debug("UpdateProperties", "from", peer.Debug(), "prop", prop)
+
+	s.conn.Write(&msgcontrol.PeerUpdate{
+		PubKey:     peer,
+		Properties: &prop,
 	})
 }
 

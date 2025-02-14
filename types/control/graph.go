@@ -2,6 +2,8 @@ package control
 
 import (
 	"errors"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 	"sync"
 )
 
@@ -156,4 +158,16 @@ type VisibilityPair struct {
 	Quarantine *ClientID
 
 	MDNS bool
+}
+
+func (vp *VisibilityPair) PropertiesFor(peer key.NodePublic) msgcontrol.Properties {
+	p := msgcontrol.Properties{
+		MDNS: vp.MDNS,
+	}
+
+	if vp.Quarantine != nil && *vp.Quarantine != ClientID(peer) {
+		p.Quarantine = true
+	}
+
+	return p
 }

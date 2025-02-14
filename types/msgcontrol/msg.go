@@ -145,6 +145,13 @@ type PeerAddition struct {
 
 	Endpoints []netip.AddrPort
 	HomeRelay int64
+
+	Properties Properties
+}
+
+type Properties struct {
+	Quarantine bool
+	MDNS       bool
 }
 
 // -> client
@@ -154,6 +161,8 @@ type PeerUpdate struct {
 	SessKey   *key.SessionPublic `json:",omitempty"`
 	Endpoints []netip.AddrPort   `json:",omitempty"`
 	HomeRelay *int64             `json:",omitempty"`
+
+	Properties *Properties `json:",omitempty"`
 }
 
 // -> client

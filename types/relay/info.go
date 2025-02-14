@@ -40,4 +40,6 @@ type Information struct {
 
 	// Whether to use this relay to detect captive portals.
 	IsCaptiveBuster *bool `json:",omitempty"`
+
+	IsSTUNOnly *bool `json:",omitempty"`
 }
