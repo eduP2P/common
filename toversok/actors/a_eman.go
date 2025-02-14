@@ -3,15 +3,16 @@ package actors
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/netip"
+	"slices"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/types/stun"
 	"golang.org/x/exp/maps"
-	"net"
-	"net/netip"
-	"slices"
-	"time"
 )
 
 func (s *Stage) makeEM() *EndpointManager {
@@ -180,7 +181,7 @@ func (em *EndpointManager) onSTUNResponse(from netip.AddrPort, pkt []byte, ts ti
 		return fmt.Errorf("got error when parsing STUN response from %s: %w", from, err)
 	}
 	if tid != req.txid {
-		return fmt.Errorf("received different TXID from raddr %s than expected: expected %s, got %s", from, em.stunRequests[from], tid)
+		return fmt.Errorf("received different TXID from raddr %s than expected: expected %s, got %s", from, em.stunRequests[from].txid, tid)
 	}
 
 	latency := ts.Sub(req.sendTimestamp)

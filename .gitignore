@@ -195,4 +195,21 @@ $RECYCLE.BIN/
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 
+# Peer keys and config files
 *.key
+cmd/test_client/*.json
+
+# Test suite logs
+test_suite/system_test_logs/*
+
+# Control/relay server config files
+test_suite/control_server/control.json
+test_suite/relay_server/relay.json
+
+# Control/relay server and client binaries
+test_suite/control_server/control_server
+test_suite/relay_server/relay_server
+test_suite/test_client/test_client
+
+# Go testing coverage files
+*.html
