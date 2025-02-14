@@ -60,6 +60,7 @@ func NewSession(cc *Conn, nodeKey key.NodePublic, sessKey key.SessionPublic, ser
 		CurrentEndpoints: make([]netip.AddrPort, 0),
 		Ctx:              ctx,
 		Ccc:              ccc,
+		greeted:          make(map[key.SessionPublic]bool),
 		getConnChan:      make(chan *Conn),
 		conn:             cc,
 		queuedPeerDeltas: make(map[key.NodePublic]PeerDelta),
