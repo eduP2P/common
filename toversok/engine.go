@@ -329,8 +329,10 @@ func NewEngine(
 	e.Observer().RegisterStateChangeListener(func(state EngineState) {
 		if state == NeedsLogin {
 			url, err := e.Observer().GetNeedsLoginState()
-			if err != nil {
+			if err == nil {
 				e.slog().Info("control wants logon", "url", url)
+			} else {
+				e.slog().Error("could not get login state when prompted for it", "err", err)
 			}
 		}
 	})

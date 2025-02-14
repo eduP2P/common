@@ -1,0 +1,122 @@
+{
+    "ControlKey": "ctrlpriv:688fa800dc1ef6e543c32f7be9a7c5f080dffbd1972da07511a5733a1b7ad25b",
+    "IP4": "10.42.0.26/16",
+    "IP6": "fd42:dead:beef::1a/64",
+    "IPMapping": {
+        "pubkey:04b0a7bb92aebec2a791ef4a3e88f3bc008c998c61aa6dab7a55f34cfeed3677": {
+            "IP4": "10.42.0.1",
+            "IP6": "fd42:dead:beef::1"
+        },
+        "pubkey:155b4fc81543cadce98cab60c01349abd7d82b49ab602d2793a3706d6dbd8f40": {
+            "IP4": "10.42.0.22",
+            "IP6": "fd42:dead:beef::16"
+        },
+        "pubkey:26caa232479ed4cf8c28a778223d2466bdb21bba2f26a20f282a1a4e63b2d87f": {
+            "IP4": "10.42.0.16",
+            "IP6": "fd42:dead:beef::10"
+        },
+        "pubkey:2c5ff45064e8c79fa1b8ab619ff5a1f1f472fe6581ec6afdde2d3cf3eb850f6e": {
+            "IP4": "10.42.0.20",
+            "IP6": "fd42:dead:beef::14"
+        },
+        "pubkey:52ff2c0bc7eca627083ea15fe5c5a505e3a422144f42d851886b2ce2fd2b6c3c": {
+            "IP4": "10.42.0.18",
+            "IP6": "fd42:dead:beef::12"
+        },
+        "pubkey:56b0e7470b2b69be5ff50a40e396883744de8091e1b0cde59c625146b0ebea42": {
+            "IP4": "10.42.0.19",
+            "IP6": "fd42:dead:beef::13"
+        },
+        "pubkey:5c6284f18e8ed3bc5e2e209cdd1a8e93d7bc689a43a7787ead4fe3f1b98d893f": {
+            "IP4": "10.42.0.5",
+            "IP6": "fd42:dead:beef::5"
+        },
+        "pubkey:5c64f61eaad2eb3112dbe26cfbc3f74cf491e5b04e896efd00a7a5e263b2955b": {
+            "IP4": "10.42.0.24",
+            "IP6": "fd42:dead:beef::18"
+        },
+        "pubkey:66d47e123bba8c787e248278469d41bf6bbb13052e579ca0622661d256608250": {
+            "IP4": "10.42.0.4",
+            "IP6": "fd42:dead:beef::4"
+        },
+        "pubkey:6b38e90bb570aae9dff3f99f0024770aa18ea74de102a0953a90ac0d19a3627f": {
+            "IP4": "10.42.0.17",
+            "IP6": "fd42:dead:beef::11"
+        },
+        "pubkey:6bdd2b2b248af3f031be8b1bd475578ca0638a13b989efd8f2dcad3cec53b775": {
+            "IP4": "10.42.0.26",
+            "IP6": "fd42:dead:beef::1a"
+        },
+        "pubkey:6ca18f0a0847432d06daba8c0f39da882b33e33bfa729b1ef0ed9586dd04b55c": {
+            "IP4": "10.42.0.12",
+            "IP6": "fd42:dead:beef::c"
+        },
+        "pubkey:7d36d2062634ae7b28c41cb198299a296677916907ff5444b168856d2eae3f4f": {
+            "IP4": "10.42.0.2",
+            "IP6": "fd42:dead:beef::2"
+        },
+        "pubkey:82f9a471d53ccadb80f26d693c5a9460fb52c78091d02f8e67a005da9428027f": {
+            "IP4": "10.42.0.7",
+            "IP6": "fd42:dead:beef::7"
+        },
+        "pubkey:90eac93693829d8a8e7b8cd90c318fc145c52fc28e3e68e0ab287a55c1ca303c": {
+            "IP4": "10.42.0.13",
+            "IP6": "fd42:dead:beef::d"
+        },
+        "pubkey:9b9516936b814ed360f314b39720ddacab622c05958b6b0636a14d6bc791951f": {
+            "IP4": "10.42.0.10",
+            "IP6": "fd42:dead:beef::a"
+        },
+        "pubkey:9d8b6aef83f63077f41a9c74331cf103de2a625d173430e65ac1dfabeb5cbb78": {
+            "IP4": "10.42.0.8",
+            "IP6": "fd42:dead:beef::8"
+        },
+        "pubkey:aa273a27117215049dcf412ab3d387dbe4502024487e96cc5be03e6073ef7a6a": {
+            "IP4": "10.42.0.9",
+            "IP6": "fd42:dead:beef::9"
+        },
+        "pubkey:be5e2032956cf4e13599c758f25df2ed56bfcc5064846a9324017c205252136b": {
+            "IP4": "10.42.0.3",
+            "IP6": "fd42:dead:beef::3"
+        },
+        "pubkey:cfb98895c44ccf79a5e1476a0dbd4d8657fd80f32d6c3265318a39350ff7a03e": {
+            "IP4": "10.42.0.21",
+            "IP6": "fd42:dead:beef::15"
+        },
+        "pubkey:ddf526f2a30b374449b738f5a3dbcc99a322c4c288caad423baf85c9d3d18e2b": {
+            "IP4": "10.42.0.6",
+            "IP6": "fd42:dead:beef::6"
+        },
+        "pubkey:de0282ad00b64ddf8f67ce09eab52b93d3599a84a6852a5279cda95896fc340d": {
+            "IP4": "10.42.0.15",
+            "IP6": "fd42:dead:beef::f"
+        },
+        "pubkey:ec16d877a7f2862c6b13e03a82bd672957f0a53e6cb84307282863a89d41aa3e": {
+            "IP4": "10.42.0.14",
+            "IP6": "fd42:dead:beef::e"
+        },
+        "pubkey:f20fe6d0ab6b0fdc559d5dcc20a211c43ea6657155d1cf9e85a350e223d1d73e": {
+            "IP4": "10.42.0.11",
+            "IP6": "fd42:dead:beef::b"
+        },
+        "pubkey:f5c23843da1ec99d527b568f0a4222d4eee68a4acc9c37191874ef9e17405f68": {
+            "IP4": "10.42.0.23",
+            "IP6": "fd42:dead:beef::17"
+        },
+        "pubkey:fdc4524ec641ada8ff1ce694a84bfa7fb241042f9b7c5c32984307b559cb3b41": {
+            "IP4": "10.42.0.25",
+            "IP6": "fd42:dead:beef::19"
+        }
+    },
+    "Relays": [
+        {
+            "ID": 0,
+            "Key": "pubkey:6974d731366a3d3d67796a876a6a4f6a74f14be2160ee755db7a5099a4b6ed42",
+            "IPs": [
+                "192.168.0.2"
+            ],
+            "IsInsecure": true,
+            "HTTPPort": 3340
+        }
+    ]
+}

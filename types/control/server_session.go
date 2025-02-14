@@ -2,12 +2,15 @@ package control
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"log/slog"
 	"net/netip"
+	"os"
+	"sync"
 	"time"
 )
 
@@ -16,8 +19,8 @@ type ServerSession struct {
 	Peer key.NodePublic
 	Sess key.SessionPublic
 
-	IPv4 netip.Addr
-	IPv6 netip.Addr
+	IPv4 netip.Prefix
+	IPv6 netip.Prefix
 
 	HomeRelay int64
 
@@ -30,6 +33,8 @@ type ServerSession struct {
 	conn        *Conn
 
 	queuedPeerDeltas map[key.NodePublic]PeerDelta
+
+	authChan chan any
 
 	// ServerSessionState
 	state ServerSessionState
@@ -55,10 +60,126 @@ func NewSession(cc *Conn, nodeKey key.NodePublic, sessKey key.SessionPublic, ser
 		getConnChan:      make(chan *Conn),
 		conn:             cc,
 		queuedPeerDeltas: make(map[key.NodePublic]PeerDelta),
+		authChan:         make(chan any, 5),
 		state:            Authenticate,
 		server:           server,
 	}
 }
+
+func (s *ServerSession) doAuthenticate(resumed bool) error {
+	if resumed {
+		s.server.callbacks.OnSessionResume(SessID(s.ID), ClientID(s.Peer))
+	} else {
+		s.server.callbacks.OnSessionCreate(SessID(s.ID), ClientID(s.Peer))
+	}
+
+	wg := &sync.WaitGroup{}
+	defer wg.Wait()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	msgChan := make(chan msgcontrol.LogonDeviceKey, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		defer wg.Done()
+
+		for ctx.Err() == nil {
+			msg := msgcontrol.LogonDeviceKey{}
+			err := s.conn.Expect(&msg, time.Millisecond*100)
+
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					continue
+				}
+
+				slog.Error("got error in devicekey expect goroutine", "err", err)
+
+				errChan <- err
+
+				return
+			} else {
+				msgChan <- msg
+
+				return
+			}
+		}
+	}()
+	wg.Add(1)
+
+	deviceKeySeen := false
+	authUrlSent := false
+
+	// TODO build timeout in here somewhere
+
+	for {
+		select {
+		case err := <-errChan:
+			return fmt.Errorf("error when reading device key: %w", err)
+		case msg := <-msgChan:
+			if deviceKeySeen {
+				// device key sent twice, this is an error, we should not continue
+				return fmt.Errorf("client sent device key twice")
+			}
+
+			deviceKeySeen = true
+
+			s.server.callbacks.OnDeviceKey(SessID(s.ID), msg.DeviceKey)
+		case authMsg := <-s.authChan:
+			switch msg := authMsg.(type) {
+			case RejectAuth:
+				err := s.conn.Write(msg.LogonReject)
+
+				if err != nil {
+					return fmt.Errorf("error while writing logon reject: %w, %w", err, LogonRejectedError)
+				}
+
+				return LogonRejectedError
+			case AcceptAuth:
+				return nil
+			case AuthUrl:
+				if authUrlSent {
+					// auth url already sent, this is a business logic error, we should error out
+					return fmt.Errorf("business logic sent auth url twice")
+				}
+				authUrlSent = true
+
+				err := s.conn.Write(&msgcontrol.LogonAuthenticate{
+					AuthenticateURL: msg.url,
+				})
+
+				slog.Debug("sent auth url", "url", msg.url, "peer", s.Peer.Debug())
+
+				if err != nil {
+					return fmt.Errorf("failed to write LogonAuthenticate with auth url: %w", err)
+				}
+			default:
+				return fmt.Errorf("unknown auth object: %v", msg)
+			}
+		}
+	}
+
+	// TODO after this point, we can get 4 things;
+	//  - device key from client, send to OnDeviceKey, lock this out after
+	//  - SendAuthURL from business logic, send to client, lock this out (error after)
+	//  - AcceptAuthentication from business logic, exits
+	//  - RejectAuthentication from business logic, exits
+
+	// todo
+}
+
+type RejectAuth struct {
+	*msgcontrol.LogonReject
+}
+
+type AcceptAuth struct{}
+
+type AuthUrl struct {
+	url string
+}
+
+var LogonRejectedError = errors.New("authentication resulted in logon rejected")
 
 // Knock asks the session goroutine/connection to "knock" (send ping, await pong) the session,
 // to make sure it is still alive.
@@ -76,8 +197,8 @@ func (s *ServerSession) Greet(otherSess *ServerSession) {
 	s.conn.Write(&msgcontrol.PeerAddition{
 		PubKey:    otherSess.Peer,
 		SessKey:   otherSess.Sess,
-		IPv4:      otherSess.IPv4,
-		IPv6:      otherSess.IPv6,
+		IPv4:      otherSess.IPv4.Addr(),
+		IPv6:      otherSess.IPv6.Addr(),
 		Endpoints: otherSess.CurrentEndpoints,
 		HomeRelay: otherSess.HomeRelay,
 	})
@@ -143,32 +264,37 @@ func (s *ServerSession) Resume(cc *Conn, sessKey key.SessionPublic) {
 	panic("implement me")
 }
 
-func (s *ServerSession) AuthenticateAccept() (accepted bool, err error) {
-	// TODO add authenticate logic
-
+func (s *ServerSession) AuthenticateAccept() (err error) {
 	s.Slog().Debug("AuthenticateAccept")
 
-	ip4, ip6 := s.server.getIPs(s.Peer)
-
 	if err = s.conn.Write(&msgcontrol.LogonAccept{
-		IP4:       ip4,
-		IP6:       ip6,
+		IP4:       s.IPv4,
+		IP6:       s.IPv6,
 		SessionID: s.ID,
 	}); err != nil {
 		err = fmt.Errorf("error when sending accept: %w", err)
 		return
 	}
 
-	s.IPv4 = ip4.Addr()
-	s.IPv6 = ip6.Addr()
-
-	accepted = true
-
 	return
 }
 
+func (s *ServerSession) AuthAndStart() error {
+	s.IPv4, s.IPv6 = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
+
+	err := s.AuthenticateAccept()
+
+	if err != nil {
+		return fmt.Errorf("error while writing logon accept: %w", err)
+	}
+
+	go s.Run()
+
+	return nil
+}
+
 func (s *ServerSession) Run() {
-	// We arrive just after Logon, next message can be Accept or Authenticate
+	// We arrive just after having sent LogonAccept
 
 	var err error
 
@@ -188,12 +314,6 @@ func (s *ServerSession) Run() {
 		s.Ccc(fmt.Errorf("main run loop exited: %w", err))
 	}()
 
-	var accepted bool
-
-	if accepted, err = s.AuthenticateAccept(); !accepted || err != nil {
-		return
-	}
-
 	s.state = Greet
 
 	if err = s.SendRelays(); err != nil {
@@ -203,17 +323,46 @@ func (s *ServerSession) Run() {
 
 	// TODO wait here for information?
 
-	s.server.ForVisible(s, func(session *ServerSession) {
-		// TODO this currently blocks and holds the lock, we should make Greet async as well
+	err = s.server.sessLockedDoVisibilityPairs(s.Peer, func(m map[ClientID]VisibilityPair) error {
+		s.state = Established
 
-		// TODO there is no bubbling of errors, ignore? log?
+		var ops []PairOperation
 
-		session.Greet(s)
+		for id, pair := range m {
+			node := key.NodePublic(id)
 
-		s.Greet(session)
+			sess, ok := s.server.sessByNode[node]
+
+			if ok && sess.state == Established {
+				ops = append(ops, PairOperation{
+					A:              s.ID,
+					B:              sess.ID,
+					AN:             s.Peer,
+					BN:             sess.Peer,
+					VisibilityPair: &pair,
+				})
+			}
+		}
+
+		s.server.pendingPairs <- ops
+
+		return nil
 	})
 
-	s.state = Established
+	if err != nil {
+		err = fmt.Errorf("could not send greets: %w", err)
+		return
+	}
+
+	//s.server.ForVisible(s, func(session *ServerSession) {
+	//	// TODO this currently blocks and holds the lock, we should make Greet async as well
+	//
+	//	// TODO there is no bubbling of errors, ignore? log?
+	//
+	//	session.Greet(s)
+	//
+	//	s.Greet(session)
+	//})
 
 	s.Slog().Info("established session")
 

@@ -240,7 +240,7 @@ for ((i=0; i<${#router_ns_list[@]}; i++)); do
 done
 
 # Execute scripts to start the peers
-cd ${repo_dir}/cmd/test_client
+cd ${repo_dir}/test_suite/test_client
 
 for i in {0..1}; do 
     peer_id="peer$((i+1))"

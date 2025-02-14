@@ -9,6 +9,7 @@ import (
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/msgcontrol"
 	"io"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -142,13 +143,25 @@ func (c *Conn) readRawMessageLocked(ttfbTimeout time.Duration) (msgcontrol.Contr
 
 func (c *Conn) readMessageHeaderLocked(ttfbTimeout time.Duration) (typ msgcontrol.ControlMessageType, length uint32, err error) {
 	if ttfbTimeout != 0 {
-		c.mc.SetReadDeadline(time.Now().Add(ttfbTimeout))
-		defer c.mc.SetReadDeadline(time.Time{})
+		if err := c.mc.SetReadDeadline(time.Now().Add(ttfbTimeout)); err != nil {
+			slog.Error("error when resetting deadline", "error", err)
+		}
+
+		defer func() {
+			if err := c.mc.SetReadDeadline(time.Time{}); err != nil {
+				slog.Error("error when resetting deadline", "error", err)
+			}
+		}()
 	}
-	readType, err := c.reader.ReadByte()
+	var readType byte
+
+	readType, err = c.reader.ReadByte()
 	if ttfbTimeout != 0 {
-		c.mc.SetReadDeadline(time.Time{})
+		if err := c.mc.SetReadDeadline(time.Time{}); err != nil {
+			slog.Error("error when resetting deadline", "error", err)
+		}
 	}
+
 	if err != nil {
 		err = fmt.Errorf("failed to read type: %w", err)
 		return

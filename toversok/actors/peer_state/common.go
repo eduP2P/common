@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	EstablishmentTimeout        = time.Second * 10
-	EstablishmentRetryMax       = time.Minute * 10
-	EstablishedPingTimeout      = time.Second * 5
-	ConnectionInactivityTimeout = time.Minute
-	EstablishingPingMinInterval = time.Millisecond * 900
+	EstablishmentTimeout             = time.Second * 10
+	EstablishmentRetryMax            = time.Minute * 10
+	EstablishedPingTimeout           = time.Second * 5
+	ConnectionInactivityTimeout      = time.Minute
+	EstablishingPingMinInterval      = time.Millisecond * 900
+	BurstEstablishingPingMinInterval = time.Millisecond * 200
 )
 
 type StateCommon struct {
@@ -119,7 +120,8 @@ type EstablishingCommon struct {
 	deadline time.Time
 	attempt  int
 
-	lastPing time.Time
+	lastPing  time.Time
+	pingCount uint
 }
 
 func mkEstComm(sc *StateCommon, attempts int) *EstablishingCommon {
@@ -152,7 +154,13 @@ func getRetryDelay(attempts int) time.Duration {
 }
 
 func (ec *EstablishingCommon) wantsPing() bool {
-	return ec.lastPing.Add(EstablishingPingMinInterval).Before(time.Now())
+	interval := EstablishingPingMinInterval
+
+	if ec.pingCount < 4 {
+		interval = BurstEstablishingPingMinInterval
+	}
+
+	return ec.lastPing.Add(interval).Before(time.Now())
 }
 
 func (ec *EstablishingCommon) sendPingsToPeer() *stage.PeerInfo {
@@ -171,6 +179,7 @@ func (ec *EstablishingCommon) sendPingsToPeer() *stage.PeerInfo {
 	slog.Log(context.Background(), types.LevelTrace, "fanning direct pings to peer", "peer", ec.peer.Debug(), "via-endpoints", types.PrettyAddrPortSlice(endpoints))
 
 	ec.lastPing = time.Now()
+	ec.pingCount++
 
 	return pi
 }

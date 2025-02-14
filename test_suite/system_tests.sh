@@ -108,7 +108,7 @@ trap cleanup EXIT
 
 function build_go() {
     for binary in test_client control_server relay_server; do
-        binary_dir="${repo_dir}/cmd/$binary"
+        binary_dir="${repo_dir}/test_suite/$binary"
         go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
     done
 }
@@ -137,7 +137,7 @@ function extract_server_pub_key() {
     ip=$2
     port=$3
 
-    cd ${repo_dir}/cmd/$server_type
+    cd ${repo_dir}/test_suite/$server_type
     pub_key=$(eval "./setup_$server_type.sh $ip $port")
 
     # Throw error if server did not start successfully
@@ -153,7 +153,7 @@ function start_server() {
     ip=$2
     port=$3
 
-    cd ${repo_dir}/cmd/$server_type
+    cd ${repo_dir}/test_suite/$server_type
 
     # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
     eval "./start_$server_type.sh $ip $port 2>&1 | tee ${log_dir}/$server_type.txt > /dev/null &" 
@@ -181,7 +181,7 @@ function setup_servers() {
     fi
 
     # Add relay server to control server config
-    cd ${repo_dir}/cmd/control_server
+    cd ${repo_dir}/test_suite/control_server
     sudo chmod 666 control.json # Make config file accessible without sudo
     python3 configure_json.py $relay_pub_key $relay_ip $relay_port
 

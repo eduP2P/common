@@ -185,40 +185,44 @@ func (dr *DirectRouter) Run() {
 				dr.logUnknownMessage(m)
 			}
 		case frame := <-dr.frameCh:
-			if _, ok := dr.stunEndpoints[frame.SrcAddrPort]; ok {
-				go SendMessage(dr.s.EMan.Inbox(), &msgactor.EManSTUNResponse{
-					Endpoint:  frame.SrcAddrPort,
-					Packet:    frame.Pkt,
-					Timestamp: frame.Timestamp,
-				})
-				continue
-			}
-
-			if msgsess.LooksLikeSessionWireMessage(frame.Pkt) {
-				go SendMessage(dr.s.SMan.Inbox(), &msgactor.SManSessionFrameFromAddrPort{
-					AddrPort:       frame.SrcAddrPort,
-					FrameWithMagic: frame.Pkt,
-				})
-				continue
-			}
-
-			peer, ok := dr.peerAKA(frame.SrcAddrPort)
-
-			if !ok {
-				// todo log? metric?
-				continue
-			}
-
-			in := dr.s.InConnFor(peer)
-
-			if in == nil {
-				// todo log? metric?
-				continue
-			}
-
-			in.ForwardPacket(frame.Pkt)
+			dr.handleFrame(frame)
 		}
 	}
+}
+
+func (dr *DirectRouter) handleFrame(frame ifaces.DirectedPeerFrame) {
+	if _, ok := dr.stunEndpoints[frame.SrcAddrPort]; ok {
+		go SendMessage(dr.s.EMan.Inbox(), &msgactor.EManSTUNResponse{
+			Endpoint:  frame.SrcAddrPort,
+			Packet:    frame.Pkt,
+			Timestamp: frame.Timestamp,
+		})
+		return
+	}
+
+	if msgsess.LooksLikeSessionWireMessage(frame.Pkt) {
+		go SendMessage(dr.s.SMan.Inbox(), &msgactor.SManSessionFrameFromAddrPort{
+			AddrPort:       frame.SrcAddrPort,
+			FrameWithMagic: frame.Pkt,
+		})
+		return
+	}
+
+	peer, ok := dr.peerAKA(frame.SrcAddrPort)
+
+	if !ok {
+		// todo log? metric?
+		return
+	}
+
+	in := dr.s.InConnFor(peer)
+
+	if in == nil {
+		// todo log? metric?
+		return
+	}
+
+	in.ForwardPacket(frame.Pkt)
 }
 
 func (dr *DirectRouter) peerAKA(ap netip.AddrPort) (peer key.NodePublic, ok bool) {
