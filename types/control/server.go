@@ -102,9 +102,25 @@ func (s *Server) handleOp(op PairOperation) {
 			return
 		}
 
-		// TODO this doesn't include MDNS and optional visibility concerns, such as quarantine
-		sessA.Greet(sessB)
-		sessB.Greet(sessA)
+		aGreetedB := sessA.Greeted(sessB.Sess)
+		bGreetedA := sessB.Greeted(sessA.Sess)
+
+		if aGreetedB && !bGreetedA {
+			slog.Error("found impossible scenario where sessA has greeted sessB, while vice versa is not true, aborting", "sessA", sessA.Sess, "sessB", sessB.Sess)
+			return
+		} else if !aGreetedB && bGreetedA {
+			slog.Error("found impossible scenario where sessB has greeted sessA, while vice versa is not true, aborting", "sessA", sessA.Sess, "sessB", sessB.Sess)
+			return
+		}
+
+		// shorthand for "already greeted both", invariant via above
+		if aGreetedB {
+			sessA.UpdateProperties(sessB.Peer, op.VisibilityPair.PropertiesFor(sessA.Peer))
+			sessB.UpdateProperties(sessA.Peer, op.VisibilityPair.PropertiesFor(sessB.Peer))
+		} else {
+			sessA.Greet(sessB, op.VisibilityPair.PropertiesFor(sessA.Peer))
+			sessB.Greet(sessA, op.VisibilityPair.PropertiesFor(sessB.Peer))
+		}
 	} else {
 		sessA, okA := s.sessByID[op.A]
 		sessB, okB := s.sessByID[op.B]
@@ -502,20 +518,20 @@ func (s *Server) RemoveSession(sess *ServerSession) {
 	delete(s.sessByID, sess.ID)
 }
 
-func (s *Server) RegisterSession(sess *ServerSession) {
-	// TODO resume support
-
-	s.sessLock.Lock()
-	defer s.sessLock.Unlock()
-
-	for _, oSess := range s.sessByNode {
-		oSess.Greet(sess)
-		sess.Greet(oSess)
-	}
-
-	s.sessByNode[sess.Peer] = sess
-	s.sessByID[sess.ID] = sess
-}
+//func (s *Server) RegisterSession(sess *ServerSession) {
+//	// TODO resume support
+//
+//	s.sessLock.Lock()
+//	defer s.sessLock.Unlock()
+//
+//	for _, oSess := range s.sessByNode {
+//		oSess.Greet(sess)
+//		sess.Greet(oSess)
+//	}
+//
+//	s.sessByNode[sess.Peer] = sess
+//	s.sessByID[sess.ID] = sess
+//}
 
 // ForVisible is called by fromSess' Run goroutine, to inform all other sessions it can see of a change (and the likes)
 func (s *Server) ForVisible(fromSess *ServerSession, f func(session *ServerSession)) {
