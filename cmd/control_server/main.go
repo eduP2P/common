@@ -35,6 +35,9 @@ var (
 	publicFacingBase       *url.URL
 	password               = flag.String("p", "", "password")
 
+	publicIPString = flag.String("ip", "", "public IP")
+	publicIP       *netip.Addr
+
 	programLevel = new(slog.LevelVar) // Info by default
 )
 
@@ -56,6 +59,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if publicIPString != nil {
+		pip := netip.MustParseAddr(*publicIPString)
+		publicIP = &pip
+	}
+
 	var err error
 
 	if publicFacingBase, err = url.Parse(*publicFacingBaseString); err != nil {
@@ -67,6 +75,12 @@ func main() {
 	defer cancel()
 
 	cserver := LoadServer(ctx)
+
+	if publicIP != nil {
+		if err := cserver.server.RunAdditionalSTUN([]netip.Addr{*publicIP}, "0.0.0.0", 1667, 1776); err != nil {
+			slog.Error("could not run additional STUN server", "err", err)
+		}
+	}
 
 	log.Printf("control: using public key %s", cserver.cfg.ControlKey.Public().Debug())
 

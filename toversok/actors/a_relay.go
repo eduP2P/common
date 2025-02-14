@@ -230,6 +230,10 @@ func (c *RestartableRelayConn) L() *slog.Logger {
 	return L(c).With("relay", c.config.ID)
 }
 
+func (c *RestartableRelayConn) Config() *relay.Information {
+	return &c.config
+}
+
 type RelayConnActor interface {
 	ifaces.Actor
 
@@ -237,6 +241,7 @@ type RelayConnActor interface {
 	Update(info relay.Information)
 	StayConnected(bool)
 	IsConnected() bool
+	Config() *relay.Information
 }
 
 type relayWriteRequest struct {
@@ -374,6 +379,11 @@ func (rm *RelayManager) selectRelay(latencies map[int64]time.Duration) int64 {
 
 	for rid, lat := range latencies {
 		L(rm).Log(context.Background(), types.LevelTrace, "selectRelay", "rid", rid, "latency", lat.String())
+
+		if isStunOnly := rm.relays[rid].Config().IsSTUNOnly; isStunOnly != nil && *isStunOnly {
+			L(rm).Debug("ignoring relay for consideration: is stun-only", "rid", rid)
+			continue
+		}
 
 		if slat > lat {
 			srid = rid

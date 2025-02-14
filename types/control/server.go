@@ -10,7 +10,9 @@ import (
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
+	stunserver "github.com/edup2p/common/types/stun"
 	"log/slog"
+	"net"
 	"net/netip"
 	"slices"
 	"sync"
@@ -19,6 +21,8 @@ import (
 
 type Server struct {
 	// TODO
+
+	ctx context.Context
 
 	privKey key.ControlPrivate
 
@@ -38,6 +42,14 @@ type Server struct {
 	//    to make it one atomic operation
 	pendingLock  sync.Mutex
 	pendingPairs chan []PairOperation
+
+	stun struct {
+		running bool
+
+		lowPort, highPort uint16
+
+		lowServer, highServer *stunserver.Server
+	}
 
 	// TODO something that remembers/accesses sessions
 }
@@ -281,7 +293,11 @@ func randData() []byte {
 func NewServer(privKey key.ControlPrivate, relays []relay.Information) *Server {
 	// TODO give caller a way to "deallocate" IPs and such
 
+	// TODO make proper context
+	ctx := context.Background()
+
 	s := &Server{
+		ctx:        ctx,
 		privKey:    privKey,
 		sessLock:   sync.RWMutex{},
 		sessByNode: make(map[key.NodePublic]*ServerSession),
@@ -296,6 +312,73 @@ func NewServer(privKey key.ControlPrivate, relays []relay.Information) *Server {
 	go s.Run()
 
 	return s
+}
+
+func (s *Server) RunAdditionalSTUN(publicIPs []netip.Addr, listenHost string, lowPort, highPort uint16) error {
+	if s.stun.running {
+		return errors.New("already running STUN servers")
+	}
+
+	s.stun.running = true
+
+	s.stun.lowPort = lowPort
+	s.stun.highPort = highPort
+
+	lowAp, err := netip.ParseAddrPort(net.JoinHostPort(listenHost, fmt.Sprint(lowPort)))
+	if err != nil {
+		return err
+	}
+
+	highAp, err := netip.ParseAddrPort(net.JoinHostPort(listenHost, fmt.Sprint(highPort)))
+	if err != nil {
+		return err
+	}
+
+	s.stun.lowServer = stunserver.NewServer(s.ctx)
+	s.stun.highServer = stunserver.NewServer(s.ctx)
+
+	go s.stun.lowServer.ListenAndServe(lowAp)
+	go s.stun.highServer.ListenAndServe(highAp)
+
+	t := true
+
+	s.relays = append(s.relays, relay.Information{
+		ID:         s.findEmptyRelayID(),
+		IsSTUNOnly: &t,
+		IPs:        publicIPs,
+		STUNPort:   &lowPort,
+	})
+
+	s.relays = append(s.relays, relay.Information{
+		ID:         s.findEmptyRelayID(),
+		IsSTUNOnly: &t,
+		IPs:        publicIPs,
+		STUNPort:   &highPort,
+	})
+
+	return nil
+}
+
+func (s *Server) findEmptyRelayID() int64 {
+	var i int64 = -1
+
+	for {
+		if !s.relayExists(i) {
+			return i
+		}
+
+		i--
+	}
+}
+
+func (s *Server) relayExists(id int64) bool {
+	for _, r := range s.relays {
+		if r.ID == id {
+			return true
+		}
+	}
+
+	return false
 }
 
 var (
