@@ -203,15 +203,13 @@ cmd/test_client/*.json
 test_suite/system_test_logs/*
 
 # Control/relay server config files
-cmd/control_server/control.json
-cmd/relay_server/relay.json
-cmd/test_client/test_client
+test_suite/control_server/control.json
+test_suite/relay_server/relay.json
 
 # Control/relay server and client binaries
-cmd/control_server/control_server
-cmd/relay_server/relay_server
-cmd/dev_client/dev_client
-cmd/test_client/test_client
+test_suite/control_server/control_server
+test_suite/relay_server/relay_server
+test_suite/test_client/test_client
 
 # Go testing coverage files
 *.html
