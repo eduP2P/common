@@ -47,9 +47,12 @@ func SetupSession(
 	sCtx := context.WithValue(ctx, "ccc", ccc)
 
 	sess := &Session{
-		ctx:        sCtx,
-		ccc:        ccc,
-		sessionKey: key.NewSession(),
+		ctx:              sCtx,
+		ccc:              ccc,
+		quarantineMu:     sync.Mutex{},
+		quarantinedPeers: make(map[key.NodePublic]bool),
+		peerAddrs:        make(map[key.NodePublic][]netip.Addr),
+		sessionKey:       key.NewSession(),
 
 		stage: nil,
 	}
