@@ -202,9 +202,11 @@ cmd/test_client/*.json
 # Test suite logs
 test_suite/system_test_logs/*
 
-# Control/relay server config files
+# Control/relay server and client config files
 test_suite/control_server/control.json
 test_suite/relay_server/relay.json
+test_suite/test_client/peer1.json
+test_suite/test_client/peer2.json
 
 # Control/relay server and client binaries
 test_suite/control_server/control_server
