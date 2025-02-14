@@ -43,6 +43,8 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 		}
 	}
 
+	// TODO set this to 1392 per https://docs.eduvpn.org/server/v3/wireguard.html
+	//  and make adjustable by environment variable
 	tunDev, err := createTUN(1280)
 
 	if err != nil {

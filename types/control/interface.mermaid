@@ -1,0 +1,60 @@
+sequenceDiagram
+    participant Client
+    participant CS as Control Server
+    participant BS as Business Logic
+
+    Client ->>+ CS: Logon
+
+    critical authentication
+        CS ->>+ BS: OnSessionCreate()
+
+        note over CS, BS: Business Logic has to reject or accept,<br/>or else session will hang
+
+        opt auth url
+            BS ->> CS: SendAuthURL()
+
+            CS ->> Client: LogonAuthenticate
+        end
+
+        opt device key
+            Client ->> CS: LogonDeviceKey
+            CS ->> BS: OnDeviceKey()
+        end
+
+        alt when rejected
+            BS ->> CS: RejectAuthentication()
+
+            CS ->> Client: LogonReject
+
+            note over Client, CS: Session terminated
+
+        else when accepted
+
+            BS ->>- CS: AcceptAuthentication()
+
+            CS ->>+ BS: OnSessionFinalize()
+            BS -->>- CS: Callback with IPs
+
+            CS ->> Client: LogonAccept
+
+            note over Client, CS: Session Authenticated
+        end
+    end
+
+    par at any point (during auth, after, or without session active)
+        BS ->> CS: UpsertVisibilityPair()<br>UpsertMultiVisibilityPair()
+        note over CS: Connectivity pairs get added<br>to internal graph
+        CS ->> Client: Greet
+        note over CS, Client: Other clients get greeted
+    and
+        BS ->> CS: RemoveVisibilityPair()
+        note over CS: Connectivity pairs get removed<br>from internal graph
+        CS ->> Client: Bye
+        note over CS, Client: Other clients also get Bye'd
+    end
+
+    note over Client, BS: Regular Activity
+
+    CS -->- Client: Session Breaks/Stops
+
+    CS -) BS: OnSessionDestroy()

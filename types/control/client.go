@@ -96,8 +96,11 @@ func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) err
 		return fmt.Errorf("could not unseal checkdata from control")
 	}
 
+	nodePubKey := c.getPriv().Public()
+	sessPubKey := c.getSess().Public()
+
 	if err := c.cc.Write(&msgcontrol.Logon{
-		SessKey:            c.getSess().Public(),
+		SessKey:            sessPubKey,
 		NodeKeyAttestation: c.getPriv().SealToControl(c.ControlKey, clearData),
 		SessKeyAttestation: c.getSess().SealToControl(c.ControlKey, clearData),
 		ResumeSessionID:    c.SessionID,
@@ -135,6 +138,8 @@ func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) err
 
 		c.IPv4 = m.IP4
 		c.IPv6 = m.IP6
+
+		slog.Debug("logon accepted", "as-peer", nodePubKey.Debug(), "as-sess", sessPubKey.Debug(), "with-sess-id", types.PtrOr(c.SessionID, "<nil>"), "with-ipv4", c.IPv4.String(), "with-ipv6", c.IPv6.String())
 
 		return nil
 	default:

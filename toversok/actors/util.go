@@ -53,6 +53,6 @@ func bail(c context.Context, v any) {
 
 func sortEndpointSlice(endpoints []netip.AddrPort) {
 	sort.SliceStable(endpoints, func(i, j int) bool {
-		return endpoints[i].Addr().Less(endpoints[j].Addr())
+		return endpoints[i].Addr().Less(endpoints[j].Addr()) && endpoints[i].Port() < endpoints[j].Port()
 	})
 }

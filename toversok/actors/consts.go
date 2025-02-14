@@ -17,8 +17,8 @@ const (
 	DirectRouterInboxChLen = 4
 
 	// Frame
-	SockRecvFrameChanBuffer = 10 * 16
-	InConnFrameChanBuffer   = 10 * 16
+	SockRecvFrameChanBuffer = 256
+	InConnFrameChanBuffer   = 512
 
 	RelayManFrameChLen      = 8
 	RelayManWriteChLen      = 8
@@ -30,7 +30,7 @@ const (
 
 	// Misc
 
-	TManTickerInterval = time.Second
+	TManTickerInterval = time.Millisecond * 250
 
 	EManTickerInterval = time.Second * 60
 

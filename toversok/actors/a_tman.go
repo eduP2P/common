@@ -18,7 +18,7 @@ type TrafficManager struct {
 	*ActorCommon
 	s *Stage
 
-	ticker *time.Ticker     // 1s
+	ticker *time.Ticker     // 250ms
 	poke   chan interface{} // len 1
 
 	peerState map[key.NodePublic]peer_state.PeerState

@@ -11,9 +11,10 @@ import (
 	"github.com/edup2p/common/types/stage"
 	"golang.org/x/exp/maps"
 	"log/slog"
+	"net"
 	"net/netip"
+	"reflect"
 	"slices"
-	"sort"
 	"sync"
 	"time"
 )
@@ -64,12 +65,12 @@ func MakeStage(
 
 		started: false,
 
-		bindExt:   bindExt,
+		ext:       bindExt(),
 		bindLocal: bindLocal,
 		control:   controlSession,
 	}
 
-	s.DMan = s.makeDM(bindExt())
+	s.DMan = s.makeDM(s.ext)
 	s.DRouter = s.makeDR()
 
 	s.RMan = s.makeRM()
@@ -127,7 +128,7 @@ type Stage struct {
 	//makeOutConn func(udp UDPConn, peer key.NodePublic, s *Stage) OutConnActor
 	//makeInConn  func(udp UDPConn, peer key.NodePublic, s *Stage) InConnActor
 
-	bindExt   func() types.UDPConn
+	ext       types.UDPConn
 	bindLocal func(peer key.NodePublic) types.UDPConn
 }
 
@@ -390,22 +391,67 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 	s.notifyEndpointChanged()
 }
 
-func (s *Stage) setLocalEndpoints(endpoints []netip.AddrPort) {
+func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
 	s.connMutex.RLock()
 	defer s.connMutex.RUnlock()
 
-	sort.SliceStable(endpoints, func(i, j int) bool {
-		return endpoints[i].Addr().Less(endpoints[j].Addr())
-	})
+	localPort := s.getLocalPort()
+
+	if localPort == 0 {
+		// TODO this will spam, maybe only have it happen once?
+		slog.Warn("could not get local port, disregarding local endpoints change")
+		return
+	}
+
+	var endpoints []netip.AddrPort
+
+	for _, addr := range addrs {
+		if s.control.IPv4().Contains(addr) || s.control.IPv6().Contains(addr) {
+			continue
+		}
+
+		endpoints = append(endpoints, netip.AddrPortFrom(addr, localPort))
+	}
+
+	sortEndpointSlice(endpoints)
 
 	if slices.Equal(s.localEndpoints, endpoints) {
 		// no change
 		return
 	}
 
+	slog.Debug("set local endpoints", "endpoints", endpoints)
+
 	s.localEndpoints = endpoints
 
 	s.notifyEndpointChanged()
+}
+
+func (s *Stage) getLocalPort() uint16 {
+	type HasLocalAddr interface {
+		LocalAddr() net.Addr
+	}
+
+	ext := s.ext
+
+	if ucc, ok := ext.(*types.UDPConnCloseCatcher); ok {
+		ext = ucc.UDPConn
+	}
+
+	nc, ok := ext.(HasLocalAddr)
+	if !ok {
+		// external socket is not able to get a port from?
+		slog.Debug("could not get HasLocalAddr from type", "type", reflect.TypeOf(ext))
+		return 0
+	}
+
+	ap, err := netip.ParseAddrPort(nc.LocalAddr().String())
+	if err != nil {
+		slog.Warn("parsing addrport from ext failed", "err", err, "addrport", nc.LocalAddr().String())
+		return 0
+	}
+
+	return ap.Port()
 }
 
 func (s *Stage) notifyEndpointChanged() {
