@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"time"
@@ -72,13 +73,15 @@ func TCP(ctx context.Context, opts Opts) (net.Conn, error) {
 	for _, addr := range opts.Addrs {
 		ap := netip.AddrPortFrom(addr, opts.Port)
 		go func() {
-			c, e := dialOneTCP(dialCtx, ap)
+			conn, err := dialOneTCP(dialCtx, ap)
 
 			select {
-			case results <- dialResult{c: c, e: e}:
+			case results <- dialResult{c: conn, e: err}:
 			case <-returned:
-				if c != nil {
-					c.Close()
+				if conn != nil {
+					if err := conn.Close(); err != nil {
+						slog.Error("failed to close tcp connection while multi-dialing", "err", err)
+					}
 				}
 			}
 		}()

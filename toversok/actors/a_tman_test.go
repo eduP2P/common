@@ -19,9 +19,9 @@ func TestTrafficManager(t *testing.T) {
 	wgConn := &MockUDPConn{}
 
 	oc := MakeOutConn(wgConn, dummyKey, 0, s)
-	s.outConn = make(map[key.NodePublic]OutConnActor, 0)
+	s.outConn = make(map[key.NodePublic]OutConnActor)
 	s.outConn[dummyKey] = oc
-	s.peerInfo = make(map[key.NodePublic]*stage.PeerInfo, 0)
+	s.peerInfo = make(map[key.NodePublic]*stage.PeerInfo)
 	s.peerInfo[dummyKey] = &stage.PeerInfo{Session: testPub}
 
 	// Run TrafficManager

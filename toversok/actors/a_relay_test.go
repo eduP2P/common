@@ -106,13 +106,13 @@ func TestRelayRouter(t *testing.T) {
 	// For each peer: register peer in RelayRouter and Stage, and then send a message to their inConn
 	for i, b := range []byte{1, 2} {
 		ic := ics[i]
-		key := ic.peer
+		peer := ic.peer
 
-		s.inConn[key] = ic
+		s.inConn[peer] = ic
 
 		frame := ifaces.RelayedPeerFrame{
 			SrcRelay: 0,
-			SrcPeer:  key,
+			SrcPeer:  peer,
 			Pkt:      []byte{b},
 		}
 

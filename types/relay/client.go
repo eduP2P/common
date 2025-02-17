@@ -271,7 +271,9 @@ func (c *Client) Close() {
 		return
 	}
 
-	c.mc.Close()
+	if err := c.mc.Close(); err != nil {
+		slog.Error("error when closing metaconn", "err", err)
+	}
 	close(c.sendCh)
 	close(c.recvCh)
 

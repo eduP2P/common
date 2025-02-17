@@ -347,6 +347,7 @@ func loadConfig() Config {
 		return writeNewConfig()
 	case err != nil:
 		log.Fatal(err)
+		//goland:noinspection GoUnreachableCode
 		panic("unreachable")
 	default:
 		var cfg Config

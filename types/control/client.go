@@ -221,5 +221,7 @@ func (c *Client) Recv(ttfbTimeout time.Duration) (msgcontrol.ControlMessage, err
 //	}
 
 func (c *Client) Close() {
-	c.cc.mc.Close()
+	if err := c.cc.mc.Close(); err != nil {
+		slog.Error("error when closing control client", "err", err)
+	}
 }

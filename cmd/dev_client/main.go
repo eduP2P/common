@@ -406,7 +406,7 @@ func fcCmd() *ishell.Cmd {
 			var (
 				err     error
 				peerKey *key.NodePublic
-				relay   int64
+				relayID int64
 				session key.SessionPublic
 				ip4     netip.Addr
 				ip6     netip.Addr
@@ -418,7 +418,7 @@ func fcCmd() *ishell.Cmd {
 				c.Err(err)
 				return
 			}
-			if relay, err = strconv.ParseInt(c.Args[1], 10, 64); err != nil {
+			if relayID, err = strconv.ParseInt(c.Args[1], 10, 64); err != nil {
 				c.Err(err)
 				return
 			}
@@ -458,7 +458,7 @@ func fcCmd() *ishell.Cmd {
 
 			if err = fakeControl.addPeer(PeerDef{
 				Key:         *peerKey,
-				HomeRelayID: relay,
+				HomeRelayID: relayID,
 				SessionKey:  session,
 				Endpoints:   endpoints,
 				VIPs: toversok.VirtualIPs{

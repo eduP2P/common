@@ -126,11 +126,11 @@ func TestDirectRouter(t *testing.T) {
 	// For each peer: register peer in DirectRouter and Stage, and then send a message to their inConn
 	for i, b := range []byte{1, 2} {
 		ic := ics[i]
-		key := ic.peer
+		peer := ic.peer
 		endpoint := peerEndpoints[i]
 
-		dr.setAKA(endpoint, key)
-		s.inConn[key] = ic
+		dr.setAKA(endpoint, peer)
+		s.inConn[peer] = ic
 
 		frame := ifaces.DirectedPeerFrame{
 			SrcAddrPort: endpoint,

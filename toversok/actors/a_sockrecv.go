@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
@@ -112,8 +113,10 @@ func (r *SockRecv) Run() {
 }
 
 func (r *SockRecv) Close() {
-	if context.Cause(r.ctx) == nil {
-		r.Conn.Close()
+	if r.ctx.Err() == nil {
+		if err := r.Conn.Close(); err != nil {
+			slog.Error("failed to close connection for sockrecv", "err", err)
+		}
 		close(r.outCh)
 		r.ctxCan()
 		return

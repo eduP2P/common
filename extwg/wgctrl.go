@@ -1,6 +1,7 @@
 package extwg
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -54,8 +55,12 @@ func NewWGCtrl(client *wgctrl.Client, device string) *WGCtrl {
 }
 
 func (w *WGCtrl) Reset() error {
+	var errs []error
+
 	for _, m := range w.localMapping {
-		m.conn.Close()
+		if err := m.conn.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	maps.Clear(w.localMapping)
@@ -67,7 +72,11 @@ func (w *WGCtrl) Reset() error {
 		ReplacePeers: true,
 		Peers:        []wgtypes.PeerConfig{},
 	}); err != nil {
-		return fmt.Errorf("error resetting wg device: %w", err)
+		errs = append(errs, fmt.Errorf("error resetting wg device: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors while wg device: %w", errors.Join(errs...))
 	}
 
 	return nil

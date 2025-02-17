@@ -48,12 +48,20 @@ func (b *ToverSokBind) Close() error {
 
 	maps.Clear(b.endpoints)
 
+	var errs []error
+
 	for _, cc := range b.conns {
 		// TODO log error
-		cc.Close()
+		if err := cc.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	maps.Clear(b.conns)
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors when closing connections: %w", errors.Join(errs...))
+	}
 
 	return nil
 }
@@ -272,8 +280,9 @@ func (b *ToverSokBind) CloseConn(peer key.NodePublic) {
 
 	cc, ok := b.conns[peer]
 	if ok {
-		// TODO log error
-		cc.Close()
+		if err := cc.Close(); err != nil {
+			slog.Error("failed to close channel", "peer", peer, "err", err)
+		}
 	}
 
 	delete(b.conns, peer)

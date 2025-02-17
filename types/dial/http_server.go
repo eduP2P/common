@@ -42,18 +42,26 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 			return
 		}
 
-		defer netConn.Close()
+		defer func() {
+			if err := netConn.Close(); err != nil {
+				slog.Error("error when closing netconn", "err", err)
+			}
+		}()
 
 		// TODO re-add publickey frontloading?
 		//  pubKey := s.PublicKey()
 		//  "Relay-Public-Key: %s\r\n\r\n",pubKey.HexString()
 
-		fmt.Fprintf(brw, "HTTP/1.1 101 Switching Protocols\r\n"+
+		if _, err := fmt.Fprintf(brw, "HTTP/1.1 101 Switching Protocols\r\n"+
 			"Upgrade: %s\r\n"+
 			"Connection: Upgrade\r\n\r\n",
-			up)
+			up); err != nil {
+			slog.Error("error when writing 101 response", "err", err)
+		}
 
-		brw.Flush()
+		if err := brw.Flush(); err != nil {
+			slog.Error("error when flushing 101 response", "err", err)
+		}
 
 		remoteIPPort, _ := netip.ParseAddrPort(netConn.RemoteAddr().String())
 

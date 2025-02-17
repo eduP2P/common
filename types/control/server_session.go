@@ -340,7 +340,9 @@ func (s *ServerSession) Run() {
 		s.server.RemoveSession(s)
 
 		if s.conn != nil {
-			s.conn.mc.Close()
+			if err := s.conn.mc.Close(); err != nil {
+				slog.Error("failed to close metaconn", "err", err)
+			}
 		}
 	}()
 
