@@ -97,6 +97,8 @@ func (dm *DirectManager) WriteTo(pkt []byte, addr netip.AddrPort) {
 	}
 }
 
+// TODO: track when we last received a packet from AddrPair?
+
 type DirectRouter struct {
 	*ActorCommon
 
