@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edup2p/common/ext_wg"
+	"github.com/edup2p/common/extwg"
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/types/dial"
 	"github.com/edup2p/common/types/key"
@@ -94,16 +94,16 @@ func main() {
 	if extPort < 0 || extPort > 65535 {
 		slog.Error("external port out of range 0-65535, aborting", "ext-port", extPort)
 		os.Exit(1)
-	} else {
-		engineExtPort = uint16(extPort)
 	}
+
+	engineExtPort = uint16(extPort)
 
 	if controlPort < 0 || controlPort > 65535 {
 		slog.Error("control port out of range 0-65535, aborting", "control-port", controlPort)
 		os.Exit(1)
-	} else {
-		controlPort16 = uint16(controlPort)
 	}
+
+	controlPort16 = uint16(controlPort)
 
 	var err error
 
@@ -212,13 +212,12 @@ func parseControlKey(str string) (*key.ControlPublic, error) {
 	if controlKeyStr == "" {
 		return nil, nil
 	}
-
-	if p, err := key.UnmarshalControlPublic(str); err != nil {
-
+	p, err := key.UnmarshalControlPublic(str)
+	if err != nil {
 		return nil, fmt.Errorf("could not parse control key: %w", err)
-	} else {
-		return p, nil
 	}
+
+	return p, nil
 }
 
 func normalisePath(file string) (string, error) {
@@ -302,17 +301,18 @@ func writeConfig(c *Config, file string) error {
 
 func getWireguardHost() (toversok.WireGuardHost, error) {
 	if extWgDevice != "" {
-		if wg, err := getWgControl(extWgDevice); err != nil {
+		wg, err := getWgControl(extWgDevice)
+		if err != nil {
 			return nil, fmt.Errorf("could not initialise external wireguard device: %w", err)
-		} else {
-			return wg, nil
 		}
-	} else {
-		return usrwg.NewUsrWGHost(), nil
+
+		return wg, nil
 	}
+
+	return usrwg.NewUsrWGHost(), nil
 }
 
-func getWgControl(device string) (*ext_wg.WGCtrl, error) {
+func getWgControl(device string) (*extwg.WGCtrl, error) {
 	client, err := wgctrl.New()
 	if err != nil {
 		return nil, fmt.Errorf("could not initialise wgctrl: %w", err)
@@ -322,7 +322,7 @@ func getWgControl(device string) (*ext_wg.WGCtrl, error) {
 		return nil, fmt.Errorf("could not find/initialise wgctrl device: %w", err)
 	}
 
-	return ext_wg.NewWGCtrl(client, device), nil
+	return extwg.NewWGCtrl(client, device), nil
 }
 
 // A dummy firewall

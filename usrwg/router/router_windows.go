@@ -16,7 +16,7 @@ import (
 
 	"github.com/dblohm7/wingoes/com"
 	"github.com/edup2p/common/usrwg/router/winnet"
-	ole "github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole"
 	"go4.org/netipx"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wireguard/tun"
@@ -870,7 +870,7 @@ func (ft *firewallTweaker) doAsyncSet() {
 		needClear := !ft.known || len(ft.lastLocal) > 0 || len(val) == 0
 		ft.mu.Unlock()
 
-		err := ft.doSet(val, needClear)
+		err := ft.doSet(val, needclearMsg)
 		if err != nil {
 			slog.Warn("firewall: set failed: %v", err)
 		}
@@ -878,7 +878,7 @@ func (ft *firewallTweaker) doAsyncSet() {
 
 		ft.mu.Lock()
 		ft.lastLocal = val
-		ft.known = (err == nil)
+		ft.known = err == nil
 	}
 }
 

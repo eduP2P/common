@@ -45,7 +45,7 @@ func TCP(ctx context.Context, opts Opts) (net.Conn, error) {
 
 	var err error
 
-	if opts.Addrs == nil || len(opts.Addrs) == 0 {
+	if len(opts.Addrs) == 0 {
 		opts.Addrs, err = net.DefaultResolver.LookupNetIP(ctx, "ip", opts.Domain)
 		if err != nil {
 			return nil, fmt.Errorf("failed to lookup %s: %w", opts.Domain, err)

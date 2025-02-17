@@ -45,9 +45,6 @@ const ToverSokRelayDefaultHTML = `
 func main() {
 	flag.Parse()
 
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-
 	if *dev {
 		*addr = "127.0.0.1:3340"
 		log.Printf("Running in dev mode.")
@@ -71,8 +68,15 @@ func main() {
 		log.Fatalf("could not parse stun-combined addrport: %v", err)
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	stunServer := stunserver.NewServer(ctx)
-	go stunServer.ListenAndServe(ap)
+	go func() {
+		if err := stunServer.ListenAndServe(ap); err != nil {
+			slog.Error("stun server listen error", "err", err)
+		}
+	}()
 
 	// TODO add STUN here
 
@@ -88,19 +92,23 @@ func main() {
 
 	mux.Handle("/relay", relayhttp.ServerHandler(server))
 
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 
-		io.WriteString(w, ToverSokRelayDefaultHTML)
+		if _, err := io.WriteString(w, ToverSokRelayDefaultHTML); err != nil {
+			slog.Error("failed to write default HTML response", "err", err)
+		}
 	}))
 
-	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
-		io.WriteString(w, "User-agent: *\nDisallow: /\n")
+		if _, err := io.WriteString(w, "User-agent: *\nDisallow: /\n"); err != nil {
+			slog.Error("failed to write robots.txt", "err", err)
+		}
 	}))
 	mux.Handle("/generate_204", http.HandlerFunc(serverCaptivePortalBuster))
 
@@ -116,7 +124,9 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		httpsrv.Shutdown(ctx)
+		if err := httpsrv.Shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown server", "err", err)
+		}
 	}()
 
 	// TODO setup TLS with autocert
@@ -125,7 +135,7 @@ func main() {
 	err = httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("relay: error %s", err)
+		log.Fatalf("relay: error %s", err) //nolint:gocritic
 	}
 }
 

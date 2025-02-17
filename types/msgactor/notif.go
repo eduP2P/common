@@ -13,16 +13,19 @@ const (
 	PeerStateDirect
 )
 
+//nolint:unused
 type PeerConnStateChangeNotification struct {
 	peer key.NodePublic
 
 	state PeerState
 }
 
+//nolint:unused
 type LocalEndpointsChangeNotification struct {
 	endpoints []netip.AddrPort
 }
 
+//nolint:unused
 type HomeRelayChangeNotification struct {
 	homeRelay int64
 }

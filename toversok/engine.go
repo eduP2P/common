@@ -14,29 +14,6 @@ import (
 	"time"
 )
 
-//type EngineOptions struct {
-//	//Ctx context.Context
-//	//Ccc context.CancelCauseFunc
-//	//
-//	//PrivKey key.NakedKey
-//	//
-//	//Control    dial.Opts
-//	//ControlKey key.ControlPublic
-//	//
-//	//// Do not contact control
-//	//OverrideControl bool
-//	//OverrideIPv4    netip.Prefix
-//	//OverrideIPv6    netip.Prefix
-//
-//	WG WireGuardHost
-//	FW FirewallHost
-//	Co ControlHost
-//
-//	ExtBindPort uint16
-//
-//	PrivateKey key.NodePrivate
-//}
-
 // Engine is the main and most high-level object for any client implementation.
 //
 // It holds the WireGuardHost, FirewallHost, and ControlHost, and utilises these for connectivity
@@ -169,7 +146,7 @@ func (e *Engine) installSession(allowLogon bool) error {
 		logon = func(url string, _ chan<- string) error {
 			// TODO register/use device key channel
 
-			e.state.currentLoginUrl = url
+			e.state.currentLoginURL = url
 			e.state.change(CreatingSession, NeedsLogin)
 			return nil
 		}
@@ -212,7 +189,7 @@ func newStateObserver() stateObserver {
 type stateObserver struct {
 	mu              sync.Mutex
 	state           EngineState
-	currentLoginUrl string
+	currentLoginURL string
 	callbacks       []func(state EngineState)
 }
 
@@ -227,21 +204,21 @@ func (s *stateObserver) RegisterStateChangeListener(f func(state EngineState)) {
 	s.callbacks = append(s.callbacks, f)
 }
 
-var WrongStateErr = errors.New("wrong state")
+var ErrWrongState = errors.New("wrong state")
 
 func (s *stateObserver) GetNeedsLoginState() (url string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.state == NeedsLogin {
-		return s.currentLoginUrl, nil
-	} else {
-		return "", WrongStateErr
+	if s.state != NeedsLogin {
+		return "", ErrWrongState
 	}
+
+	return s.currentLoginURL, nil
 }
 
 func (s *stateObserver) GetEstablishedState() {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
@@ -298,17 +275,18 @@ func NewEngine(
 		parentCtx = context.Background()
 	}
 
-	ctx, ccc := context.WithCancelCause(parentCtx)
-
-	if wg == nil {
+	switch {
+	case wg == nil:
 		return nil, errors.New("cannot initialise toversok engine with nil WireGuardHost")
-	} else if fw == nil {
+	case fw == nil:
 		return nil, errors.New("cannot initialise toversok engine with nil FirewallHost")
-	} else if co == nil {
+	case co == nil:
 		return nil, errors.New("cannot initialise toversok engine with nil ControlHost")
-	} else if privateKey.IsZero() {
+	case privateKey.IsZero():
 		return nil, errors.New("cannot initialise toversok engine with zero privateKey")
 	}
+
+	ctx, ccc := context.WithCancelCause(parentCtx)
 
 	e := &Engine{
 		ctx:  ctx,
@@ -373,93 +351,10 @@ func (e *Engine) Observer() Observer {
 	return &e.state
 }
 
-func (e *Engine) SupplyDeviceKey(key string) error {
+func (e *Engine) SupplyDeviceKey(string) error {
 	// TODO
 	panic("not implemented")
 }
-
-//
-//const WGKeepAlive = time.Second * 20
-//
-//func (e *Engine) Handle(ev Event) error {
-//	switch ev := ev.(type) {
-//	case PeerAddition:
-//		return e.AddPeer(ev.Key, ev.HomeRelayId, ev.Endpoints, ev.SessionKey, ev.VIPs.IPv4, ev.VIPs.IPv6)
-//	case PeerUpdate:
-//		// FIXME the reason for the panic below is because this function is essentially deprecated, and it still uses
-//		//  gonull, which is a pain
-//		panic("cannot handle PeerUpdate via handle")
-//
-//		//if ev.Endpoints.Present {
-//		//	if err := e.stage.SetEndpoints(ev.Key, ev.Endpoints.Val); err != nil {
-//		//		return fmt.Errorf("failed to update endpoints: %w", err)
-//		//	}
-//		//}
-//		//
-//		//if ev.SessionKey.Present {
-//		//	if err := e.stage.UpdateSessionKey(ev.Key, ev.SessionKey.Val); err != nil {
-//		//		return fmt.Errorf("failed to update session key: %w", err)
-//		//	}
-//		//}
-//		//
-//		//if ev.HomeRelayId.Present {
-//		//	if err := e.stage.UpdateHomeRelay(ev.Key, ev.HomeRelayId.Val); err != nil {
-//		//		return fmt.Errorf("failed to update home relay: %w", err)
-//		//	}
-//		//}
-//	case PeerRemoval:
-//		return e.RemovePeer(ev.Key)
-//	case RelayUpdate:
-//		return e.UpdateRelays(ev.Set)
-//	default:
-//		// TODO warn-log about unknown type instead of panic
-//		panic("Unknown type!")
-//	}
-//
-//	return nil
-//}
-//
-//func (e *Engine) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr) error {
-//	m := e.bindLocal()
-//	e.localMapping[peer] = m
-//
-//	if err := e.wg.UpdatePeer(peer, PeerCfg{
-//		Set: true,
-//		VIPs: &VirtualIPs{
-//			IPv4: ip4,
-//			IPv6: ip6,
-//		},
-//		KeepAliveInterval: nil,
-//		LocalEndpointPort: &m.port,
-//	}); err != nil {
-//		return fmt.Errorf("failed to update wireguard: %w", err)
-//	}
-//
-//	if err := e.stage.AddPeer(peer, homeRelay, endpoints, session, ip4, ip6); err != nil {
-//		return fmt.Errorf("failed to update stage: %w", err)
-//	}
-//	return nil
-//}
-//
-//func (e *Engine) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error {
-//	return e.stage.UpdatePeer(peer, homeRelay, endpoints, session)
-//}
-//
-//func (e *Engine) RemovePeer(peer key.NodePublic) error {
-//	if err := e.stage.RemovePeer(peer); err != nil {
-//		return err
-//	}
-//
-//	if err := e.wg.RemovePeer(peer); err != nil {
-//		return fmt.Errorf("failed to remove peer from wireguard: %w", err)
-//	}
-//
-//	return nil
-//}
-//
-//func (e *Engine) UpdateRelays(relay []relay.Information) error {
-//	return e.stage.UpdateRelays(relay)
-//}
 
 type FakeControl struct {
 	controlKey key.ControlPublic
@@ -479,12 +374,16 @@ func (f *FakeControl) IPv6() netip.Prefix {
 	return f.ipv6
 }
 
-func (f *FakeControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) error {
+func (f *FakeControl) InstallCallbacks(ifaces.ControlCallbacks) {
+	// NOP
+}
+
+func (f *FakeControl) UpdateEndpoints([]netip.AddrPort) error {
 	// NOP
 	return nil
 }
 
-func (f *FakeControl) UpdateEndpoints(ports []netip.AddrPort) error {
+func (f *FakeControl) UpdateHomeRelay(int64) error {
 	// NOP
 	return nil
 }

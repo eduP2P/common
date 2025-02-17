@@ -1,8 +1,8 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 )
 
@@ -27,19 +27,19 @@ func (e *EstPreTransmit) OnTick() PeerState {
 	if len(endpoints) > 0 {
 		e.tm.SendMsgToRelay(
 			pi.HomeRelay, e.peer, pi.Session,
-			&msg2.Rendezvous{MyAddresses: endpoints},
+			&msgsess.Rendezvous{MyAddresses: endpoints},
 		)
 	}
 
 	return LogTransition(e, &EstTransmitting{EstablishingCommon: e.EstablishingCommon})
 }
 
-func (e *EstPreTransmit) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
+func (e *EstPreTransmit) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(e, ap, clear)
+	return cascadeDirect(e, ap, clearMsg)
 }
 
-func (e *EstPreTransmit) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
+func (e *EstPreTransmit) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(e, relay, peer, clear)
+	return cascadeRelay(e, relay, peer, clearMsg)
 }

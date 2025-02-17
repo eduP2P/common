@@ -1,4 +1,4 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types/key"
@@ -28,22 +28,22 @@ func (t *Teardown) OnTick() PeerState {
 		return LogTransition(t, &Inactive{
 			StateCommon: t.StateCommon,
 		})
-	} else {
-		L(t).Info("LOST direct peer connection", "peer", t.peer.Debug())
-
-		return LogTransition(t, &Trying{
-			StateCommon: t.StateCommon,
-			tryAt:       time.Now(),
-		})
 	}
+
+	L(t).Info("LOST direct peer connection", "peer", t.peer.Debug())
+
+	return LogTransition(t, &Trying{
+		StateCommon: t.StateCommon,
+		tryAt:       time.Now(),
+	})
 }
 
-func (t *Teardown) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {
+func (t *Teardown) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(t, ap, clear)
+	return cascadeDirect(t, ap, clearMsg)
 }
 
-func (t *Teardown) OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState {
+func (t *Teardown) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(t, relay, peer, clear)
+	return cascadeRelay(t, relay, peer, clearMsg)
 }

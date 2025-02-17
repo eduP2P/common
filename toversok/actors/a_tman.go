@@ -1,7 +1,7 @@
 package actors
 
 import (
-	"github.com/edup2p/common/toversok/actors/peer_state"
+	"github.com/edup2p/common/toversok/actors/peerstate"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
@@ -21,7 +21,7 @@ type TrafficManager struct {
 	ticker *time.Ticker     // 250ms
 	poke   chan interface{} // len 1
 
-	peerState map[key.NodePublic]peer_state.PeerState
+	peerState map[key.NodePublic]peerstate.PeerState
 
 	pings     map[msgsess.TxID]*stage.SentPing
 	activeOut map[key.NodePublic]bool
@@ -38,7 +38,7 @@ func (s *Stage) makeTM() *TrafficManager {
 
 		ticker:    time.NewTicker(TManTickerInterval),
 		poke:      make(chan interface{}, 1),
-		peerState: make(map[key.NodePublic]peer_state.PeerState),
+		peerState: make(map[key.NodePublic]peerstate.PeerState),
 
 		pings:     make(map[msgsess.TxID]*stage.SentPing),
 		activeOut: make(map[key.NodePublic]bool),
@@ -110,7 +110,7 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 		n := tm.NodeForSess(m.Msg.Session)
 
 		if n != nil {
-			tm.forState(*n, func(s peer_state.PeerState) peer_state.PeerState {
+			tm.forState(*n, func(s peerstate.PeerState) peerstate.PeerState {
 				return s.OnDirect(types.NormaliseAddrPort(m.AddrPort), m.Msg)
 			})
 		} else {
@@ -123,7 +123,7 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 			return
 		}
 
-		tm.forState(m.Peer, func(s peer_state.PeerState) peer_state.PeerState {
+		tm.forState(m.Peer, func(s peerstate.PeerState) peerstate.PeerState {
 			return s.OnRelay(m.Relay, m.Peer, m.Msg)
 		})
 	case *msgactor.SyncPeerInfo:
@@ -153,7 +153,7 @@ func (tm *TrafficManager) DoStateTick() {
 	// We explicitly range over a slice of the keys we already got,
 	// since golang likes to complain when we mutate while we iterate.
 	for _, peer := range maps2.Keys(tm.peerState) {
-		tm.forState(peer, func(s peer_state.PeerState) peer_state.PeerState {
+		tm.forState(peer, func(s peerstate.PeerState) peerstate.PeerState {
 			return s.OnTick()
 		})
 	}
@@ -192,6 +192,7 @@ func (tm *TrafficManager) Poke() {
 	}
 }
 
+//nolint:unused
 func (tm *TrafficManager) isConnActive(peer key.NodePublic) bool {
 	return tm.activeOut[peer] || tm.activeIn[peer]
 }
@@ -222,7 +223,7 @@ func (tm *TrafficManager) ensurePeerState(peer key.NodePublic) {
 	s, ok := tm.peerState[peer]
 
 	if !ok {
-		tm.peerState[peer] = peer_state.MakeWaiting(tm, peer)
+		tm.peerState[peer] = peerstate.MakeWaiting(tm, peer)
 		tm.Poke()
 		return
 	}
@@ -230,7 +231,7 @@ func (tm *TrafficManager) ensurePeerState(peer key.NodePublic) {
 	if s == nil {
 		// !! this should never happen, but we recover regardless
 		L(tm).Warn("found nil state for peer, restarting state with Waiting", "peer", peer.Debug())
-		tm.peerState[peer] = peer_state.MakeWaiting(tm, peer)
+		tm.peerState[peer] = peerstate.MakeWaiting(tm, peer)
 		tm.Poke()
 	}
 }
@@ -244,7 +245,7 @@ func (tm *TrafficManager) doPingManagement() {
 	//  - expire old pings
 }
 
-type StateForState func(state peer_state.PeerState) peer_state.PeerState
+type StateForState func(state peerstate.PeerState) peerstate.PeerState
 
 func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 	// A state for a state, perfectly balanced, as all things should be.
@@ -269,12 +270,6 @@ func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 		tm.peerState[peer] = newState
 	}
 }
-
-// TODO see if these correspond in peer_state package
-//const EstablishmentTimeout = time.Second * 10
-//const EstablishmentRetry = time.Second * 40
-//
-//const EstablishedPingTimeout = time.Second * 5
 
 func (tm *TrafficManager) DManClearAKA(peer key.NodePublic) {
 	SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerClearKnownAs{

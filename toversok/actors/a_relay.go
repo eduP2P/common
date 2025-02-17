@@ -372,7 +372,7 @@ func (rm *RelayManager) Close() {
 }
 
 func (rm *RelayManager) selectRelay(latencies map[int64]time.Duration) int64 {
-	var srid int64 = 0
+	var srid int64
 	var slat = 60 * time.Second
 
 	L(rm).Debug("selectRelay: starting latency check")

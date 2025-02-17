@@ -34,11 +34,6 @@ type InConnActor interface {
 	ForwardPacket(pkt []byte)
 }
 
-//udp, err := net.ListenUDP("udp", net.UDPAddrFromAddrPort(netip.AddrPortFrom(netip.IPv4Unspecified(), localPort)))
-//if err != nil {
-//	panic(fmt.Sprintf("could not create listenUDP: %s", err))
-//}
-
 func MakeStage(
 	pCtx context.Context,
 
@@ -124,10 +119,11 @@ type Stage struct {
 
 	//// A repeatable function to an outside context to acquire a new UDPconn,
 	//// once a peer conn has died for whatever reason.
-	//reviveOutConn func(peer key.NodePublic) *net.UDPConn
+	// TODO rework this?
+	// reviveOutConn func(peer key.NodePublic) *net.UDPConn
 	//
-	//makeOutConn func(udp UDPConn, peer key.NodePublic, s *Stage) OutConnActor
-	//makeInConn  func(udp UDPConn, peer key.NodePublic, s *Stage) InConnActor
+	// makeOutConn func(udp UDPConn, peer key.NodePublic, s *Stage) OutConnActor
+	// makeInConn  func(udp UDPConn, peer key.NodePublic, s *Stage) InConnActor
 
 	ext       types.UDPConn
 	bindLocal func(peer key.NodePublic) types.UDPConn
@@ -222,7 +218,7 @@ func (s *Stage) reapableConnsLocked() []key.NodePublic {
 
 			if !ok {
 				// outconn is gone for some reason, this is fine for now
-				// TODO log this?
+				slog.Warn("missing outconn pair to inconn, this is fine, but odd", "peer", peer.Debug())
 			} else {
 				out.Cancel()
 			}
@@ -343,14 +339,6 @@ func (s *Stage) InConnFor(peer key.NodePublic) InConnActor {
 	return s.inConn[peer]
 }
 
-//// AddConn creates an InConn and OutConn for a specified connection.
-//// Starting each Actor'S goroutines as well. It also starts a SockRecv given the
-//// udp connection.
-//func (s *Stage) AddConn(udp *net.UDPConn, peer key.NodePublic, info *PeerInfo) {
-//	s.UpdateSessionKey(peer, session)
-//	s.addConn(udp, peer, homeRelay)
-//}
-
 // addConnLocked assumes Stage.connMutex and Stage.peerInfoMutex is held by caller.
 func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 	pi := s.peerInfo[peer]
@@ -461,7 +449,7 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr, prop msgcontrol.Properties) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr, _ msgcontrol.Properties) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {
@@ -487,7 +475,7 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 
 var errNoPeerInfo = errors.New("could not find peer info to update")
 
-func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error {
+func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, _ *msgcontrol.Properties) error {
 	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
 		if homeRelay != nil {
 			info.HomeRelay = *homeRelay
@@ -570,41 +558,3 @@ func (s *Stage) ControlSTUN() []netip.AddrPort {
 	// TODO
 	return []netip.AddrPort{}
 }
-
-//func (s *Stage) RemoveConn(peer key.NodePublic) {
-//	s.connMutex.Lock()
-//	defer s.connMutex.Unlock()
-//
-//	in, inok := s.inConn[peer]
-//	out, outok := s.inConn[peer]
-//
-//	if !inok && !outok {
-//		// both already removed, we're done here
-//		return
-//	}
-//
-//	if inok != outok {
-//		// only one of them removed?
-//		// we could recover this, but this is a bug, panic.
-//		panic(fmt.Sprintf("InConn or OutConn presence on stage was disbalanced: in=%t, out=%t", inok, outok))
-//	}
-//
-//	// Now we know both exist
-//
-//	delete(s.inConn, peer)
-//	delete(s.outConn, peer)
-//
-//	in.Cancel()
-//	out.Cancel()
-//
-//	// OutConn cancel:
-//	//   this closes the outch in SockRecv,
-//	//   sends "outconn goodbye" to traffic manager,
-//	//
-//	// InConn cancel:
-//	//   sends "outconn goodbye" to traffic manager.
-//
-//	// When TM has received both goodbyes:
-//	//   removes from internal activity tracking,
-//	//   and removes mapping from direct router.
-//}

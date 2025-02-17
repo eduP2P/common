@@ -9,9 +9,9 @@ import (
 type ClientID key.NodePublic
 type SessID string
 
-var SessionDoesNotExistError = errors.New("session does not exist")
+var ErrSessionDoesNotExist = errors.New("session does not exist")
 
-var SessionIsNotAuthenticating = errors.New("session is not authenticating")
+var ErrSessionIsNotAuthenticating = errors.New("session is not authenticating")
 
 // ServerLogic denotes exposed functions that a control server must provide for any business logic to interface with it.
 type ServerLogic interface {

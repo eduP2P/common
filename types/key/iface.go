@@ -9,7 +9,7 @@ type key interface {
 }
 
 type canTextMarshal interface {
-	// We need text encoding for JSON and BSON (currently)
+	// We need text encoding for JSON
 
 	encoding.TextMarshaler
 	encoding.TextUnmarshaler
@@ -18,15 +18,6 @@ type canTextMarshal interface {
 	//  encoding.BinaryMarshaler
 	//  encoding.BinaryUnmarshaler
 }
-
-//type canBsonMarshal interface {
-//	bson.ValueMarshaler
-//	bson.ValueUnmarshaler
-//
-//	// TODO maybe also allow/support binary marshalling
-//	// encoding.BinaryMarshaler
-//	// encoding.BinaryUnmarshaler
-//}
 
 type publicKey interface {
 	key

@@ -1,10 +1,10 @@
-package peer_state
+package peerstate
 
 import (
 	"context"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"slices"
 	"time"
@@ -51,13 +51,11 @@ func (e *Established) OnTick() PeerState {
 		if !e.inactive {
 			e.inactive = true
 			e.inactiveSince = time.Now()
-		} else {
-			if time.Now().After(e.inactiveSince.Add(ConnectionInactivityTimeout)) {
-				return LogTransition(e, &Teardown{
-					StateCommon: e.StateCommon,
-					inactive:    true,
-				})
-			}
+		} else if time.Now().After(e.inactiveSince.Add(ConnectionInactivityTimeout)) {
+			return LogTransition(e, &Teardown{
+				StateCommon: e.StateCommon,
+				inactive:    true,
+			})
 		}
 	}
 
@@ -79,12 +77,12 @@ func (e *Established) OnTick() PeerState {
 	return nil
 }
 
-func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
-	if s := cascadeDirect(e, ap, clear); s != nil {
+func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
+	if s := cascadeDirect(e, ap, clearMsg); s != nil {
 		return s
 	}
 
-	LogDirectMessage(e, ap, clear)
+	LogDirectMessage(e, ap, clearMsg)
 
 	// TODO check if endpoint is same as current used one
 	//  - switch? trusting it blindly is open to replay attacks
@@ -95,55 +93,54 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) Peer
 		return nil
 	}
 
-	switch m := clear.Message.(type) {
-	case *msg2.Ping:
-		if !e.pingDirectValid(ap, clear.Session, m) {
+	switch m := clearMsg.Message.(type) {
+	case *msgsess.Ping:
+		if !e.pingDirectValid(ap, clearMsg.Session, m) {
 			L(e).Warn("dropping invalid ping", "ap", ap.String())
 			return nil
 		}
 
 		e.lastPingRecv = time.Now()
-		e.replyWithPongDirect(ap, clear.Session, m)
+		e.replyWithPongDirect(ap, clearMsg.Session, m)
 		return nil
 
-	case *msg2.Pong:
+	case *msgsess.Pong:
 		e.lastPongRecv = time.Now()
-		e.ackPongDirect(ap, clear.Session, m)
+		e.ackPongDirect(ap, clearMsg.Session, m)
 		return nil
 
-	//case *msg.Rendezvous:
 	default:
 		L(e).Debug("ignoring direct session message",
 			"ap", ap,
-			"session", clear.Session,
+			"session", clearMsg.Session,
 			"msg", m.Debug())
 		return nil
 	}
 }
 
-func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
-	if s := cascadeRelay(e, relay, peer, clear); s != nil {
+func (e *Established) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
+	if s := cascadeRelay(e, relay, peer, clearMsg); s != nil {
 		return s
 	}
 
-	LogRelayMessage(e, relay, peer, clear)
+	LogRelayMessage(e, relay, peer, clearMsg)
 
-	switch m := clear.Message.(type) {
-	case *msg2.Ping:
-		e.replyWithPongRelay(relay, peer, clear.Session, m)
+	switch m := clearMsg.Message.(type) {
+	case *msgsess.Ping:
+		e.replyWithPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
 
-	case *msg2.Pong:
-		e.ackPongRelay(relay, peer, clear.Session, m)
+	case *msgsess.Pong:
+		e.ackPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
 
-	//case *msg.Rendezvous:
-	// TODO maybe re-establishment logic?
+	// case *msg.Rendezvous:
+	//  TODO maybe re-establishment logic?
 	default:
 		L(e).Debug("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
-			"session", clear.Session,
+			"session", clearMsg.Session,
 			"msg", m.Debug())
 		return nil
 	}

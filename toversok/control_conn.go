@@ -77,6 +77,7 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 	clientCtx := context.WithoutCancel(rcsCtx)
 	c, err := controlhttp.Dial(clientCtx, opts, getPriv, getSess, controlKey, nil, logon)
 	if err != nil {
+		rcsCcc(err)
 		return nil, fmt.Errorf("could not create control session: %w", err)
 	}
 
@@ -211,7 +212,7 @@ func (rcs *ResumableControlSession) Run() {
 					return
 				}
 
-				if errors.Is(err, control.NeedsLogonError) {
+				if errors.Is(err, control.ErrNeedsLogon) {
 					// TODO dead/retry logic, signal that session is dead and needs manual logon
 					panic("not implemented")
 				}
@@ -347,7 +348,7 @@ func (rcs *ResumableControlSession) send(msg msgcontrol.ControlMessage) error {
 			return nil
 		}
 
-		if !errors.Is(err, control.ClosedErr) {
+		if !errors.Is(err, control.ErrClosed) {
 			return err
 		}
 	}

@@ -266,96 +266,6 @@ func (em *EndpointManager) endpointToRelay(ap netip.AddrPort) *int64 {
 	return nil
 }
 
-//func (em *EndpointManager) updateEndpoints() {
-//	ep, err := em.doSTUN(EManStunTimeout)
-//	if err != nil {
-//		if ep != nil && len(ep) > 1 {
-//			L(em).Warn("STUN completed with error", "endpoints", ep, "err", err)
-//		} else {
-//			L(em).Warn("STUN failed with error", "err", err)
-//		}
-//	}
-//	if ep != nil && len(ep) > 1 {
-//		em.s.setSTUNEndpoints(ep)
-//		L(em).Info("STUN completed", "endpoints", ep)
-//	} else {
-//		L(em).Warn("STUN completed with no endpoints")
-//	}
-//}
-
-//// Performs STUN on all known servers, returns all (deduplicated) results, and any error (if there is one).
-//func (em *EndpointManager) doSTUN(timeout time.Duration) (responses []netip.AddrPort, err error) {
-//	var c *net.UDPConn
-//
-//	c, err = net.ListenUDP("udp", nil)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to open UDP socket: %w", err)
-//	}
-//
-//	requests := make(map[netip.AddrPort]stun.TxID)
-//
-//	for _, ep := range em.collectSTUNEndpoints() {
-//		txID := stun.NewTxID()
-//		req := stun.Request(txID)
-//
-//		_, err = c.WriteToUDP(req, net.UDPAddrFromAddrPort(ep))
-//		if err != nil {
-//			return nil, fmt.Errorf("failed to write to %s: %w", ep, err)
-//		}
-//
-//		requests[ep] = txID
-//	}
-//
-//	if err := c.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-//		return nil, fmt.Errorf("failed to set read deadline: %w", err)
-//	}
-//
-//	var responseMap = make(map[netip.AddrPort]bool)
-//
-//	for {
-//		if len(requests) == 0 {
-//			break
-//		}
-//
-//		var buf [1024]byte
-//		var n int
-//		var raddr netip.AddrPort
-//
-//		n, raddr, err = c.ReadFromUDPAddrPort(buf[:])
-//		if err != nil {
-//			break
-//		}
-//
-//		if raddr.Addr().Is4In6() {
-//			raddr = netip.AddrPortFrom(netip.AddrFrom4(raddr.Addr().As4()), raddr.Port())
-//		}
-//
-//		if _, ok := requests[raddr]; !ok {
-//			L(em).Warn("got response from unexpected raddr while doing STUN", "raddr", raddr)
-//			continue
-//		}
-//
-//		tid, saddr, err := stun.ParseResponse(buf[:n])
-//		if err != nil {
-//			L(em).Warn("got error when parsing STUN response from raddr", "raddr", raddr, "err", err)
-//			continue
-//		}
-//		if tid != requests[raddr] {
-//			L(em).Warn("received different TXID from raddr than expected", "raddr", raddr, "txid.expected", requests[raddr], "txid.got", tid)
-//			continue
-//		}
-//
-//		responseMap[saddr] = true
-//		delete(requests, raddr)
-//	}
-//
-//	for ep := range responseMap {
-//		responses = append(responses, ep)
-//	}
-//
-//	return responses, err
-//}
-
 // Collects STUN endpoints from known relay definitions and Control itself
 func (em *EndpointManager) collectRelaySTUNEndpoints() map[netip.AddrPort]int64 {
 	relayEndpoints := make(map[netip.AddrPort]int64)
@@ -424,6 +334,6 @@ func (em *EndpointManager) collectLocalEndpoints() []netip.Addr {
 }
 
 func (em *EndpointManager) Close() {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }

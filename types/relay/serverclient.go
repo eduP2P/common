@@ -292,7 +292,9 @@ func (sc *ServerClient) RunSender() {
 }
 
 func (sc *ServerClient) setWriteDeadline() {
-	sc.netConn.SetWriteDeadline(time.Now().Add(ServerClientWriteTimeout))
+	if err := sc.netConn.SetWriteDeadline(time.Now().Add(ServerClientWriteTimeout)); err != nil {
+		slog.Error("setWriteDeadline error", "err", err)
+	}
 }
 
 // sendKeepAlive sends a keep-alive frame, without flushing.

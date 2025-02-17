@@ -72,12 +72,12 @@ func SliceOrEmpty[T any](v []T) []T {
 }
 
 func SliceOrNil[T any](v []T) []T {
-	if (v != nil && len(v) > 0) || (v == nil) {
+	if len(v) > 0 {
 		return v
-	} else {
-		// len(v) == 0
-		return nil
 	}
+
+	// len(v) == 0
+	return nil
 }
 
 // IsContextDone does a quick check on a context to see if its dead.
@@ -135,3 +135,7 @@ func Map[T, U any](ts []T, f func(T) U) []U {
 }
 
 type LogonCallback func(url string, deviceKey chan<- string) error
+
+type CCCKEY int
+
+const CCC CCCKEY = 112

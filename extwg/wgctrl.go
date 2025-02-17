@@ -1,4 +1,4 @@
-package ext_wg
+package extwg
 
 import (
 	"fmt"
@@ -255,7 +255,7 @@ func (w *WGCtrl) bindLocal() *mapping {
 }
 
 func (w *WGCtrl) getWGConn(fromPort *uint16) (*net.UDPConn, error) {
-	var laddr *net.UDPAddr = nil
+	var laddr *net.UDPAddr
 
 	if fromPort != nil {
 		laddr = net.UDPAddrFromAddrPort(

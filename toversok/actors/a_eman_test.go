@@ -56,7 +56,7 @@ func TestEndpointManager(t *testing.T) {
 
 	mockControl := &MockControl{
 		endpoints:       make([]netip.AddrPort, 0),
-		updateEndpoints: func(eps []netip.AddrPort) error { return nil },
+		updateEndpoints: func([]netip.AddrPort) error { return nil },
 	}
 
 	s.control = mockControl

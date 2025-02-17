@@ -1,9 +1,9 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"time"
 )
@@ -12,7 +12,7 @@ import (
 type EstRendezGot struct {
 	*EstablishingCommon
 
-	m *msg2.Rendezvous
+	m *msgsess.Rendezvous
 }
 
 func (e *EstRendezGot) Name() string {
@@ -39,12 +39,12 @@ func (e *EstRendezGot) OnTick() PeerState {
 	return LogTransition(e, &EstRendezAck{EstablishingCommon: e.EstablishingCommon})
 }
 
-func (e *EstRendezGot) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
+func (e *EstRendezGot) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(e, ap, clear)
+	return cascadeDirect(e, ap, clearMsg)
 }
 
-func (e *EstRendezGot) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
+func (e *EstRendezGot) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(e, relay, peer, clear)
+	return cascadeRelay(e, relay, peer, clearMsg)
 }

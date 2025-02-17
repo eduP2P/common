@@ -46,9 +46,9 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 
 	if err := c.Handshake(timeout, logon); err != nil {
 		return nil, err
-	} else {
-		return c, nil
 	}
+
+	return c, nil
 }
 
 func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) error {
@@ -85,10 +85,8 @@ func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) err
 	if c.ControlKey.IsZero() {
 		c.ControlKey = serverHello.ControlNodePub
 		// TODO log TOFU?
-	} else {
-		if serverHello.ControlNodePub != c.ControlKey {
-			return fmt.Errorf("client-stated control key does not match server-given control key")
-		}
+	} else if serverHello.ControlNodePub != c.ControlKey {
+		return fmt.Errorf("client-stated control key does not match server-given control key")
 	}
 
 	clearData, ok := c.getPriv().OpenFromControl(c.ControlKey, serverHello.CheckData)
@@ -133,9 +131,6 @@ func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) err
 	case *msgcontrol.LogonAccept:
 		c.SessionID = &m.SessionID
 
-		//c.IPv4 = netip.PrefixFrom(netip.Addr(m.IPv4Addr), int(m.IPv4Mask))
-		//c.IPv6 = netip.PrefixFrom(netip.Addr(m.IPv6Addr), int(m.IPv6Mask))
-
 		c.IPv4 = m.IP4
 		c.IPv6 = m.IP6
 
@@ -145,69 +140,14 @@ func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) err
 	default:
 		return fmt.Errorf("received unknown message type after-logon: %d", m)
 	}
-
-	//switch typ {
-	//case msgcontrol.LogonAuthenticateType:
-	//	// TODO
-	//	panic("authenticate logic not implemented")
-	//case msgcontrol.LogonAcceptType:
-	//	accept := new(msgcontrol.LogonAccept)
-	//	if err := ReadMessage(c.reader, msgLen, accept); err != nil {
-	//		return fmt.Errorf("error when reading after-logon reject message: %w", err)
-	//	}
-	//
-	//	c.SessionID = &accept.SessionID
-	//	c.IPv4 = netip.PrefixFrom(netip.Addr(accept.IPv4Addr), int(accept.IPv4Mask))
-	//	c.IPv6 = netip.PrefixFrom(netip.Addr(accept.IPv6Addr), int(accept.IPv6Mask))
-	//
-	//	return nil
-	//
-	//case msgcontrol.LogonRejectType:
-	//	reject := new(msgcontrol.LogonReject)
-	//	if err := ReadMessage(c.reader, msgLen, reject); err != nil {
-	//		return fmt.Errorf("error when reading after-logon reject message: %w", err)
-	//	}
-	//
-	//	return fmt.Errorf(
-	//		"logon rejected after-logon: %s; retry strategy: %w",
-	//		reject.Reason,
-	//		types.PtrOr(reject.RetryStrategy, msgcontrol.NoRetryStrategy),
-	//	)
-	//default:
-	//	return fmt.Errorf("received unknown message type after-logon: %d", typ)
-	//}
-	//
-	//typ, msgLen, err = ReadMessageHeader(c.reader)
-	//if err != nil {
-	//	return fmt.Errorf("error when receiving after-authenticate message: %w", err)
-	//}
-	//
-	//switch typ {
-	//case msgcontrol.LogonAcceptType:
-	//	// TODO
-	//	panic("implement me")
-	//case msgcontrol.LogonRejectType:
-	//	reject := new(msgcontrol.LogonReject)
-	//	if err := ReadMessage(c.reader, msgLen, reject); err != nil {
-	//		return fmt.Errorf("error when reading after-authenticate reject message: %w", err)
-	//	}
-	//
-	//	return fmt.Errorf(
-	//		"logon rejected after-authenticate: %s; retry strategy: %w",
-	//		reject.Reason,
-	//		types.PtrOr(reject.RetryStrategy, msgcontrol.NoRetryStrategy),
-	//	)
-	//default:
-	//	return fmt.Errorf("received unknown message type after-authenticate: %d", typ)
-	//}
 }
 
-var NeedsLogonError = errors.New("needs logon callback")
+var ErrNeedsLogon = errors.New("needs logon callback")
 
 func (c *Client) handleLogon(url string, logon types.LogonCallback) (msgcontrol.ControlMessage, error) {
 	if logon == nil {
 		// No way we can start or create a logon session, abort
-		return nil, fmt.Errorf("logonauthenticate requested when no interactive logon callback exists, aborting; %w", NeedsLogonError)
+		return nil, fmt.Errorf("logonauthenticate requested when no interactive logon callback exists, aborting; %w", ErrNeedsLogon)
 	}
 
 	deviceKeyChan := make(chan string)
@@ -257,11 +197,11 @@ func (c *Client) handleLogon(url string, logon types.LogonCallback) (msgcontrol.
 	}
 }
 
-var ClosedErr = errors.New("client closed")
+var ErrClosed = errors.New("client closed")
 
 func (c *Client) Send(msg msgcontrol.ControlMessage) error {
 	if types.IsContextDone(c.ctx) {
-		return ClosedErr
+		return ErrClosed
 	}
 
 	return c.cc.Write(msg)
@@ -270,7 +210,7 @@ func (c *Client) Send(msg msgcontrol.ControlMessage) error {
 // Recv blocks until it receives a package, it will return (nil, nil) if timeout
 func (c *Client) Recv(ttfbTimeout time.Duration) (msgcontrol.ControlMessage, error) {
 	if types.IsContextDone(c.ctx) {
-		return nil, ClosedErr
+		return nil, ErrClosed
 	}
 
 	return c.cc.Read(ttfbTimeout)

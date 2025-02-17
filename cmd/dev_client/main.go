@@ -8,7 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/abiosoft/ishell/v2"
-	"github.com/edup2p/common/ext_wg"
+	"github.com/edup2p/common/extwg"
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/toversok/actors"
 	"github.com/edup2p/common/types"
@@ -34,7 +34,7 @@ import (
 var (
 	programLevel = new(slog.LevelVar) // Info by default
 
-	wgCtrl *ext_wg.WGCtrl
+	wgCtrl *extwg.WGCtrl
 	usrWg  *usrwg.UserSpaceWireGuardHost
 
 	wg toversok.WireGuardHost
@@ -42,9 +42,6 @@ var (
 	wgC toversok.WireGuardController
 
 	privKey *key.NodePrivate
-
-	//ip4     *netip.Prefix
-	//ip6     *netip.Prefix
 
 	fakeControl   StokControl
 	properControl toversok.DefaultControlHost
@@ -74,7 +71,9 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		pprof.StartCPUProfile(f)
+		if err := pprof.StartCPUProfile(f); err != nil {
+			panic(err)
+		}
 		defer pprof.StopCPUProfile()
 	}
 
@@ -97,7 +96,7 @@ func main() {
 	logCmd.AddCmd(&ishell.Cmd{
 		Name: "info",
 		Help: "set log level to info",
-		Func: func(c *ishell.Context) {
+		Func: func(_ *ishell.Context) {
 			programLevel.Set(slog.LevelInfo)
 		},
 	})
@@ -105,7 +104,7 @@ func main() {
 	logCmd.AddCmd(&ishell.Cmd{
 		Name: "debug",
 		Help: "set log level to debug",
-		Func: func(c *ishell.Context) {
+		Func: func(_ *ishell.Context) {
 			programLevel.Set(slog.LevelDebug)
 		},
 	})
@@ -113,7 +112,7 @@ func main() {
 	logCmd.AddCmd(&ishell.Cmd{
 		Name: "trace",
 		Help: "set log level to trace",
-		Func: func(c *ishell.Context) {
+		Func: func(_ *ishell.Context) {
 			programLevel.Set(-8)
 		},
 	})
@@ -125,9 +124,6 @@ func main() {
 	shell.AddCmd(enCmd())
 	shell.AddCmd(pcCmd())
 	shell.AddCmd(fcCmd())
-
-	//shell.AddCmd(tsCmd())
-	//shell.AddCmd(ctrlCmd())
 
 	shell.Run()
 
@@ -196,12 +192,13 @@ func keyCmd() *ishell.Cmd {
 				line = c.Args[0]
 			}
 
-			if p, err := key.UnmarshalPrivate(line); err != nil {
+			p, err := key.UnmarshalPrivate(line)
+			if err != nil {
 				c.Err(err)
 				return
-			} else {
-				privKey = p
 			}
+
+			privKey = p
 		},
 	})
 
@@ -288,7 +285,7 @@ func pcCmd() *ishell.Cmd {
 	c.AddCmd(&ishell.Cmd{
 		Name: "use",
 		Help: "start using the proper control",
-		Func: func(c *ishell.Context) {
+		Func: func(_ *ishell.Context) {
 			usedControl = &properControl
 		},
 	})
@@ -305,12 +302,13 @@ func pcCmd() *ishell.Cmd {
 				line = c.Args[0]
 			}
 
-			if p, err := key.UnmarshalControlPublic(line); err != nil {
+			p, err := key.UnmarshalControlPublic(line)
+			if err != nil {
 				c.Err(err)
 				return
-			} else {
-				properControl.Key = *p
 			}
+
+			properControl.Key = *p
 		},
 	})
 
@@ -383,15 +381,12 @@ func fcCmd() *ishell.Cmd {
 	c := &ishell.Cmd{
 		Name: "fc",
 		Help: "fake controlhost variables and handling",
-		//Func: func(c *ishell.Context) {
-		//	c.Println("fake control:", fakeControl)
-		//},
 	}
 
 	c.AddCmd(&ishell.Cmd{
 		Name: "use",
 		Help: "start using the proper control",
-		Func: func(c *ishell.Context) {
+		Func: func(_ *ishell.Context) {
 			usedControl = &fakeControl
 		},
 	})
@@ -433,24 +428,22 @@ func fcCmd() *ishell.Cmd {
 			// We (semi-intentionally) break compatibility with any main network because of this.
 			session = [32]byte(*peerKey)
 
-			if ip4, err = netip.ParseAddr(c.Args[2]); err != nil {
+			ip4, err = netip.ParseAddr(c.Args[2])
+
+			if err != nil {
 				c.Err(err)
 				return
-			} else {
-				if !ip4.Is4() {
-					c.Err(errors.New("ip4 isnt ipv4"))
-					return
-				}
+			} else if !ip4.Is4() {
+				c.Err(errors.New("ip4 isnt ipv4"))
+				return
 			}
 
 			if ip6, err = netip.ParseAddr(c.Args[3]); err != nil {
 				c.Err(err)
 				return
-			} else {
-				if !ip6.Is6() {
-					c.Err(errors.New("ip6 isnt ipv6"))
-					return
-				}
+			} else if !ip6.Is6() {
+				c.Err(errors.New("ip6 isnt ipv6"))
+				return
 			}
 
 			for _, e := range c.Args[4:] {
@@ -477,65 +470,6 @@ func fcCmd() *ishell.Cmd {
 			}
 		},
 	})
-
-	//peerCmd.AddCmd(&ishell.Cmd{
-	//	Name:    "update",
-	//	Aliases: []string{"u"},
-	//	Help:    "update a peer: <pubkey:hex> -r [relay] -e [endpoint,...]",
-	//	Func: func(c *ishell.Context) {
-	//		if len(c.Args) == 0 {
-	//			c.Err(errors.New("did not define peer key"))
-	//			return
-	//		}
-	//
-	//		peerKey, err := key.UnmarshalPublic(c.Args[0])
-	//
-	//		if err != nil {
-	//			c.Err(fmt.Errorf("error parsing peer key: %w", err))
-	//			return
-	//		}
-	//
-	//		fs := flag.NewFlagSet("peer-update", flag.ContinueOnError)
-	//
-	//		r := fs.Int64("r", math.MaxInt64, "relay (int64)")
-	//		endpoints := fs.String("e", "", "endpoints (comma-seperated IPs)")
-	//
-	//		if err := fs.Parse(c.Args[1:]); err != nil {
-	//			c.Err(fmt.Errorf("could not parse flags: %w", err))
-	//			return
-	//		}
-	//
-	//		pu := toversok.PeerUpdate{
-	//			Key: *peerKey,
-	//		}
-	//
-	//		if *r != math.MaxInt64 {
-	//			pu.HomeRelayId = gonull.NewNullable(*r)
-	//		}
-	//
-	//		if *endpoints != "" {
-	//			as := *endpoints
-	//
-	//			aps := make([]netip.AddrPort, 0)
-	//
-	//			for _, addr := range strings.Split(as, ",") {
-	//				a, err := netip.ParseAddrPort(addr)
-	//				if err != nil {
-	//					c.Err(err)
-	//					return
-	//				}
-	//
-	//				aps = append(aps, a)
-	//			}
-	//
-	//			pu.Endpoints = gonull.NewNullable(aps)
-	//		}
-	//
-	//		if err = engine.Handle(pu); err != nil {
-	//			c.Err(err)
-	//		}
-	//	},
-	//})
 
 	peerCmd.AddCmd(&ishell.Cmd{
 		Name:    "delete",
@@ -747,7 +681,7 @@ func wgCmd() *ishell.Cmd {
 				device = names[choice]
 			}
 
-			wgCtrl = ext_wg.NewWGCtrl(client, device)
+			wgCtrl = extwg.NewWGCtrl(client, device)
 
 			wg = wgCtrl
 
@@ -771,27 +705,25 @@ func wgCmd() *ishell.Cmd {
 		Name: "init",
 		Help: "Perform Init() on the wg configurator. wg init <privkey addr4/cidr addr6/cidr>",
 		Func: func(c *ishell.Context) {
-			if len(c.Args) < 2 {
+			switch {
+			case len(c.Args) < 2:
 				c.Err(errors.New("usage: privkey addr4 addr6"))
 				return
-			} else if wg == nil {
+			case wg == nil:
 				c.Err(errors.New("wg not setup"))
-			} else {
+			default:
 				privkeyStr := c.Args[0]
 				addr4Str := c.Args[1]
 				addr6Str := c.Args[2]
-
 				privkeySlice, err := hex.DecodeString(privkeyStr)
 				if err != nil {
 					c.Err(err)
 					return
 				} else if len(privkeySlice) != key.Len {
-					c.Err(errors.New(fmt.Sprintf("unexpected key length, expected 32, got %d", len(privkeySlice))))
+					c.Err(fmt.Errorf("unexpected key length, expected 32, got %d", len(privkeySlice)))
 					return
 				}
-
 				privkey := key.NodePrivateFrom((key.NakedKey)(privkeySlice))
-
 				addr4, err := netip.ParsePrefix(addr4Str)
 				if err != nil {
 					c.Err(err)
@@ -800,7 +732,6 @@ func wgCmd() *ishell.Cmd {
 					c.Err(errors.New("first argument is not ipv4 address/cidr"))
 					return
 				}
-
 				addr6, err := netip.ParsePrefix(addr6Str)
 				if err != nil {
 					c.Err(err)
@@ -809,13 +740,11 @@ func wgCmd() *ishell.Cmd {
 					c.Err(errors.New("second argument is not ipv6 address/cidr"))
 					return
 				}
-
 				wgC, err = wg.Controller(privkey, addr4, addr6)
 				if err != nil {
 					c.Err(err)
 					return
 				}
-
 				c.Println("wg controller:", wgC)
 			}
 		},
@@ -850,13 +779,15 @@ func enCmd() *ishell.Cmd {
 		Func: func(c *ishell.Context) {
 			var err error
 
-			if usedControl == nil {
+			switch {
+			case usedControl == nil:
 				err = errors.New("no control host set")
-			} else if wg == nil {
+			case wg == nil:
 				err = errors.New("wg is not set")
-			} else if privKey == nil {
+			case privKey == nil:
 				err = errors.New("key is not set")
 			}
+
 			if err != nil {
 				c.Err(err)
 				return
@@ -871,20 +802,13 @@ func enCmd() *ishell.Cmd {
 			}
 
 			ctx, ccc := context.WithCancelCause(context.Background())
-			//opts := toversok.EngineOptions{
-			//	Ctx:         ctx,
-			//	Ccc:         ccc,
-			//	PrivKey:     key.UnveilPrivate(*privKey),
-			//	ExtBindPort: engineExtPort,
-			//	WG:          wg,
-			//	FW:          nil,
-			//}
 
 			fw := &StokFirewall{}
 
 			e, err := toversok.NewEngine(ctx, wg, fw, usedControl, engineExtPort, *privKey)
 			if err != nil {
 				c.Err(err)
+				ccc(err)
 				return
 			}
 
@@ -993,7 +917,7 @@ func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 	}
 }
 
-func (s *StokControl) CreateClient(parentCtx context.Context, getNode func() *key.NodePrivate, getSess func() *key.SessionPrivate, login types.LogonCallback) (ifaces.ControlSession, error) {
+func (s *StokControl) CreateClient(context.Context, func() *key.NodePrivate, func() *key.SessionPrivate, types.LogonCallback) (ifaces.ControlSession, error) {
 	return s, nil
 }
 

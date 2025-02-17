@@ -64,7 +64,7 @@ func (cc *ChannelConn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (cc *ChannelConn) WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (int, error) {
+func (cc *ChannelConn) WriteToUDPAddrPort(_ []byte, _ netip.AddrPort) (int, error) {
 	return 0, net.ErrWriteToConnected
 }
 
@@ -92,7 +92,7 @@ func (cc *ChannelConn) tryGetOut() (pkt []byte) {
 // Reads a packet from the outgoing channel, and waits.
 //
 // Returns nil on timeout.
-func (cc *ChannelConn) getOut(d time.Duration) (pkt []byte) {
+func (cc *ChannelConn) getOut(d time.Duration) (pkt []byte) { // nolint:unused
 	select {
 	case pkt = <-cc.outgoing:
 	case <-time.After(d):

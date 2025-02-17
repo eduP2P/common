@@ -26,8 +26,6 @@ type Session struct {
 	quarantinedPeers map[key.NodePublic]bool
 	peerAddrs        map[key.NodePublic][]netip.Addr
 
-	//control ifaces.ControlSession
-
 	stage ifaces.Stage
 
 	sessionKey key.SessionPrivate
@@ -44,7 +42,7 @@ func SetupSession(
 ) (*Session, error) {
 	ctx, ccc := context.WithCancelCause(engineCtx)
 
-	sCtx := context.WithValue(ctx, "ccc", ccc)
+	sCtx := context.WithValue(ctx, types.CCC, ccc)
 
 	sess := &Session{
 		ctx:              sCtx,

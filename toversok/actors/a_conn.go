@@ -40,7 +40,7 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 	return &OutConn{
 		ActorCommon: common,
 
-		sock: MakeSockRecv(udp, common.ctx),
+		sock: MakeSockRecv(common.ctx, udp),
 		s:    s,
 
 		peer:     peer,

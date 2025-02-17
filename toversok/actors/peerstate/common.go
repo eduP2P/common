@@ -1,4 +1,4 @@
-package peer_state
+package peerstate
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func (sc *StateCommon) Peer() key.NodePublic {
 	return sc.peer
 }
 
-func (sc *StateCommon) pingDirectValid(ap netip.AddrPort, sess key.SessionPublic, ping *msgsess.Ping) bool {
+func (sc *StateCommon) pingDirectValid(_ netip.AddrPort, sess key.SessionPublic, ping *msgsess.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
@@ -41,7 +41,8 @@ func (sc *StateCommon) replyWithPongDirect(ap netip.AddrPort, sess key.SessionPu
 	})
 }
 
-func (sc *StateCommon) pingRelayValid(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msgsess.Ping) bool {
+//nolint:unused
+func (sc *StateCommon) pingRelayValid(_ int64, _ key.NodePublic, sess key.SessionPublic, ping *msgsess.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
@@ -52,7 +53,7 @@ func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
+func (sc *StateCommon) ackPongDirect(_ netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
 	sent, ok := sc.tm.Pings()[pong.TxID]
 	if !ok {
 		// TODO log: Got pong for unknown ping
@@ -77,7 +78,7 @@ func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, 
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
+func (sc *StateCommon) ackPongRelay(_ int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
 
 	// Relay pongs should come in response to relay pings, note if it is different.
 	sent, ok := sc.tm.Pings()[pong.TxID]

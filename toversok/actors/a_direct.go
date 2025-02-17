@@ -31,7 +31,7 @@ func (s *Stage) makeDM(udpSocket types.UDPConn) *DirectManager {
 	c := MakeCommon(s.Ctx, -1)
 	return &DirectManager{
 		ActorCommon: c,
-		sock:        MakeSockRecv(udpSocket, c.ctx),
+		sock:        MakeSockRecv(c.ctx, udpSocket),
 		s:           s,
 		writeCh:     make(chan directWriteRequest, DirectManWriteChLen),
 	}
@@ -60,13 +60,6 @@ func (dm *DirectManager) Run() {
 		case <-dm.ctx.Done():
 			dm.Close()
 			return
-		//case msg := <-dm.inbox:
-		//	switch m := msg.(type) {
-		//	case *DManSetMTU:
-		//		dm.SetMTUFor(m.forAddrPort, m.mtu)
-		//	default:
-		//		dm.logUnknownMessage(m)
-		//	}
 		case req := <-dm.writeCh:
 			L(dm).Log(context.Background(), types.LevelTrace, "direct: writing")
 			_, err := dm.sock.Conn.WriteToUDPAddrPort(req.pkt, req.to)
@@ -103,26 +96,6 @@ func (dm *DirectManager) WriteTo(pkt []byte, addr netip.AddrPort) {
 	}
 }
 
-//// MTUFor gets the MTU for a netip.AddrPort pair, or default.
-//func (dm *DirectManager) MTUFor(ap netip.AddrPort) uint16 {
-//	// TODO(jo): there is a small possibility that internal representation in
-//	//   netip.AddrPort can differ, even though they'd be the same IP+Port pair.
-//	//   I haven't found such a case, but it'S nagging in the back of my mind,
-//	//   which is why this is a separate function,
-//	//   so we can do any canonisation later.
-//	mtu, ok := dm.mtuFor[ap]
-//	if !ok {
-//		return DefaultSafeMTU
-//	} else {
-//		return mtu
-//	}
-//}
-//
-//// SetMTUFor sets the MTU for a netip.AddrPort pair.
-//func (dm *DirectManager) SetMTUFor(ap netip.AddrPort, mtu uint16) {
-//	dm.mtuFor[ap] = mtu
-//}
-
 type DirectRouter struct {
 	*ActorCommon
 
@@ -148,9 +121,9 @@ func (s *Stage) makeDR() *DirectRouter {
 }
 
 func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
-	//go func() {
+	// go func() {
 	dr.frameCh <- frame
-	//}()
+	// }()
 }
 
 func (dr *DirectRouter) Run() {
@@ -230,7 +203,7 @@ func (dr *DirectRouter) peerAKA(ap netip.AddrPort) (peer key.NodePublic, ok bool
 
 	peer, ok = dr.aka[nap]
 
-	//slog.Debug("dr: peerAKA", "ap", ap.String(), "nap", nap, "ok", ok)
+	slog.Log(context.Background(), types.LevelTrace, "dr: peerAKA", "ap", ap.String(), "nap", nap, "ok", ok)
 
 	return
 }

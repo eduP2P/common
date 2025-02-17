@@ -1,4 +1,4 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types/ifaces"
@@ -23,23 +23,23 @@ func (w *WaitingForInfo) OnTick() PeerState {
 	return nil
 }
 
-func (w *WaitingForInfo) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {
-	s := cascadeDirect(w, ap, clear)
+func (w *WaitingForInfo) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
+	s := cascadeDirect(w, ap, clearMsg)
 
 	if s == nil {
 		// The state did not cascade, so we log here.
-		LogDirectMessage(w, ap, clear)
+		LogDirectMessage(w, ap, clearMsg)
 	}
 
 	return s
 }
 
-func (w *WaitingForInfo) OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState {
-	s := cascadeRelay(w, relay, peer, clear)
+func (w *WaitingForInfo) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
+	s := cascadeRelay(w, relay, peer, clearMsg)
 
 	if s == nil {
 		// The state did not cascade, so we log here.
-		LogRelayMessage(w, relay, peer, clear)
+		LogRelayMessage(w, relay, peer, clearMsg)
 	}
 
 	return s

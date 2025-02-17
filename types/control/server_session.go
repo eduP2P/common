@@ -103,17 +103,15 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 				errChan <- err
 
 				return
-			} else {
-				msgChan <- msg
-
-				return
 			}
+
+			msgChan <- msg
 		}
 	}()
 	wg.Add(1)
 
 	deviceKeySeen := false
-	authUrlSent := false
+	authURLSent := false
 
 	// TODO build timeout in here somewhere
 
@@ -136,18 +134,18 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 				err := s.conn.Write(msg.LogonReject)
 
 				if err != nil {
-					return fmt.Errorf("error while writing logon reject: %w, %w", err, LogonRejectedError)
+					return fmt.Errorf("error while writing logon reject: %w, %w", err, ErrLogonRejected)
 				}
 
-				return LogonRejectedError
+				return ErrLogonRejected
 			case AcceptAuth:
 				return nil
-			case AuthUrl:
-				if authUrlSent {
+			case AuthURL:
+				if authURLSent {
 					// auth url already sent, this is a business logic error, we should error out
 					return fmt.Errorf("business logic sent auth url twice")
 				}
-				authUrlSent = true
+				authURLSent = true
 
 				err := s.conn.Write(&msgcontrol.LogonAuthenticate{
 					AuthenticateURL: msg.url,
@@ -179,11 +177,11 @@ type RejectAuth struct {
 
 type AcceptAuth struct{}
 
-type AuthUrl struct {
+type AuthURL struct {
 	url string
 }
 
-var LogonRejectedError = errors.New("authentication resulted in logon rejected")
+var ErrLogonRejected = errors.New("authentication resulted in logon rejected")
 
 // Knock asks the session goroutine/connection to "knock" (send ping, await pong) the session,
 // to make sure it is still alive.
@@ -198,7 +196,7 @@ func (s *ServerSession) Knock() (dangling bool) {
 func (s *ServerSession) Greet(otherSess *ServerSession, prop msgcontrol.Properties) {
 	s.Slog().Debug("Greet", "from", otherSess.Peer.Debug())
 
-	s.conn.Write(&msgcontrol.PeerAddition{
+	if err := s.conn.Write(&msgcontrol.PeerAddition{
 		PubKey:     otherSess.Peer,
 		SessKey:    otherSess.Sess,
 		IPv4:       otherSess.IPv4.Addr(),
@@ -206,7 +204,9 @@ func (s *ServerSession) Greet(otherSess *ServerSession, prop msgcontrol.Properti
 		Endpoints:  otherSess.CurrentEndpoints,
 		HomeRelay:  otherSess.HomeRelay,
 		Properties: prop,
-	})
+	}); err != nil {
+		slog.Error("error writing peer addition", "err", err)
+	}
 
 	s.greetedMu.Lock()
 	defer s.greetedMu.Unlock()
@@ -226,10 +226,12 @@ func (s *ServerSession) UpdateEndpoints(peer key.NodePublic, endpoints []netip.A
 
 	s.Slog().Debug("UpdateEndpoints", "from", peer.Debug(), "endpoints", endpoints)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:    peer,
 		Endpoints: endpoints,
-	})
+	}); err != nil {
+		slog.Error("error writing endpoints peer update", "err", err)
+	}
 }
 
 func (s *ServerSession) UpdateSessKey(peer key.NodePublic, sessKey key.SessionPublic) {
@@ -237,10 +239,12 @@ func (s *ServerSession) UpdateSessKey(peer key.NodePublic, sessKey key.SessionPu
 
 	s.Slog().Debug("UpdateSessKey", "from", peer.Debug(), "sess-key", sessKey)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:  peer,
 		SessKey: &sessKey,
-	})
+	}); err != nil {
+		slog.Error("error writing sess key peer update", "err", err)
+	}
 }
 
 func (s *ServerSession) UpdateHomeRelay(peer key.NodePublic, homeRelay int64) {
@@ -248,28 +252,34 @@ func (s *ServerSession) UpdateHomeRelay(peer key.NodePublic, homeRelay int64) {
 
 	s.Slog().Debug("UpdateHomeRelay", "from", peer.Debug(), "home-relay", homeRelay)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:    peer,
 		HomeRelay: &homeRelay,
-	})
+	}); err != nil {
+		slog.Error("error writing home relay peer update", "err", err)
+	}
 }
 
 func (s *ServerSession) UpdateProperties(peer key.NodePublic, prop msgcontrol.Properties) {
 	s.Slog().Debug("UpdateProperties", "from", peer.Debug(), "prop", prop)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:     peer,
 		Properties: &prop,
-	})
+	}); err != nil {
+		slog.Error("error writing properties peer update", "err", err)
+	}
 }
 
 // Bye to another session, send PeerRemove
 func (s *ServerSession) Bye(peer key.NodePublic) {
 	s.Slog().Debug("Bye", "from", peer.Debug())
 
-	s.conn.Write(&msgcontrol.PeerRemove{
+	if err := s.conn.Write(&msgcontrol.PeerRemove{
 		PubKey: peer,
-	})
+	}); err != nil {
+		slog.Error("error writing peer remove message", "err", err)
+	}
 }
 
 // SendRelays sends all relay information to the client. This is not ran on Resume.
@@ -279,7 +289,7 @@ func (s *ServerSession) SendRelays() error {
 	return s.conn.Write(&msgcontrol.RelayUpdate{Relays: s.server.relays})
 }
 
-func (s *ServerSession) Resume(cc *Conn, sessKey key.SessionPublic) {
+func (s *ServerSession) Resume(_ *Conn, _ key.SessionPublic) {
 	// TODO: check sessKey == s.key, else send sesskeyupdate
 
 	// TODO we send nothing to the client except queued messages, which are backed up.
@@ -380,16 +390,6 @@ func (s *ServerSession) Run() {
 		return
 	}
 
-	//s.server.ForVisible(s, func(session *ServerSession) {
-	//	// TODO this currently blocks and holds the lock, we should make Greet async as well
-	//
-	//	// TODO there is no bubbling of errors, ignore? log?
-	//
-	//	session.Greet(s)
-	//
-	//	s.Greet(session)
-	//})
-
 	s.Slog().Info("established session")
 
 	for {
@@ -433,29 +433,6 @@ func (s *ServerSession) Run() {
 			return
 		}
 	}
-
-	time.Sleep(30 * time.Second)
-
-	// TODO make other peers aware
-
-	// for now, send a reject
-	//if err = s.conn.Write(&msgcontrol.LogonReject{
-	//	Reason:        "dev: reject unambiguously",
-	//	RetryStrategy: 0,
-	//}); err != nil {
-	//	err = fmt.Errorf("error when sending reject: %w", err)
-	//	return
-	//}
-
-	return
-
-	// TODO after Accept, we send the client peer and relay definitions,
-	//  but we need to wait for the client to send their home relay and endpoints,
-	//  before we'd (ideally) send a complete peer info to other clients.
-	//  We will wait 10 seconds for this, before timing out and sending incomplete information.
-
-	// TODO
-	panic("implement me")
 }
 
 func (s *ServerSession) Slog() *slog.Logger {

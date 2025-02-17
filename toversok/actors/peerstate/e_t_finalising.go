@@ -1,8 +1,8 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 )
 
@@ -11,7 +11,7 @@ type Finalizing struct {
 
 	ap   netip.AddrPort
 	sess key.SessionPublic
-	pong *msg2.Pong
+	pong *msgsess.Pong
 }
 
 func (f *Finalizing) Name() string {
@@ -27,12 +27,12 @@ func (f *Finalizing) OnTick() PeerState {
 	})
 }
 
-func (f *Finalizing) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
+func (f *Finalizing) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(f, ap, clear)
+	return cascadeDirect(f, ap, clearMsg)
 }
 
-func (f *Finalizing) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
+func (f *Finalizing) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(f, relay, peer, clear)
+	return cascadeRelay(f, relay, peer, clearMsg)
 }

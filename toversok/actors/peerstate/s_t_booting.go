@@ -1,4 +1,4 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types"
@@ -35,12 +35,12 @@ func (b *Booting) OnTick() PeerState {
 	})
 }
 
-func (b *Booting) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {
+func (b *Booting) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(b, ap, clear)
+	return cascadeDirect(b, ap, clearMsg)
 }
 
-func (b *Booting) OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState {
+func (b *Booting) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(b, relay, peer, clear)
+	return cascadeRelay(b, relay, peer, clearMsg)
 }

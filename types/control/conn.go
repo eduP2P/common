@@ -181,10 +181,6 @@ func (c *Conn) Write(obj msgcontrol.ControlMessage) error {
 	c.writeMutex.Lock()
 	defer c.writeMutex.Unlock()
 
-	//// FIXME: bson is extremely fucky and will write empty values if it cannot decode something, so be careful with that
-	////  or replace this with a registry thingie.
-	//data, err := bson.Marshal(obj)
-
 	data, err := json.Marshal(obj)
 	if err != nil {
 		return fmt.Errorf("could not marshal data: %w", err)

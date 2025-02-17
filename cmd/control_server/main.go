@@ -26,10 +26,8 @@ import (
 )
 
 var (
-	//dev        = flag.Bool("dev", false, "run in localhost development mode (overrides -a)")
 	addr       = flag.String("a", ":443", "server HTTP/HTTPS listen address, in form \":port\", \"ip:port\", or for IPv6 \"[ip]:port\". If the IP is omitted, it defaults to all interfaces. Serves HTTPS if the port is 443 and/or -certmode is manual, otherwise HTTP.")
 	configPath = flag.String("c", "", "config file path")
-	//stunPort   = flag.Int("stun-port", stunserver.DefaultPort, "The UDP port on which to serve STUN. The listener is bound to the same IP (if any) as specified in the -a flag.")
 
 	publicFacingBaseString = flag.String("u", "", "public facing base URL (required)")
 	publicFacingBase       *url.URL
@@ -92,9 +90,11 @@ func main() {
 
 	mux.Handle("/", handleStaticHTML(ToverSokControlDefaultHTML))
 
-	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
-		io.WriteString(w, "User-agent: *\nDisallow: /\n")
+		if _, err := io.WriteString(w, "User-agent: *\nDisallow: /\n"); err != nil {
+			slog.Error("could not write robots.txt", "err", err)
+		}
 	}))
 	mux.Handle("/generate_204", http.HandlerFunc(serverCaptivePortalBuster))
 
@@ -125,7 +125,9 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		httpsrv.Shutdown(ctx)
+		if err := httpsrv.Shutdown(ctx); err != nil {
+			slog.Error("could not shutdown control server", "err", err)
+		}
 	}()
 
 	// TODO setup TLS with autocert?
@@ -134,7 +136,7 @@ func main() {
 	err = httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("control: error %s", err)
+		log.Fatalf("control: error %s", err) //nolint:gocritic
 	}
 }
 
@@ -149,7 +151,7 @@ type ControlServer struct {
 
 func (cs *ControlServer) HandleAuthRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Redirect(w, r, "/auth/land", 302)
+		http.Redirect(w, r, "/auth/land", http.StatusFound)
 		return
 	}
 
@@ -165,16 +167,16 @@ func (cs *ControlServer) HandleAuthRequest(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		http.Redirect(w, r, "/auth/success", 302)
+		http.Redirect(w, r, "/auth/success", http.StatusFound)
 	} else {
 		// Fail
-		http.Redirect(w, r, "/auth/fail", 302)
+		http.Redirect(w, r, "/auth/fail", http.StatusFound)
 	}
 
 }
 
 func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID) {
-	println("OnSessionCreate")
+	slog.Info("OnSessionCreate", "id", id, "cid", cid)
 
 	if cs.isKnown(key.NodePublic(cid)) {
 		go func() {
@@ -186,31 +188,28 @@ func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID
 		return
 	}
 
-	url, _ := url.Parse(string("/auth/land?session=" + id))
-	if err := cs.server.SendAuthURL(id, publicFacingBase.ResolveReference(url).String()); err != nil {
+	redirectURL, _ := url.Parse(string("/auth/land?session=" + id))
+	if err := cs.server.SendAuthURL(id, publicFacingBase.ResolveReference(redirectURL).String()); err != nil {
 		slog.Error("error sending auth URL", "id", id, "err", err)
 	}
 }
 
-func (cs *ControlServer) OnSessionResume(id control.SessID, id2 control.ClientID) {
-	println("OnSessionResume")
-	return // noop
+func (cs *ControlServer) OnSessionResume(sess control.SessID, cid control.ClientID) {
+	slog.Info("OnSessionResume", "sess", sess, "cid", cid)
 }
 
-func (cs *ControlServer) OnDeviceKey(id control.SessID, key string) {
-	println("OnDeviceKey")
-	return // noop
+func (cs *ControlServer) OnDeviceKey(sess control.SessID, deviceKey string) {
+	slog.Info("OnDeviceKey", "sess", sess, "deviceKey", deviceKey)
 }
 
-func (cs *ControlServer) OnSessionFinalize(id control.SessID, id2 control.ClientID) (netip.Prefix, netip.Prefix) {
-	println("OnSessionFinalize")
+func (cs *ControlServer) OnSessionFinalize(sess control.SessID, cid control.ClientID) (netip.Prefix, netip.Prefix) {
+	slog.Info("OnSessionFinalize", "sess", sess, "cid", cid)
 
-	return cs.getIPs(key.NodePublic(id2))
+	return cs.getIPs(key.NodePublic(cid))
 }
 
-func (cs *ControlServer) OnSessionDestroy(id control.SessID, id2 control.ClientID) {
-	println("OnSessionDestroy")
-	return // noop
+func (cs *ControlServer) OnSessionDestroy(sess control.SessID, cid control.ClientID) {
+	slog.Info("OnSessionDestroy", "sess", sess, "cid", cid)
 }
 
 func LoadServer(ctx context.Context) *ControlServer {
@@ -371,14 +370,16 @@ func handleStaticHTML(doc string) http.HandlerFunc {
 	}
 }
 
-func sendStaticHTML(doc string, w http.ResponseWriter, r *http.Request) {
+func sendStaticHTML(doc string, w http.ResponseWriter, _ *http.Request) {
 	browserHeaders(w)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 
-	io.WriteString(w, doc)
+	if _, err := io.WriteString(w, doc); err != nil {
+		slog.Error("failed to write static HTML page", "error", err)
+	}
 }
 
 const ToverSokControlDefaultHTML = `

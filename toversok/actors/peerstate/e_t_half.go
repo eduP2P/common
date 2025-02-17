@@ -1,8 +1,8 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"time"
 )
@@ -12,7 +12,7 @@ type EstHalfIng struct {
 
 	ap   netip.AddrPort
 	sess key.SessionPublic
-	ping *msg2.Ping
+	ping *msgsess.Ping
 }
 
 func (e *EstHalfIng) Name() string {
@@ -28,12 +28,12 @@ func (e *EstHalfIng) OnTick() PeerState {
 	return LogTransition(e, &EstHalf{EstablishingCommon: e.EstablishingCommon})
 }
 
-func (e *EstHalfIng) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
+func (e *EstHalfIng) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(e, ap, clear)
+	return cascadeDirect(e, ap, clearMsg)
 }
 
-func (e *EstHalfIng) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
+func (e *EstHalfIng) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(e, relay, peer, clear)
+	return cascadeRelay(e, relay, peer, clearMsg)
 }

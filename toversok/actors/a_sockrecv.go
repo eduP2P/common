@@ -27,13 +27,12 @@ type SockRecv struct {
 	outCh chan RecvFrame
 }
 
-func MakeSockRecv(udp types.UDPConn, pCtx context.Context) *SockRecv {
-
+func MakeSockRecv(ctx context.Context, udp types.UDPConn) *SockRecv {
 	return &SockRecv{
 		Conn:  udp,
 		outCh: make(chan RecvFrame, SockRecvFrameChanBuffer),
 
-		ActorCommon: MakeCommon(pCtx, -1),
+		ActorCommon: MakeCommon(ctx, -1),
 	}
 }
 

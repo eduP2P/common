@@ -16,7 +16,7 @@ type ActorCommon struct {
 func MakeCommon(pCtx context.Context, chLen int) *ActorCommon {
 	ctx, ctxCan := context.WithCancel(pCtx)
 
-	var inbox chan msgactor.ActorMessage = nil
+	var inbox chan msgactor.ActorMessage
 
 	if chLen >= 0 {
 		inbox = make(chan msgactor.ActorMessage, chLen)

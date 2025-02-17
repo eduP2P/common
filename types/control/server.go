@@ -139,14 +139,14 @@ func (s *Server) Logger() *slog.Logger {
 	return slog.With("control", s.privKey.Public().Debug())
 }
 
-func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, remoteAddrPort netip.AddrPort) error {
+func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, _ netip.AddrPort) error {
 	cc := NewConn(ctx, mc, brw)
 
 	// TODO this logon segment can be in a different function
 	{
 		// TODO set deadline on read
 
-		err, clientHello, logon := s.handleLogon(cc)
+		clientHello, logon, err := s.handleLogon(cc)
 
 		if err != nil {
 			return fmt.Errorf("handle logon: %w", err)
@@ -168,7 +168,6 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 			if err = sess.AuthAndStart(); err != nil {
 				return err
 			}
-			//go sess.Run()
 		}
 
 		// Wait until connection dead
@@ -177,14 +176,6 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 		<-sess.Ctx.Done()
 
 		return sess.Ctx.Err()
-
-		//// for now, send a reject
-		//if err := cc.Write(&msgcontrol.LogonReject{
-		//	Reason:        "dev: reject unambiguously",
-		//	RetryStrategy: 0,
-		//}); err != nil {
-		//	return fmt.Errorf("error when sending reject: %w", err)
-		//}
 
 		// TODO send authenticate (then wait, or expect devicekey), accept, or reject
 
@@ -204,17 +195,14 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 
 		// TODO (here) mark session as latent
 	}
-
-	//TODO implement me
-	panic("implement me")
 }
 
-func (s *Server) handleLogon(cc *Conn) (error, *msgcontrol.ClientHello, *msgcontrol.Logon) {
+func (s *Server) handleLogon(cc *Conn) (*msgcontrol.ClientHello, *msgcontrol.Logon, error) {
 	// TODO set deadline on read
 
 	var clientHello = new(msgcontrol.ClientHello)
 	if err := cc.Expect(clientHello, HandshakeReceiveTimeout); err != nil {
-		return fmt.Errorf("error when receiving clienthello: %w", err), nil, nil
+		return nil, nil, fmt.Errorf("error when receiving clienthello: %w", err)
 	}
 
 	data := randData()
@@ -223,12 +211,12 @@ func (s *Server) handleLogon(cc *Conn) (error, *msgcontrol.ClientHello, *msgcont
 		ControlNodePub: s.privKey.Public(),
 		CheckData:      s.privKey.SealToNode(clientHello.ClientNodePub, data),
 	}); err != nil {
-		return fmt.Errorf("error when sending serverhello: %w", err), nil, nil
+		return nil, nil, fmt.Errorf("error when sending serverhello: %w", err)
 	}
 
 	logon := new(msgcontrol.Logon)
 	if err := cc.Expect(logon, HandshakeReceiveTimeout); err != nil {
-		return fmt.Errorf("error when receiving logon: %w", err), nil, nil
+		return nil, nil, fmt.Errorf("error when receiving logon: %w", err)
 	}
 
 	// Verify logon
@@ -237,46 +225,41 @@ func (s *Server) handleLogon(cc *Conn) (error, *msgcontrol.ClientHello, *msgcont
 		var ok bool
 
 		if nodeData, ok = s.privKey.OpenFromNode(clientHello.ClientNodePub, logon.NodeKeyAttestation); !ok {
-			return fmt.Errorf("could not open node attestation"), nil, nil
+			return nil, nil, fmt.Errorf("could not open node attestation")
 		}
 
 		if sessData, ok = s.privKey.OpenFromSession(logon.SessKey, logon.SessKeyAttestation); !ok {
-			return fmt.Errorf("could not open session attestation"), nil, nil
+			return nil, nil, fmt.Errorf("could not open session attestation")
 		}
 
 		// FIXME: we should probably make the below something like constant time, to prevent timing attacks.
 		//  It is not now, for development purposes.
 
 		if !slices.Equal(data, nodeData) {
-			return fmt.Errorf("node data not equal"), nil, nil
+			return nil, nil, fmt.Errorf("node data not equal")
 		}
 
 		if !slices.Equal(data, sessData) {
-			return fmt.Errorf("sess data not equal"), nil, nil
+			return nil, nil, fmt.Errorf("sess data not equal")
 		}
 	}
 
-	return nil, clientHello, logon
+	return clientHello, logon, nil
 }
 
 func (s *Server) doReject(cc *Conn, sess *ServerSession, err error) error {
 
 	reject := &msgcontrol.LogonReject{}
 
-	if errors.Is(err, stillEstablished) {
-		if errors.Is(err, stillEstablished) {
-			// TODO we need to replace this with knocking-and-acquiring
-
-			reject.RetryStrategy = msgcontrol.RegenerateSessionKey
-			reject.RetryAfter = time.Second * 15
-			reject.Reason = "other client session still active, please retry"
-		} else {
-			reject.Reason = "cannot log in at the moment, please retry in the future"
-		}
-	} else if errors.Is(err, sessionIdMismatch) {
+	switch {
+	case errors.Is(err, errStillEstablished):
+		reject.RetryStrategy = msgcontrol.RegenerateSessionKey
+		reject.RetryAfter = time.Second * 15
+		reject.Reason = "other client session still active, please retry"
+	case errors.Is(err, errSessionIDMismatch):
 		reject.RetryStrategy = msgcontrol.RecreateSession
 		reject.Reason = "session ID mismatch, please try without"
-	} else {
+	default:
 		reject.Reason = "could not acquire session"
 		slog.Warn("rejected session with unknown error", "err", err)
 	}
@@ -292,9 +275,9 @@ func (s *Server) doReject(cc *Conn, sess *ServerSession, err error) error {
 
 	if err := cc.Write(reject); err != nil {
 		return fmt.Errorf("error when sending reject: %w", err)
-	} else {
-		return nil
 	}
+
+	return nil
 }
 
 func randData() []byte {
@@ -353,8 +336,16 @@ func (s *Server) RunAdditionalSTUN(publicIPs []netip.Addr, listenHost string, lo
 	s.stun.lowServer = stunserver.NewServer(s.ctx)
 	s.stun.highServer = stunserver.NewServer(s.ctx)
 
-	go s.stun.lowServer.ListenAndServe(lowAp)
-	go s.stun.highServer.ListenAndServe(highAp)
+	go func() {
+		if err := s.stun.lowServer.ListenAndServe(lowAp); err != nil {
+			slog.Error("low stun server ListenAndServe error", "err", err)
+		}
+	}()
+	go func() {
+		if err := s.stun.highServer.ListenAndServe(highAp); err != nil {
+			slog.Error("high stun server ListenAndServe error", "err", err)
+		}
+	}()
 
 	t := true
 
@@ -398,23 +389,23 @@ func (s *Server) relayExists(id int64) bool {
 }
 
 var (
-	incorrectState    = errors.New("incorrect state, want nil or Dangling")
-	stillEstablished  = errors.New("session is still established or reestablished")
-	sessionIdMismatch = errors.New("session ID did not match")
+	errIncorrectState    = errors.New("incorrect state, want nil or Dangling")
+	errStillEstablished  = errors.New("session is still established or reestablished")
+	errSessionIDMismatch = errors.New("session ID did not match")
 )
 
-func (s *Server) ReEstablishOrMakeSession(cc *Conn, nodeKey key.NodePublic, sessKey key.SessionPublic, sessId *string) (retSess *ServerSession, resumed bool, err error) {
+func (s *Server) ReEstablishOrMakeSession(cc *Conn, nodeKey key.NodePublic, sessKey key.SessionPublic, sessID *string) (retSess *ServerSession, resumed bool, err error) {
 	s.sessLock.Lock()
 	defer s.sessLock.Unlock()
 
 	sess, ok := s.sessByNode[nodeKey]
 
 	if !ok {
-		if sessId != nil {
+		if sessID != nil {
 			// There's no session ID to match if its empty.
 			// The client requested resume, so we need to tell it to try again without the session ID,
 			// kicking internal logic to regenerate session keys and clearing state.
-			err = sessionIdMismatch
+			err = errSessionIDMismatch
 			return
 		}
 
@@ -433,13 +424,13 @@ func (s *Server) ReEstablishOrMakeSession(cc *Conn, nodeKey key.NodePublic, sess
 	// less simple path: we have a session in state for this nodekey
 	if sess.state != Dangling {
 		// We only accept resuming dangling sessions, everything else is incorrect.
-		err = incorrectState
+		err = errIncorrectState
 
 		if sess.state == Established || sess.state == ReEstablishing {
 			// The server may lag behind for a second, so if we wrap this error and return the session,
 			// the caller could knock that session to force it to Dangling.
 
-			err = fmt.Errorf("established state (%w): %w", err, stillEstablished)
+			err = fmt.Errorf("established state (%w): %w", err, errStillEstablished)
 			retSess = sess
 		}
 
@@ -447,10 +438,10 @@ func (s *Server) ReEstablishOrMakeSession(cc *Conn, nodeKey key.NodePublic, sess
 	}
 
 	// Session is dangling, we can grab it
-	if sessId != nil && sess.ID != *sessId {
+	if sessID != nil && sess.ID != *sessID {
 		// Cant resume, the client expects a different session ID
 
-		err = sessionIdMismatch
+		err = errSessionIDMismatch
 		return
 	}
 
@@ -506,10 +497,6 @@ func (s *Server) RemoveSession(sess *ServerSession) {
 		if err != nil {
 			slog.Error("failed to remove sessions", "err", err)
 		}
-
-		//s.ForVisibleLocked(sess, func(session *ServerSession) {
-		//	session.Bye(sess.Peer)
-		//})
 	}
 
 	slog.Info("REMOVE session", "peer", sess.Peer.Debug())
@@ -518,7 +505,7 @@ func (s *Server) RemoveSession(sess *ServerSession) {
 	delete(s.sessByID, sess.ID)
 }
 
-//func (s *Server) RegisterSession(sess *ServerSession) {
+// func (s *Server) RegisterSession(sess *ServerSession) {
 //	// TODO resume support
 //
 //	s.sessLock.Lock()
@@ -531,7 +518,7 @@ func (s *Server) RemoveSession(sess *ServerSession) {
 //
 //	s.sessByNode[sess.Peer] = sess
 //	s.sessByID[sess.ID] = sess
-//}
+// }
 
 // ForVisible is called by fromSess' Run goroutine, to inform all other sessions it can see of a change (and the likes)
 func (s *Server) ForVisible(fromSess *ServerSession, f func(session *ServerSession)) {

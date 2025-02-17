@@ -3,6 +3,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
@@ -37,7 +38,7 @@ func L(a ifaces.Actor) *slog.Logger {
 }
 
 func bail(c context.Context, v any) {
-	maybeCcc := c.Value("ccc")
+	maybeCcc := c.Value(types.CCC)
 	if maybeCcc == nil {
 		panic(fmt.Errorf("could not bail, cannot find ccc: %s", v))
 	}

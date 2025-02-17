@@ -10,6 +10,7 @@ import (
 	"github.com/edup2p/common/types/msgactor"
 )
 
+//nolint:unused
 type MockActor struct {
 	ctx context.Context
 

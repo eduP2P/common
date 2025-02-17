@@ -6,10 +6,10 @@ import (
 	"os/exec"
 )
 
-func prefixesToAdd(new, curr []netip.Prefix) (add []netip.Prefix) {
-	for _, cur := range new {
+func prefixesToAdd(newP, currP []netip.Prefix) (add []netip.Prefix) {
+	for _, cur := range newP {
 		found := false
-		for _, v := range curr {
+		for _, v := range currP {
 			found = v == cur
 			if found {
 				break
@@ -22,10 +22,10 @@ func prefixesToAdd(new, curr []netip.Prefix) (add []netip.Prefix) {
 	return
 }
 
-func prefixesToRemove(new, curr []netip.Prefix) (remove []netip.Prefix) {
-	for _, cur := range curr {
+func prefixesToRemove(newP, currP []netip.Prefix) (remove []netip.Prefix) {
+	for _, cur := range currP {
 		found := false
-		for _, v := range new {
+		for _, v := range newP {
 			found = v == cur
 			if found {
 				break

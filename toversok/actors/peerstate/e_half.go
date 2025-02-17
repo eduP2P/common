@@ -1,8 +1,8 @@
-package peer_state
+package peerstate
 
 import (
 	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
+	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"time"
 )
@@ -28,64 +28,62 @@ func (e *EstHalf) OnTick() PeerState {
 	return nil
 }
 
-func (e *EstHalf) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
-	if s := cascadeDirect(e, ap, clear); s != nil {
+func (e *EstHalf) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
+	if s := cascadeDirect(e, ap, clearMsg); s != nil {
 		return s
 	}
 
-	LogDirectMessage(e, ap, clear)
+	LogDirectMessage(e, ap, clearMsg)
 
-	switch m := clear.Message.(type) {
-	case *msg2.Ping:
-		if !e.pingDirectValid(ap, clear.Session, m) {
+	switch m := clearMsg.Message.(type) {
+	case *msgsess.Ping:
+		if !e.pingDirectValid(ap, clearMsg.Session, m) {
 			L(e).Warn("dropping invalid ping", "ap", ap.String())
 			return nil
 		}
 
-		e.replyWithPongDirect(ap, clear.Session, m)
+		e.replyWithPongDirect(ap, clearMsg.Session, m)
 
 		// Send one as a hail-mary, for if another got lost
-		e.tm.SendPingDirect(ap, e.peer, clear.Session)
+		e.tm.SendPingDirect(ap, e.peer, clearMsg.Session)
 		e.lastPing = time.Now()
 		return nil
-	case *msg2.Pong:
+	case *msgsess.Pong:
 		e.tm.Poke()
 		return LogTransition(e, &Finalizing{
 			EstablishingCommon: e.EstablishingCommon,
 			ap:                 ap,
-			sess:               clear.Session,
+			sess:               clearMsg.Session,
 			pong:               m,
 		})
-	//case *msg.Rendezvous:
 	default:
 		L(e).Warn("ignoring direct session message",
 			"ap", ap,
-			"session", clear.Session,
+			"session", clearMsg.Session,
 			"msg", m.Debug())
 		return nil
 	}
 }
 
-func (e *EstHalf) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
-	if s := cascadeRelay(e, relay, peer, clear); s != nil {
+func (e *EstHalf) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
+	if s := cascadeRelay(e, relay, peer, clearMsg); s != nil {
 		return s
 	}
 
-	LogRelayMessage(e, relay, peer, clear)
+	LogRelayMessage(e, relay, peer, clearMsg)
 
-	switch m := clear.Message.(type) {
-	case *msg2.Ping:
-		e.replyWithPongRelay(relay, peer, clear.Session, m)
+	switch m := clearMsg.Message.(type) {
+	case *msgsess.Ping:
+		e.replyWithPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
-	case *msg2.Pong:
-		e.ackPongRelay(relay, peer, clear.Session, m)
+	case *msgsess.Pong:
+		e.ackPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
-	//case *msg.Rendezvous:
 	default:
 		L(e).Warn("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
-			"session", clear.Session,
+			"session", clearMsg.Session,
 			"msg", m.Debug())
 		return nil
 	}

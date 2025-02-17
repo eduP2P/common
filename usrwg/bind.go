@@ -1,11 +1,14 @@
 package usrwg
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/conn"
+	"log/slog"
 	"reflect"
 	"runtime"
 	"sync"
@@ -94,14 +97,8 @@ fill:
 		sizes[i] = len(p)
 		copy(packets[i], p)
 
-		n += 1
+		n++
 	}
-
-	//defer func() {
-	//	for i := 0; i < n; i++ {
-	//		slog.Debug("received packet", "hex", hex.EncodeToString(packets[i][:sizes[i]]))
-	//	}
-	//}()
 
 	if n != 0 {
 		// Buffer filled, return early
@@ -144,9 +141,18 @@ func (b *ToverSokBind) waitForValueFromConns() ([]byte, *endpoint) {
 
 	cases = append(cases, connChangeCase)
 
-	choice, recv, _ := reflect.Select(cases)
+	choice, recv, recvOk := reflect.Select(cases)
 
-	//slog.Debug("waitForValueFromConns reflect.Select", "choice", choice, "len", len(cases), "recv", recv, "recvOk", recvOk, "cases", cases)
+	slog.Log(
+		context.Background(),
+		types.LevelTrace,
+		"waitForValueFromConns reflect.Select",
+		"choice", choice,
+		"len", len(cases),
+		"recv", recv,
+		"recvOk", recvOk,
+		"cases", cases,
+	)
 
 	// choice == last index
 	if choice == len(cases)-1 {
@@ -188,7 +194,7 @@ func (b *ToverSokBind) createConnChangeSelectCase() reflect.SelectCase {
 
 // SetMark is used by wireguard-go to avoid routing loops.
 // TODO: double-check
-func (b *ToverSokBind) SetMark(mark uint32) error {
+func (b *ToverSokBind) SetMark(uint32) error {
 	return nil
 }
 
