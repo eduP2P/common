@@ -1,9 +1,10 @@
 package usrwg
 
 import (
-	"github.com/edup2p/common/types/key"
 	"net/netip"
 	"slices"
+
+	"github.com/edup2p/common/types/key"
 )
 
 type endpoint struct {

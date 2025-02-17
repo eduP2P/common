@@ -6,10 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edup2p/common/types/control"
-	"github.com/edup2p/common/types/control/controlhttp"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/relay"
 	"io"
 	"log"
 	"log/slog"
@@ -23,6 +19,11 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/edup2p/common/types/control"
+	"github.com/edup2p/common/types/control/controlhttp"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
 )
 
 var (
@@ -42,7 +43,7 @@ var (
 func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: programLevel,
-		//AddSource: true,
+		// AddSource: true,
 	})
 	slog.SetDefault(slog.New(h))
 	programLevel.Set(-8)
@@ -117,7 +118,7 @@ func main() {
 		Addr:    *addr,
 		Handler: mux,
 		// TODO
-		//ErrorLog: slog.NewLogLogger(),
+		// ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -172,7 +173,6 @@ func (cs *ControlServer) HandleAuthRequest(w http.ResponseWriter, r *http.Reques
 		// Fail
 		http.Redirect(w, r, "/auth/fail", http.StatusFound)
 	}
-
 }
 
 func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID) {
@@ -508,14 +508,14 @@ func writeNewConfig() Config {
 }
 
 func writeConfig(cfg Config, path string) {
-	if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		log.Fatal(err)
 	}
 	b, err := json.MarshalIndent(cfg, "", "\t")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile(path, b, 0600); err != nil {
+	if err := os.WriteFile(path, b, 0o600); err != nil {
 		log.Fatal(err)
 	}
 }

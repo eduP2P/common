@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgcontrol"
 	"log/slog"
 	"net/netip"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 )
 
 type ServerSession struct {
@@ -92,7 +93,6 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 		for ctx.Err() == nil {
 			msg := msgcontrol.LogonDeviceKey{}
 			err := s.conn.Expect(&msg, time.Millisecond*100)
-
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					continue
@@ -132,7 +132,6 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 			switch msg := authMsg.(type) {
 			case RejectAuth:
 				err := s.conn.Write(msg.LogonReject)
-
 				if err != nil {
 					return fmt.Errorf("error while writing logon reject: %w, %w", err, ErrLogonRejected)
 				}
@@ -319,7 +318,6 @@ func (s *ServerSession) AuthAndStart() error {
 	s.IPv4, s.IPv6 = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
 
 	err := s.AuthenticateAccept()
-
 	if err != nil {
 		return fmt.Errorf("error while writing logon accept: %w", err)
 	}
@@ -384,7 +382,6 @@ func (s *ServerSession) Run() {
 
 		return nil
 	})
-
 	if err != nil {
 		err = fmt.Errorf("could not send greets: %w", err)
 		return
@@ -396,7 +393,6 @@ func (s *ServerSession) Run() {
 		var m msgcontrol.ControlMessage
 
 		m, err = s.conn.Read(0)
-
 		if err != nil {
 			// TODO this currently removes the session on connection break; no resuming
 

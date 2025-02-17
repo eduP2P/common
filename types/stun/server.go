@@ -51,7 +51,6 @@ func (s *Server) Serve() error {
 	)
 	for {
 		n, ua, err = s.pc.ReadFromUDP(buf[:])
-
 		if err != nil {
 			if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
 				return nil

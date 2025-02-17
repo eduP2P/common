@@ -6,10 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/relay"
-	"github.com/edup2p/common/types/relay/relayhttp"
-	stunserver "github.com/edup2p/common/types/stun"
 	"io"
 	"log"
 	"log/slog"
@@ -22,6 +18,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
+	"github.com/edup2p/common/types/relay/relayhttp"
+	stunserver "github.com/edup2p/common/types/stun"
 )
 
 var (
@@ -116,7 +117,7 @@ func main() {
 		Addr:    *addr,
 		Handler: mux,
 		// TODO
-		//ErrorLog: slog.NewLogLogger(),
+		// ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -204,7 +205,7 @@ func loadConfig() Config {
 }
 
 func writeNewConfig() Config {
-	if err := os.MkdirAll(filepath.Dir(*configPath), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(*configPath), 0o777); err != nil {
 		log.Fatal(err)
 	}
 	cfg := newConfig()
@@ -212,7 +213,7 @@ func writeNewConfig() Config {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile(*configPath, b, 0600); err != nil {
+	if err := os.WriteFile(*configPath, b, 0o600); err != nil {
 		log.Fatal(err)
 	}
 	return cfg

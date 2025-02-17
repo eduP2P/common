@@ -4,16 +4,16 @@ package router
 
 import (
 	"fmt"
-	"go4.org/netipx"
-	"golang.zx2c4.com/wireguard/tun"
 	"log/slog"
 	"net/netip"
 	"runtime"
+
+	"go4.org/netipx"
+	"golang.zx2c4.com/wireguard/tun"
 )
 
 func NewRouter(device tun.Device) (Router, error) {
 	name, err := device.Name()
-
 	if err != nil {
 		return nil, err
 	}
@@ -109,9 +109,11 @@ func (r *bsdRouter) addRoute(prefix netip.Prefix) error {
 	nip := net.IP.Mask(net.Mask)
 	nstr := fmt.Sprintf("%v/%d", nip, prefix.Bits())
 
-	args := []string{"route", "-q", "-n",
+	args := []string{
+		"route", "-q", "-n",
 		"add", "-" + inet(prefix), nstr,
-		"-iface", r.tunName}
+		"-iface", r.tunName,
+	}
 
 	if out, err := cmd(args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("route add failed: %v => %w\n%s", args, err, out)
@@ -129,9 +131,11 @@ func (r *bsdRouter) removeRoute(prefix netip.Prefix) error {
 	if runtime.GOOS == "darwin" {
 		del = "delete"
 	}
-	routedel := []string{"route", "-q", "-n",
+	routedel := []string{
+		"route", "-q", "-n",
 		del, "-" + inet(prefix), nstr,
-		"-iface", r.tunName}
+		"-iface", r.tunName,
+	}
 
 	if out, err := cmd(routedel...).CombinedOutput(); err != nil {
 		return fmt.Errorf("route del failed: %v: %w\n%s", routedel, err, out)

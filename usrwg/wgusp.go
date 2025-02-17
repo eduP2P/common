@@ -2,13 +2,14 @@ package usrwg
 
 import (
 	"fmt"
+	"log/slog"
+	"net/netip"
+
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/usrwg/router"
 	"golang.zx2c4.com/wireguard/device"
-	"log/slog"
-	"net/netip"
 )
 
 func init() {
@@ -44,13 +45,11 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	// TODO set this to 1392 per https://docs.eduvpn.org/server/v3/wireguard.html
 	//  and make adjustable by environment variable
 	tunDev, err := createTUN(1280)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
 
 	r, err := router.NewRouter(tunDev)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create router: %w", err)
 	}
@@ -126,7 +125,6 @@ func (u *UserSpaceWireGuardController) UpdatePeer(publicKey key.NodePublic, cfg 
 			publicKey.HexString(), cfg.VIPs.IPv4.String(), cfg.VIPs.IPv6.String(), publicKey.Marshal(),
 		),
 	)
-
 	if err != nil {
 		err = fmt.Errorf("failed to do IPC set: %w", err)
 	}

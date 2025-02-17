@@ -6,12 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edup2p/common/extwg"
-	"github.com/edup2p/common/toversok"
-	"github.com/edup2p/common/types/dial"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/usrwg"
-	"golang.zx2c4.com/wireguard/wgctrl"
 	"log/slog"
 	"net/netip"
 	"os"
@@ -19,6 +13,13 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/edup2p/common/extwg"
+	"github.com/edup2p/common/toversok"
+	"github.com/edup2p/common/types/dial"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/usrwg"
+	"golang.zx2c4.com/wireguard/wgctrl"
 )
 
 // Flags
@@ -72,7 +73,7 @@ func main() {
 
 	flag.Parse()
 
-	var level = slog.LevelInfo
+	level := slog.LevelInfo
 
 	switch logLevel {
 	case "debug":
@@ -123,7 +124,7 @@ func main() {
 	}
 
 	if controlHost != "" || controlPort != 0 || controlKeyStr != "" {
-		var mustWrite = false
+		mustWrite := false
 
 		if config.ControlPort != controlPort16 {
 			slog.Warn("config control port and given control port disagree, overwriting config", "config", config.ControlPort, "cli-given", controlPort16)
@@ -248,7 +249,6 @@ func getOrGenerateConfig(file string) (*Config, error) {
 	var c *Config
 
 	data, err := os.ReadFile(file)
-
 	if err != nil {
 		if os.IsNotExist(err) {
 			slog.Info("config file does not exist, generating new config...", "file", file)
@@ -292,7 +292,7 @@ func writeConfig(c *Config, file string) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(file, jsonData, 0644); err != nil {
+	if err := os.WriteFile(file, jsonData, 0o644); err != nil {
 		return fmt.Errorf("failed to write config to file: %w", err)
 	}
 

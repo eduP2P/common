@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/ifaces"
-	"github.com/edup2p/common/types/key"
 	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/key"
 )
 
 // Engine is the main and most high-level object for any client implementation.
@@ -325,7 +326,6 @@ func (e *Engine) getNodePriv() *key.NodePrivate {
 func (e *Engine) getExtConn() types.UDPConn {
 	if e.extBind == nil || e.extBind.Closed {
 		conn, err := e.bindExt()
-
 		if err != nil {
 			panic(fmt.Sprintf("could not bind ext: %s", err))
 		}

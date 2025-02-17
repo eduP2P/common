@@ -2,6 +2,13 @@ package extwg
 
 import (
 	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
+	"runtime"
+	"strings"
+	"sync"
+
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
@@ -9,12 +16,6 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
-	"log/slog"
-	"net"
-	"net/netip"
-	"runtime"
-	"strings"
-	"sync"
 )
 
 // A wireguard configurator by the help of wgtools shell commands.
@@ -130,7 +131,6 @@ func (w *WGCtrl) Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefi
 
 	var device *wgtypes.Device
 	device, err = w.client.Device(w.name)
-
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,6 @@ func (w *WGCtrl) rebindMapping(m *mapping) error {
 
 func (w *WGCtrl) bindLocal() *mapping {
 	conn, err := w.getWGConn(nil)
-
 	if err != nil {
 		panic(fmt.Sprintf("error when first binding to wgport: %s", err))
 	}

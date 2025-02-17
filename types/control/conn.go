@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/msgcontrol"
 	"io"
 	"log/slog"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/msgcontrol"
 )
 
 type Conn struct {
@@ -37,7 +38,6 @@ func NewConn(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter) *Con
 }
 
 func (c *Conn) UnmarshalInto(data []byte, to msgcontrol.ControlMessage) error {
-
 	if err := json.Unmarshal(data, to); err != nil {
 		return fmt.Errorf("failed to unmarshal data: %w", err)
 	}
@@ -50,7 +50,6 @@ func (c *Conn) Expect(to msgcontrol.ControlMessage, ttfbTimeout time.Duration) e
 	defer c.readMutex.Unlock()
 
 	msgTyp, data, err := c.readRawMessageLocked(ttfbTimeout)
-
 	if err != nil {
 		return fmt.Errorf("failed reading message: %w", err)
 	}

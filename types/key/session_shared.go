@@ -2,6 +2,7 @@ package key
 
 import (
 	"crypto/subtle"
+
 	"github.com/edup2p/common/types"
 	"golang.org/x/crypto/nacl/box"
 )

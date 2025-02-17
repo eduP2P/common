@@ -1,11 +1,12 @@
 package msgactor
 
 import (
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/relay"
-	"net/netip"
-	"time"
 )
 
 // Messages

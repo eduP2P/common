@@ -2,14 +2,15 @@ package peerstate
 
 import (
 	"context"
+	"log/slog"
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
-	"log/slog"
-	"net/netip"
-	"time"
 )
 
 const (
@@ -79,7 +80,6 @@ func (sc *StateCommon) ackPongDirect(_ netip.AddrPort, sess key.SessionPublic, p
 
 // TODO add bool here and checks by callers
 func (sc *StateCommon) ackPongRelay(_ int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
-
 	// Relay pongs should come in response to relay pings, note if it is different.
 	sent, ok := sc.tm.Pings()[pong.TxID]
 
@@ -108,7 +108,6 @@ func (sc *StateCommon) ackPongRelay(_ int64, node key.NodePublic, sess key.Sessi
 	// TODO more checks? (permissive, but log)
 
 	delete(sc.tm.Pings(), pong.TxID)
-
 }
 
 func (sc *StateCommon) getPeerInfo() *stage.PeerInfo {

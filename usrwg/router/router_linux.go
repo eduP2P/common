@@ -2,14 +2,14 @@ package router
 
 import (
 	"fmt"
-	"golang.zx2c4.com/wireguard/tun"
 	"log/slog"
 	"net/netip"
+
+	"golang.zx2c4.com/wireguard/tun"
 )
 
 func NewRouter(device tun.Device) (Router, error) {
 	name, err := device.Name()
-
 	if err != nil {
 		return nil, err
 	}

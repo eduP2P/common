@@ -2,10 +2,11 @@ package actors
 
 import (
 	"fmt"
+	"slices"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
-	"slices"
 )
 
 // SessionManager receives frames from routers and decrypts them,
@@ -120,7 +121,6 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msgsess.ClearMessage, 
 	}
 
 	sMsg, err := msgsess.ParseSessionMessage(clearBytes)
-
 	if err != nil {
 		return nil, fmt.Errorf("could not parse session message: %s", err)
 	}

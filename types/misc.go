@@ -6,10 +6,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"golang.org/x/exp/maps"
 	"log/slog"
 	"net/netip"
 	"strings"
+
+	"golang.org/x/exp/maps"
 )
 
 // Incomparable is a zero-width incomparable type. If added as the

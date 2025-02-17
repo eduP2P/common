@@ -3,15 +3,16 @@ package toversok
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/netip"
+	"sync"
+
 	"github.com/edup2p/common/toversok/actors"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
-	"log/slog"
-	"net/netip"
-	"sync"
 )
 
 // Session represents one single session; a session key is generated here, and used inside a Stage

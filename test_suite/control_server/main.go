@@ -67,7 +67,7 @@ func main() {
 		Addr:    *addr,
 		Handler: mux,
 		// TODO
-		//ErrorLog: slog.NewLogLogger(),
+		// ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -366,14 +366,14 @@ func writeNewConfig() Config {
 }
 
 func writeConfig(cfg Config, path string) {
-	if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		log.Fatal(err)
 	}
 	b, err := json.MarshalIndent(cfg, "", "\t")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile(path, b, 0600); err != nil {
+	if err := os.WriteFile(path, b, 0o600); err != nil {
 		log.Fatal(err)
 	}
 }

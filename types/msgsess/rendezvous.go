@@ -2,9 +2,10 @@ package msgsess
 
 import (
 	"fmt"
-	"github.com/edup2p/common/types"
 	"net/netip"
 	"slices"
+
+	"github.com/edup2p/common/types"
 )
 
 type Rendezvous struct {

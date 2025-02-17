@@ -1,9 +1,10 @@
 package peerstate
 
 import (
+	"net/netip"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
-	"net/netip"
 )
 
 // This state pattern was inspired by https://refactoring.guru/design-patterns/state/go/example

@@ -3,6 +3,14 @@ package actors
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"net"
+	"net/netip"
+	"reflect"
+	"slices"
+	"sync"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
@@ -11,13 +19,6 @@ import (
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/types/stage"
 	"golang.org/x/exp/maps"
-	"log/slog"
-	"net"
-	"net/netip"
-	"reflect"
-	"slices"
-	"sync"
-	"time"
 )
 
 type OutConnActor interface {

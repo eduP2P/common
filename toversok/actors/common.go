@@ -2,8 +2,9 @@ package actors
 
 import (
 	"context"
-	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
+
+	"github.com/edup2p/common/types/msgactor"
 )
 
 type ActorCommon struct {

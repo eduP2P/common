@@ -3,6 +3,7 @@ package key
 import (
 	"encoding/hex"
 	"fmt"
+
 	"go4.org/mem"
 )
 

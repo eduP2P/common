@@ -1,10 +1,11 @@
 package ifaces
 
 import (
+	"net/netip"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
-	"net/netip"
 )
 
 // ControlCallbacks are the possible updates that the control server wishes to inform the client about.

@@ -1,12 +1,13 @@
 package ifaces
 
 import (
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
-	"net/netip"
-	"time"
 )
 
 type Actor interface {

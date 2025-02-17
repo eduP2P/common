@@ -6,17 +6,18 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgcontrol"
-	"github.com/edup2p/common/types/relay"
-	stunserver "github.com/edup2p/common/types/stun"
 	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
+	"github.com/edup2p/common/types/relay"
+	stunserver "github.com/edup2p/common/types/stun"
 )
 
 type Server struct {
@@ -147,13 +148,11 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 		// TODO set deadline on read
 
 		clientHello, logon, err := s.handleLogon(cc)
-
 		if err != nil {
 			return fmt.Errorf("handle logon: %w", err)
 		}
 
 		sess, resumed, err := s.ReEstablishOrMakeSession(cc, clientHello.ClientNodePub, logon.SessKey, logon.ResumeSessionID)
-
 		if err != nil {
 			return s.doReject(cc, sess, err)
 		}
@@ -200,7 +199,7 @@ func (s *Server) Accept(ctx context.Context, mc types.MetaConn, brw *bufio.ReadW
 func (s *Server) handleLogon(cc *Conn) (*msgcontrol.ClientHello, *msgcontrol.Logon, error) {
 	// TODO set deadline on read
 
-	var clientHello = new(msgcontrol.ClientHello)
+	clientHello := new(msgcontrol.ClientHello)
 	if err := cc.Expect(clientHello, HandshakeReceiveTimeout); err != nil {
 		return nil, nil, fmt.Errorf("error when receiving clienthello: %w", err)
 	}
@@ -248,7 +247,6 @@ func (s *Server) handleLogon(cc *Conn) (*msgcontrol.ClientHello, *msgcontrol.Log
 }
 
 func (s *Server) doReject(cc *Conn, sess *ServerSession, err error) error {
-
 	reject := &msgcontrol.LogonReject{}
 
 	switch {
@@ -301,7 +299,7 @@ func NewServer(privKey key.ControlPrivate, relays []relay.Information) *Server {
 		sessLock:   sync.RWMutex{},
 		sessByNode: make(map[key.NodePublic]*ServerSession),
 		sessByID:   make(map[string]*ServerSession),
-		//getIPs:   getIPs,
+		// getIPs:   getIPs,
 		relays:       relays,
 		vGraph:       NewEdgeGraph(),
 		pendingLock:  sync.Mutex{},
@@ -493,7 +491,6 @@ func (s *Server) RemoveSession(sess *ServerSession) {
 
 			return nil
 		})
-
 		if err != nil {
 			slog.Error("failed to remove sessions", "err", err)
 		}

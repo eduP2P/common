@@ -5,12 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgcontrol"
 	"log/slog"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 )
 
 type Client struct {
@@ -52,7 +53,6 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 }
 
 func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) error {
-
 	// TODO
 	//  1. send ClientHello
 	//  2. expect ServerHello

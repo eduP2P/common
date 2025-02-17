@@ -5,14 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgsess"
 	"io"
 	"log/slog"
 	"math/rand"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 // ServerPacket is a transient packet type handled by the server
@@ -113,7 +114,6 @@ func (sc *ServerClient) RunReceiver() {
 
 	for {
 		frType, frLen, err := readFrameHeader(sc.buffReader)
-
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				sc.ccc(fmt.Errorf("reader: read EOF"))
@@ -147,7 +147,6 @@ func (sc *ServerClient) RunReceiver() {
 }
 
 func (sc *ServerClient) handleSend(frLen uint32) error {
-
 	dstKey, contents, err := sc.readSend(frLen)
 	if err != nil {
 		return err

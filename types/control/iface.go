@@ -2,12 +2,15 @@ package control
 
 import (
 	"errors"
-	"github.com/edup2p/common/types/key"
 	"net/netip"
+
+	"github.com/edup2p/common/types/key"
 )
 
-type ClientID key.NodePublic
-type SessID string
+type (
+	ClientID key.NodePublic
+	SessID   string
+)
 
 var ErrSessionDoesNotExist = errors.New("session does not exist")
 

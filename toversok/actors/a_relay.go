@@ -3,6 +3,10 @@ package actors
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"runtime"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/dial"
 	"github.com/edup2p/common/types/ifaces"
@@ -11,9 +15,6 @@ import (
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/relay"
 	"github.com/edup2p/common/types/relay/relayhttp"
-	"log/slog"
-	"runtime"
-	"time"
 )
 
 // RestartableRelayConn is a Relay connection that will automatically reconnect,
@@ -364,7 +365,6 @@ func (rm *RelayManager) Run() {
 			rm.s.RRouter.Push(frame)
 		}
 	}
-
 }
 
 func (rm *RelayManager) Close() {
@@ -373,7 +373,7 @@ func (rm *RelayManager) Close() {
 
 func (rm *RelayManager) selectRelay(latencies map[int64]time.Duration) int64 {
 	var srid int64
-	var slat = 60 * time.Second
+	slat := 60 * time.Second
 
 	L(rm).Debug("selectRelay: starting latency check")
 

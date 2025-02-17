@@ -105,7 +105,6 @@ func (cc *ChannelConn) getOut(d time.Duration) (pkt []byte) { // nolint:unused
 //
 // Will return false on timeout.
 func (cc *ChannelConn) putIn(pkt []byte, d time.Duration) (ok bool) {
-
 	select {
 	case cc.incoming <- pkt:
 		ok = true

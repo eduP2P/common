@@ -3,12 +3,13 @@ package actors
 import (
 	"context"
 	"errors"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgactor"
 	"net"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgactor"
 )
 
 type OutConn struct {

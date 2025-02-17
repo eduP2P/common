@@ -2,9 +2,10 @@ package control
 
 import (
 	"errors"
+	"sync"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
-	"sync"
 )
 
 type EdgeGraph struct {

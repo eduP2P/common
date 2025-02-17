@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
 	"net"
 	"net/netip"
 	"slices"
 	"time"
+
+	"github.com/edup2p/common/types"
 )
 
 type RecvFrame struct {
@@ -50,7 +51,7 @@ func (r *SockRecv) Run() {
 		return
 	}
 
-	var buf = make([]byte, 1<<16)
+	buf := make([]byte, 1<<16)
 
 	for {
 		if context.Cause(r.ctx) != nil {

@@ -2,15 +2,16 @@ package actors
 
 import (
 	"context"
+	"log/slog"
+	"net/netip"
+	"runtime"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"golang.org/x/exp/maps"
-	"log/slog"
-	"net/netip"
-	"runtime"
 )
 
 type directWriteRequest struct {

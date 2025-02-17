@@ -3,9 +3,10 @@ package msgsess
 import (
 	"errors"
 	"fmt"
+	"net/netip"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
-	"net/netip"
 )
 
 // Session Wire header:

@@ -1,12 +1,13 @@
 package main
 
 import (
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/stun"
 	"log"
 	"net"
 	"net/netip"
 	"os"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/stun"
 )
 
 func main() {

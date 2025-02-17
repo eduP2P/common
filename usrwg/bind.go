@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"golang.org/x/exp/maps"
-	"golang.zx2c4.com/wireguard/conn"
 	"log/slog"
 	"reflect"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"golang.org/x/exp/maps"
+	"golang.zx2c4.com/wireguard/conn"
 )
 
 type ToverSokBind struct {
@@ -164,7 +165,7 @@ func (b *ToverSokBind) waitForValueFromConns() ([]byte, *endpoint) {
 }
 
 func (b *ToverSokBind) buildConnsSelectCaseMap() map[key.NodePublic]reflect.SelectCase {
-	var cases = make(map[key.NodePublic]reflect.SelectCase)
+	cases := make(map[key.NodePublic]reflect.SelectCase)
 
 	b.connMu.RLock()
 	defer b.connMu.RUnlock()
@@ -220,7 +221,6 @@ func (b *ToverSokBind) Send(bufs [][]byte, ep conn.Endpoint) error {
 
 func (b *ToverSokBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	np, err := key.UnmarshalPublic(s)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal nodepublic: %w", err)
 	}

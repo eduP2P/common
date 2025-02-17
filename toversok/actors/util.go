@@ -3,13 +3,14 @@ package actors
 import (
 	"context"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/ifaces"
-	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
 	"net/netip"
 	"sort"
 	"sync/atomic"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/msgactor"
 )
 
 // RunCheck ensures that only one instance of the actor is running at all times.

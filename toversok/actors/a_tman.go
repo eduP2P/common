@@ -1,6 +1,10 @@
 package actors
 
 import (
+	"maps"
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/toversok/actors/peerstate"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
@@ -8,10 +12,6 @@ import (
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
-	maps2 "golang.org/x/exp/maps"
-	"maps"
-	"net/netip"
-	"time"
 )
 
 type TrafficManager struct {
@@ -152,7 +152,7 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 func (tm *TrafficManager) DoStateTick() {
 	// We explicitly range over a slice of the keys we already got,
 	// since golang likes to complain when we mutate while we iterate.
-	for _, peer := range maps2.Keys(tm.peerState) {
+	for peer := range maps.Keys(tm.peerState) {
 		tm.forState(peer, func(s peerstate.PeerState) peerstate.PeerState {
 			return s.OnTick()
 		})

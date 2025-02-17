@@ -1,10 +1,11 @@
 package msgcontrol
 
 import (
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/relay"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
 )
 
 type ControlMessageType byte

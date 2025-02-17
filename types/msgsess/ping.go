@@ -3,8 +3,9 @@ package msgsess
 import (
 	crand "crypto/rand"
 	"fmt"
-	"github.com/edup2p/common/types/key"
 	"slices"
+
+	"github.com/edup2p/common/types/key"
 )
 
 type TxID [12]byte

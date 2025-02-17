@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/netip"
+	"sync"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/control"
 	"github.com/edup2p/common/types/control/controlhttp"
@@ -12,10 +17,6 @@ import (
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"golang.org/x/exp/maps"
-	"log/slog"
-	"net/netip"
-	"sync"
-	"time"
 )
 
 type DefaultControlHost struct {
@@ -107,7 +108,6 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 }
 
 func (rcs *ResumableControlSession) Run() {
-
 	go func() {
 		<-rcs.ctx.Done()
 
@@ -130,7 +130,6 @@ func (rcs *ResumableControlSession) Run() {
 			}
 
 			err := rcs.FlushOut()
-
 			if err != nil {
 				slog.Warn("control connection errored while flushing out", "err", err)
 
@@ -176,7 +175,7 @@ func (rcs *ResumableControlSession) Run() {
 
 		absenceStart := time.Now()
 
-		var session = &rcs.session
+		session := &rcs.session
 		var err error
 		var client *control.Client
 
@@ -193,8 +192,8 @@ func (rcs *ResumableControlSession) Run() {
 				clientCtx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session, nil,
 			)
 
-			var r = msgcontrol.NoRetryStrategy
-			var retry = &r
+			r := msgcontrol.NoRetryStrategy
+			retry := &r
 
 			if err != nil {
 				if errors.As(err, retry) {
@@ -270,7 +269,6 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 	default:
 		return fmt.Errorf("got unexpected message from control: %v", msg)
 	}
-
 }
 
 func (rcs *ResumableControlSession) CallbacksReady() bool {

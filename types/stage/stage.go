@@ -2,9 +2,10 @@
 package stage
 
 import (
-	"github.com/edup2p/common/types/key"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types/key"
 )
 
 type SentPing struct {

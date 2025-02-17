@@ -7,6 +7,17 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log"
+	"log/slog"
+	"math"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"runtime/pprof"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/abiosoft/ishell/v2"
 	"github.com/edup2p/common/extwg"
 	"github.com/edup2p/common/toversok"
@@ -19,16 +30,6 @@ import (
 	"github.com/edup2p/common/usrwg"
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/wgctrl"
-	"log"
-	"log/slog"
-	"math"
-	"net/netip"
-	"os"
-	"path/filepath"
-	"runtime/pprof"
-	"strconv"
-	"strings"
-	"sync"
 )
 
 var (
@@ -239,7 +240,6 @@ func getOrGenerateKey(file string, c *ishell.Context) (key.NodePrivate, error) {
 	}
 
 	data, err := os.ReadFile(file)
-
 	if err != nil {
 		if os.IsNotExist(err) {
 			c.Println(fmt.Sprintf("%s does not exist, generating new key...", file))
@@ -251,7 +251,7 @@ func getOrGenerateKey(file string, c *ishell.Context) (key.NodePrivate, error) {
 				return k, fmt.Errorf("failed to marshal private key: %w", err)
 			}
 
-			if err := os.WriteFile(file, jsonData, 0644); err != nil {
+			if err := os.WriteFile(file, jsonData, 0o644); err != nil {
 				return k, fmt.Errorf("failed to write private key to file: %w", err)
 			}
 
@@ -536,10 +536,10 @@ func fcCmd() *ishell.Cmd {
 				ID:     id,
 				Key:    *relayKey,
 				Domain: *domain,
-				//IPs:             gonull.Nullable[[]netip.Addr]{},
-				//STUNPort:        gonull.Nullable[uint16]{},
-				//HTTPSPort:       gonull.Nullable[uint16]{},
-				//HTTPPort:        gonull.Nullable[uint16]{},
+				// IPs:             gonull.Nullable[[]netip.Addr]{},
+				// STUNPort:        gonull.Nullable[uint16]{},
+				// HTTPSPort:       gonull.Nullable[uint16]{},
+				// HTTPPort:        gonull.Nullable[uint16]{},
 				IsInsecure: *insecure,
 			}
 
@@ -754,7 +754,6 @@ func wgCmd() *ishell.Cmd {
 }
 
 func enCmd() *ishell.Cmd {
-
 	c := &ishell.Cmd{
 		Name: "en",
 		Help: "toversok engine and subcommands",

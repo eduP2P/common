@@ -131,7 +131,7 @@ func (em *EndpointManager) startSTUN() {
 
 	em.collectedResponse = make([]stunResponse, 0)
 
-	var stunReq = &msgactor.DRouterPushSTUN{Packets: make(map[netip.AddrPort][]byte)}
+	stunReq := &msgactor.DRouterPushSTUN{Packets: make(map[netip.AddrPort][]byte)}
 
 	em.stunRequests = make(map[netip.AddrPort]stunRequest)
 

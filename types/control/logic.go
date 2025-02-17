@@ -2,6 +2,7 @@ package control
 
 import (
 	"errors"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 )

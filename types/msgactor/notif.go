@@ -1,8 +1,9 @@
 package msgactor
 
 import (
-	"github.com/edup2p/common/types/key"
 	"net/netip"
+
+	"github.com/edup2p/common/types/key"
 )
 
 type PeerState byte

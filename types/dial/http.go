@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/edup2p/common/types"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/edup2p/common/types"
 )
 
 // getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.NodePublic
@@ -55,7 +56,6 @@ func HTTP[T any](ctx context.Context, opts Opts, url, protocol string, makeClien
 	// At this point, we're speaking the protocol with the server.
 
 	c, err := makeClient(ctx, netConn, brw, opts)
-
 	if err != nil {
 		netConn.Close()
 		return nil, fmt.Errorf("failed to establish client: %w", err)

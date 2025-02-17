@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgsess"
 	"io"
 	"log/slog"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 const (
@@ -187,7 +188,6 @@ func (c *Client) recvServerKey() error {
 	var buf [32]byte
 
 	_, err = io.ReadFull(c.reader, buf[:])
-
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (c *Client) recvServerInfo() (*ServerInfo, error) {
 		return nil, errPacketTooLarge
 	}
 
-	var msgbox = make([]byte, frLen)
+	msgbox := make([]byte, frLen)
 
 	if _, err = io.ReadFull(c.reader, msgbox); err != nil {
 		return nil, err

@@ -1,11 +1,12 @@
 package peerstate
 
 import (
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
-	"net/netip"
-	"time"
 )
 
 // EstRendezGot is a transient state that immediately transitions to EstRendezAck after the first OnTick

@@ -2,12 +2,13 @@ package peerstate
 
 import (
 	"context"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"slices"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 const EstablishedPingInterval = time.Second * 2

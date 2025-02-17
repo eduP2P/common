@@ -13,7 +13,6 @@ import (
 // WithTLS does a "full" dial, including TLS wrapping and CN checking
 func WithTLS(ctx context.Context, opts Opts) (net.Conn, error) {
 	netConn, err := TCP(ctx, opts)
-
 	if err != nil {
 		return nil, fmt.Errorf("tcp dial failed: %w", err)
 	}

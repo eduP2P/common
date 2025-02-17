@@ -2,11 +2,12 @@ package peerstate
 
 import (
 	"context"
+	"log/slog"
+	"net/netip"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
-	"log/slog"
-	"net/netip"
 )
 
 // cascadeDirect makes it so that first we call the default "tick" function of a peer's state,

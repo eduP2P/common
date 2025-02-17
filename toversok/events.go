@@ -1,10 +1,11 @@
 package toversok
 
 import (
+	"net/netip"
+
 	"github.com/LukaGiorgadze/gonull"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/relay"
-	"net/netip"
 )
 
 // TODO DEPRECATED, should be refactored into using fake control client and such

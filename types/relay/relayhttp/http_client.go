@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/dial"
 	"github.com/edup2p/common/types/key"

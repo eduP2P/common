@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/edup2p/common/types"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"strings"
+
+	"github.com/edup2p/common/types"
 )
 
 type ProtocolServer interface {
