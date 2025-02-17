@@ -14,7 +14,7 @@ type ControlCallbacks interface {
 	AddPeer(
 		peer key.NodePublic,
 		homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic,
-		ip4 netip.Addr, ip6 netip.Addr,
+		ip4, ip6 netip.Addr,
 		prop msgcontrol.Properties,
 	) error
 

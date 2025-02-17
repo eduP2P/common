@@ -264,7 +264,7 @@ func (s *Stage) reapableConnsLocked() []key.NodePublic {
 	return peers
 }
 
-func (s *Stage) syncableConnsLocked() (added []key.NodePublic, deleted []key.NodePublic) {
+func (s *Stage) syncableConnsLocked() (added, deleted []key.NodePublic) {
 	piPeers := maps.Keys(s.peerInfo)
 	connPeers := types.SetUnion(maps.Keys(s.inConn), maps.Keys(s.outConn))
 
@@ -462,7 +462,7 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr, _ msgcontrol.Properties) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _, _ netip.Addr, _ msgcontrol.Properties) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {

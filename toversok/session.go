@@ -133,7 +133,7 @@ func (s *Session) triggerQuarantineUpdate() {
 
 // CONTROL CALLBACKS
 
-func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr, prop msgcontrol.Properties) error {
+func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4, ip6 netip.Addr, prop msgcontrol.Properties) error {
 	s.registerPeerAddrs(peer, ip4, ip6)
 
 	if prop.Quarantine {

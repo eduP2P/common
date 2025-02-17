@@ -88,7 +88,7 @@ func (s *Server) GetConnectedClients() (map[SessID]ClientID, error) {
 	return retMap, nil
 }
 
-func (s *Server) UpsertVisibilityPair(id ClientID, id2 ClientID, pair VisibilityPair) error {
+func (s *Server) UpsertVisibilityPair(id, id2 ClientID, pair VisibilityPair) error {
 	s.sessLock.RLock()
 	defer s.sessLock.RUnlock()
 
@@ -169,7 +169,7 @@ func (s *Server) UpsertMultiVisibilityPair(id ClientID, m map[ClientID]Visibilit
 	return nil
 }
 
-func (s *Server) RemoveVisibilityPair(from ClientID, to ClientID) error {
+func (s *Server) RemoveVisibilityPair(from, to ClientID) error {
 	s.sessLock.RLock()
 	defer s.sessLock.RUnlock()
 

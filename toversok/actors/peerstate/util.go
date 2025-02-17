@@ -45,7 +45,7 @@ func L(s PeerState) *slog.Logger {
 	return slog.With("peer", s.Peer().Debug(), "state", s.Name())
 }
 
-func LogTransition(from PeerState, to PeerState) PeerState {
+func LogTransition(from, to PeerState) PeerState {
 	L(from).Log(context.Background(), types.LevelTrace, "transitioning state", "to-state", to.Name())
 
 	return to
