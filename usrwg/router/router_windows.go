@@ -869,7 +869,7 @@ func (ft *firewallTweaker) doAsyncSet() {
 		needClear := !ft.known || len(ft.lastLocal) > 0 || len(val) == 0
 		ft.mu.Unlock()
 
-		err := ft.doSet(val, needclearMsg)
+		err := ft.doSet(val, needClear)
 		if err != nil {
 			slog.Warn("firewall: set failed: %v", err)
 		}
