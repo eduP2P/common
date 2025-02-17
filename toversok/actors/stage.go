@@ -3,6 +3,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"github.com/edup2p/common/types/relay/relayhttp"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -44,8 +45,14 @@ func MakeStage(
 	bindExt func() types.UDPConn,
 	bindLocal func(peer key.NodePublic) types.UDPConn,
 	controlSession ifaces.ControlInterface,
+
+	dialRelayFunc relayhttp.RelayDialFunc,
 ) ifaces.Stage {
 	ctx := context.WithoutCancel(pCtx)
+
+	if dialRelayFunc == nil {
+		dialRelayFunc = relayhttp.Dial
+	}
 
 	s := &Stage{
 		Ctx: ctx,
@@ -65,6 +72,8 @@ func MakeStage(
 		ext:       bindExt(),
 		bindLocal: bindLocal,
 		control:   controlSession,
+
+		dialRelayFunc: dialRelayFunc,
 	}
 
 	s.DMan = s.makeDM(s.ext)
@@ -128,6 +137,8 @@ type Stage struct {
 
 	ext       types.UDPConn
 	bindLocal func(peer key.NodePublic) types.UDPConn
+
+	dialRelayFunc relayhttp.RelayDialFunc
 }
 
 // Start kicks off goroutines for the stage and returns

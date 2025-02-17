@@ -23,10 +23,12 @@ func makeRelayURL(opts dial.Opts) string {
 	return fmt.Sprintf("%s://%s/relay", proto, domain)
 }
 
-func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, expectKey key.NodePublic) (*relay.Client, error) {
+type RelayDialFunc func(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, expectKey key.NodePublic) (relay.Client, error)
+
+func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, expectKey key.NodePublic) (relay.Client, error) {
 	opts.SetDefaults()
 
-	c, err := dial.HTTP(ctx, opts, makeRelayURL(opts), relay.UpgradeProtocol, func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*relay.Client, error) {
+	c, err := dial.HTTP(ctx, opts, makeRelayURL(opts), relay.UpgradeProtocol, func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*relay.HTTPClient, error) {
 		return relay.EstablishClient(parentCtx, mc, brw, opts.EstablishTimeout, getPriv)
 	})
 	if err != nil {

@@ -14,7 +14,6 @@ import (
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/relay"
-	"github.com/edup2p/common/types/relay/relayhttp"
 )
 
 // RestartableRelayConn is a Relay connection that will automatically reconnect,
@@ -26,7 +25,7 @@ type RestartableRelayConn struct {
 
 	config relay.Information
 
-	client *relay.Client
+	client relay.Client
 
 	stay bool
 
@@ -120,7 +119,7 @@ func (c *RestartableRelayConn) establish() (success bool) {
 	}
 
 	var err error
-	c.client, err = relayhttp.Dial(c.ctx, dial.Opts{
+	c.client, err = c.man.s.dialRelayFunc(c.ctx, dial.Opts{
 		Domain:       c.config.Domain,
 		Addrs:        types.SliceOrNil(c.config.IPs),
 		Port:         port,
@@ -138,8 +137,7 @@ func (c *RestartableRelayConn) establish() (success bool) {
 		return false
 	}
 
-	go c.client.RunSend()
-	go c.client.RunReceive()
+	go c.client.Run()
 
 	c.L().Debug("established")
 

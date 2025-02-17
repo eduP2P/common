@@ -74,7 +74,7 @@ func SetupSession(
 		return nil, err
 	}
 
-	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, cc)
+	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, cc, nil)
 
 	cc.InstallCallbacks(sess)
 
