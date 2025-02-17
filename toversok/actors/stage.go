@@ -3,7 +3,6 @@ package actors
 import (
 	"context"
 	"errors"
-	"github.com/edup2p/common/types/relay/relayhttp"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -18,6 +17,7 @@ import (
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
+	"github.com/edup2p/common/types/relay/relayhttp"
 	"github.com/edup2p/common/types/stage"
 	"golang.org/x/exp/maps"
 )
