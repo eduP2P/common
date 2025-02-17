@@ -12,6 +12,7 @@ import (
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
+	xmaps "golang.org/x/exp/maps"
 )
 
 type TrafficManager struct {
@@ -152,7 +153,7 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 func (tm *TrafficManager) DoStateTick() {
 	// We explicitly range over a slice of the keys we already got,
 	// since golang likes to complain when we mutate while we iterate.
-	for peer := range maps.Keys(tm.peerState) {
+	for _, peer := range xmaps.Keys(tm.peerState) {
 		tm.forState(peer, func(s peerstate.PeerState) peerstate.PeerState {
 			return s.OnTick()
 		})
