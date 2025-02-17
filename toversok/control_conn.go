@@ -67,7 +67,8 @@ type ResumableControlSession struct {
 	// In to local
 	msgInQueue []msgcontrol.ControlMessage
 
-	callbacks ifaces.ControlCallbacks
+	callbackLock sync.RWMutex
+	callbacks    ifaces.ControlCallbacks
 }
 
 func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.ControlPublic, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, logon types.LogonCallback) (*ResumableControlSession, error) {
@@ -239,7 +240,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 	switch m := msg.(type) {
 	case *msgcontrol.PeerAddition:
 		rcs.knownPeers[m.PubKey] = true
-		return rcs.callbacks.AddPeer(
+		return rcs.ExpectCallbacks().AddPeer(
 			m.PubKey,
 			m.HomeRelay,
 			m.Endpoints,
@@ -254,7 +255,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 			endpoints = m.Endpoints
 		}
 
-		return rcs.callbacks.UpdatePeer(
+		return rcs.ExpectCallbacks().UpdatePeer(
 			m.PubKey,
 			m.HomeRelay,
 			endpoints,
@@ -263,15 +264,18 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 		)
 	case *msgcontrol.PeerRemove:
 		delete(rcs.knownPeers, m.PubKey)
-		return rcs.callbacks.RemovePeer(m.PubKey)
+		return rcs.ExpectCallbacks().RemovePeer(m.PubKey)
 	case *msgcontrol.RelayUpdate:
-		return rcs.callbacks.UpdateRelays(m.Relays)
+		return rcs.ExpectCallbacks().UpdateRelays(m.Relays)
 	default:
 		return fmt.Errorf("got unexpected message from control: %v", msg)
 	}
 }
 
 func (rcs *ResumableControlSession) CallbacksReady() bool {
+	rcs.callbackLock.RLock()
+	defer rcs.callbackLock.RUnlock()
+
 	return rcs.callbacks != nil
 }
 
@@ -333,7 +337,21 @@ func (rcs *ResumableControlSession) IPv6() netip.Prefix {
 	return rcs.ipv6
 }
 
+func (rcs *ResumableControlSession) ExpectCallbacks() ifaces.ControlCallbacks {
+	rcs.callbackLock.RLock()
+	defer rcs.callbackLock.RUnlock()
+
+	if rcs.callbacks == nil {
+		panic("expected callbacks to be ready at this stage")
+	}
+
+	return rcs.callbacks
+}
+
 func (rcs *ResumableControlSession) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
+	rcs.callbackLock.Lock()
+	defer rcs.callbackLock.Unlock()
+
 	rcs.callbacks = callbacks
 }
 
