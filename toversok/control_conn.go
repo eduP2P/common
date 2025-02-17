@@ -72,8 +72,6 @@ type ResumableControlSession struct {
 }
 
 func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.ControlPublic, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, logon types.LogonCallback) (*ResumableControlSession, error) {
-	// TODO authCallback func(url string)
-
 	rcsCtx, rcsCcc := context.WithCancelCause(ctx)
 
 	clientCtx := context.WithoutCancel(rcsCtx)

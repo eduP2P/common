@@ -61,15 +61,6 @@ type stunResponse struct {
 	latency time.Duration
 }
 
-// TODO
-//  - receive relay info
-//  - do STUN requests to each and resolve remote endpoints
-//    - maybe determine when symmetric nat / "varies" is happening
-//  - do latency determination
-//    - inform relay manager that results are ready
-//    - relay manager switches home relay and informs stage of that decision
-//  - collect local endpoints
-
 // TODO future:
 //  - UPnP? Other stuff?
 
@@ -280,8 +271,6 @@ func (em *EndpointManager) collectRelaySTUNEndpoints() map[netip.AddrPort]int64 
 }
 
 func (em *EndpointManager) getLocalEndpoints() {
-	// TODO disregard own address, obviously
-
 	localEndpoints := em.collectLocalEndpoints()
 
 	L(em).Debug("local endpoints collected", "endpoints", localEndpoints)

@@ -135,8 +135,8 @@ func (e *Established) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgses
 		e.ackPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
 
+	// TODO maybe re-establishment logic?
 	// case *msg.Rendezvous:
-	//  TODO maybe re-establishment logic?
 	default:
 		L(e).Debug("ignoring relay session message",
 			"relay", relay,

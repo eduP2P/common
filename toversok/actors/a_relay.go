@@ -490,7 +490,11 @@ func (rr *RelayRouter) Run() {
 			in := rr.s.InConnFor(frame.SrcPeer)
 
 			if in == nil {
-				// todo log? metric?
+				L(rr).Debug(
+					"received incoming relay frame from peer that we don't know about (yet)",
+					"from-peer", frame.SrcPeer.Debug(),
+					"from-relay", frame.SrcRelay,
+				)
 				continue
 			}
 

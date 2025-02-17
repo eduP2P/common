@@ -395,6 +395,7 @@ func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
 
 	var endpoints []netip.AddrPort
 
+	// Filter own endpoint, and also append localport
 	for _, addr := range addrs {
 		if s.control.IPv4().Contains(addr) || s.control.IPv6().Contains(addr) {
 			continue

@@ -54,22 +54,39 @@ func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongDirect(_ netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
+func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
 	sent, ok := sc.tm.Pings()[pong.TxID]
 	if !ok {
-		// TODO log: Got pong for unknown ping
+		slog.Warn(
+			"got pong for unknown ping",
+			"from-ap", ap,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
 	}
 
 	if sent.ToRelay {
-		// TODO log: got direct pong to relay ping
+		slog.Warn(
+			"got direct pong to relay ping",
+			"from-ap", ap,
+			"txid", pong.TxID,
+			"ping-to", sent.To.Debug(),
+			"to-relay", sent.RelayID,
+			"sess", sess,
+		)
 		return
 	}
 
 	if !sc.tm.ValidKeys(sc.peer, sess) {
 		// ?? Somehow the pong is for a valid ping to a node that no longer has this session key?
 		// Might happen between restarts, log and ignore.
-		// TODO log
+		slog.Warn(
+			"received valid pong for unexpected remote session",
+			"from-ap", ap,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
 	}
 
@@ -79,30 +96,63 @@ func (sc *StateCommon) ackPongDirect(_ netip.AddrPort, sess key.SessionPublic, p
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongRelay(_ int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
+func (sc *StateCommon) ackPongRelay(relayID int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
 	// Relay pongs should come in response to relay pings, note if it is different.
 	sent, ok := sc.tm.Pings()[pong.TxID]
 
 	if !ok {
-		// TODO log: Got pong for unknown ping
+		slog.Warn(
+			"got pong for unknown ping",
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
 	}
 
 	if !sent.ToRelay {
-		// TODO log: got relay reply to direct ping
+		slog.Warn(
+			"got relay pong to direct ping",
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"ping-to", sent.To.Debug(),
+			"to-relay", sent.RelayID,
+			"sess", sess,
+		)
 		return
 	}
 
-	if !sc.tm.ValidKeys(node, sess) {
-		// TODO log
+	if node != sent.To {
+		slog.Warn(
+			"received pong to ping (with same TXID) from a different peer than we sent it to, possible collision",
+			"to-peer", sent.To.Debug(),
+			"from-peer", node.Debug(),
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
 	}
 
 	if !sc.tm.ValidKeys(sent.To, sess) {
 		// ?? Somehow the pong is for a valid ping to a node that no longer has this session key?
 		// Might happen between restarts, log and ignore.
-		// TODO log
+		slog.Warn(
+			"received valid pong for unexpected remote session",
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
+	}
+
+	if sent.RelayID != relayID {
+		slog.Debug(
+			"received relay pong to relay ping from other relay, ignoring...",
+			"to-relay", sent.RelayID,
+			"from-relay", relayID,
+			"txid", pong.TxID,
+		)
 	}
 
 	// TODO more checks? (permissive, but log)

@@ -51,8 +51,6 @@ func main() {
 
 	mux.Handle("/control", controlhttp.ServerHandler(cserver.server))
 
-	// TODO below is dup from relayserver main.go; dedup in a common library?
-
 	mux.Handle("/", handleStaticHTML(ToverSokControlDefaultHTML))
 
 	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -66,8 +64,6 @@ func main() {
 	httpsrv := &http.Server{
 		Addr:    *addr,
 		Handler: mux,
-		// TODO
-		// ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -79,8 +75,6 @@ func main() {
 			slog.Error("control: failed to shutdown control server", "error", err)
 		}
 	}()
-
-	// TODO setup TLS with autocert?
 
 	slog.Info("control: serving", "addr", *addr)
 	err := httpsrv.ListenAndServe()
@@ -232,7 +226,6 @@ func findNewIP(ipp netip.Prefix, used func(netip.Addr) bool) (netip.Prefix, neti
 				// we exceeded the boundary, try a back-sweep
 				backwards = true
 			} else {
-				// TODO find better way to deal with this
 				panic("address space exhausted")
 			}
 		}
@@ -383,7 +376,6 @@ func newConfig() Config {
 	return Config{
 		ControlKey: key.NewControlPrivate(),
 
-		//// TODO REPLACE WITH CONFIGURABLE VALUES
 		IP4: netip.MustParsePrefix("10.42.0.0/16"),
 		IP6: netip.MustParsePrefix("fd42:dead:beef::/64"),
 

@@ -28,8 +28,6 @@ type Client struct {
 
 	IPv4 netip.Prefix
 	IPv6 netip.Prefix
-
-	// TODO
 }
 
 func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string, logon types.LogonCallback) (*Client, error) {
@@ -53,14 +51,6 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 }
 
 func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) error {
-	// TODO
-	//  1. send ClientHello
-	//  2. expect ServerHello
-	//  3. send Logon
-	//  4. (optional) expect LogonAuthenticate
-	//    - Allow sending LogonDeviceKey
-	//  4. expect LogonAccept|LogonReject
-
 	if timeout != 0 {
 		if err := c.cc.mc.SetDeadline(time.Now().Add(timeout)); err != nil {
 			return fmt.Errorf("can't set deadline: %w", err)

@@ -105,7 +105,8 @@ func (r *bsdRouter) removeAddr(prefix netip.Prefix) error {
 
 func (r *bsdRouter) addRoute(prefix netip.Prefix) error {
 	net := netipx.PrefixIPNet(prefix)
-	// TODO replace with .Masked()?
+	// TODO replace with (Prefix).Masked()?
+	//   need to figure out what the exact outputs are, and if .Masked does that
 	nip := net.IP.Mask(net.Mask)
 	nstr := fmt.Sprintf("%v/%d", nip, prefix.Bits())
 
@@ -124,7 +125,8 @@ func (r *bsdRouter) addRoute(prefix netip.Prefix) error {
 
 func (r *bsdRouter) removeRoute(prefix netip.Prefix) error {
 	net := netipx.PrefixIPNet(prefix)
-	// TODO replace with .Masked()?
+	// TODO replace with (Prefix).Masked()?
+	//   need to figure out what the exact outputs are, and if .Masked does that
 	nip := net.IP.Mask(net.Mask)
 	nstr := fmt.Sprintf("%v/%d", nip, prefix.Bits())
 	del := "del"

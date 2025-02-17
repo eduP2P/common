@@ -86,8 +86,6 @@ func (s *Server) GetConnectedClients() (map[SessID]ClientID, error) {
 	}
 
 	return retMap, nil
-
-	// todo what do we use the error field for here?
 }
 
 func (s *Server) UpsertVisibilityPair(id ClientID, id2 ClientID, pair VisibilityPair) error {

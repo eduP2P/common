@@ -25,15 +25,12 @@ type publicKey interface {
 	IsZero() bool
 	Debug() string
 	HexString() string
-	// TODO
 }
 
 type privateKey[Pub key] interface {
 	key
 
 	Public() Pub
-
-	// TODO
 }
 
 type canSealTo[To publicKey] interface {

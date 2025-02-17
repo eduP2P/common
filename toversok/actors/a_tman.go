@@ -241,9 +241,20 @@ func (tm *TrafficManager) Close() {
 	tm.ticker.Stop()
 }
 
+const PingReapTimeout = 10 * time.Minute
+
 func (tm *TrafficManager) doPingManagement() {
-	// TODO
-	//  - expire old pings
+	var oldPings []msgsess.TxID
+
+	for txid, ping := range tm.pings {
+		if ping.At.Add(PingReapTimeout).Before(time.Now()) {
+			oldPings = append(oldPings, txid)
+		}
+	}
+
+	for _, txid := range oldPings {
+		delete(tm.pings, txid)
+	}
 }
 
 type StateForState func(state peerstate.PeerState) peerstate.PeerState

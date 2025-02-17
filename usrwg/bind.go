@@ -51,7 +51,6 @@ func (b *ToverSokBind) Close() error {
 	var errs []error
 
 	for _, cc := range b.conns {
-		// TODO log error
 		if err := cc.Close(); err != nil {
 			errs = append(errs, err)
 		}

@@ -79,10 +79,6 @@ func main() {
 		}
 	}()
 
-	// TODO add STUN here
-
-	// TODO continue here
-
 	cfg := loadConfig()
 
 	log.Printf("relay: using public key %s", cfg.PrivateKey.Public().Debug())
@@ -116,8 +112,6 @@ func main() {
 	httpsrv := &http.Server{
 		Addr:    *addr,
 		Handler: mux,
-		// TODO
-		// ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -130,7 +124,7 @@ func main() {
 		}
 	}()
 
-	// TODO setup TLS with autocert
+	// TODO setup TLS with autocert: https://github.com/eduP2P/relay-server/issues/2
 
 	slog.Info("relay: serving", "addr", *addr)
 	err = httpsrv.ListenAndServe()
