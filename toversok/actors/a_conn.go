@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"runtime/debug"
 	"time"
 
 	"github.com/edup2p/common/types"
@@ -56,7 +57,7 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 func (oc *OutConn) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(oc).Error("panicked", "panic", v)
+			L(oc).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			oc.Cancel()
 			bail(oc.ctx, v)
 		}
@@ -218,7 +219,7 @@ func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 func (ic *InConn) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(ic).Error("panicked", "panic", v)
+			L(ic).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			ic.Cancel()
 			ic.Close()
 			bail(ic.ctx, v)

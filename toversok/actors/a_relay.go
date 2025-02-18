@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/edup2p/common/types"
@@ -281,7 +282,7 @@ func (s *Stage) makeRM() *RelayManager {
 func (rm *RelayManager) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(rm).Error("panicked", "panic", v)
+			L(rm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			rm.Cancel()
 			bail(rm.ctx, v)
 		}
@@ -456,7 +457,7 @@ func (rr *RelayRouter) Push(frame ifaces.RelayedPeerFrame) {
 func (rr *RelayRouter) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(rr).Warn("panicked", "error", v)
+			L(rr).Warn("panicked", "error", v, "stack", string(debug.Stack()))
 			rr.Cancel()
 			bail(rr.ctx, v)
 		}
