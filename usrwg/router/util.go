@@ -38,6 +38,8 @@ func prefixesToRemove(newP, currP []netip.Prefix) (remove []netip.Prefix) {
 	return
 }
 
+// nolint:unused
+// used in router_bsd, golangci-lint on linux trips over it
 func inet(p netip.Prefix) string {
 	if p.Addr().Is6() {
 		return "inet6"
@@ -52,6 +54,8 @@ func cmd(args ...string) *exec.Cmd {
 	return exec.Command(args[0], args[1:]...)
 }
 
+// nolint:unused
+// used in router_bsd, golangci-lint on linux trips over it
 func prefixToSingle(prefix netip.Prefix) netip.Prefix {
 	return netip.PrefixFrom(prefix.Addr(), prefix.Addr().BitLen())
 }
