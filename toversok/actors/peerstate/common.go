@@ -2,6 +2,7 @@ package peerstate
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/netip"
 	"time"
@@ -53,8 +54,7 @@ func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess
 	})
 }
 
-// TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
+func (sc *StateCommon) pongDirectValid(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) error {
 	sent, ok := sc.tm.Pings()[pong.TxID]
 	if !ok {
 		slog.Warn(
@@ -63,7 +63,7 @@ func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, 
 			"txid", pong.TxID,
 			"sess", sess,
 		)
-		return
+		return errors.New("pong txid does not correspond to any sent ping")
 	}
 
 	if sent.ToRelay {
@@ -75,7 +75,7 @@ func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, 
 			"to-relay", sent.RelayID,
 			"sess", sess,
 		)
-		return
+		return errors.New("direct pong is reply to relay ping")
 	}
 
 	if !sc.tm.ValidKeys(sc.peer, sess) {
@@ -87,11 +87,15 @@ func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, 
 			"txid", pong.TxID,
 			"sess", sess,
 		)
-		return
+		return errors.New("got pong from invalid session")
 	}
 
 	// TODO more checks? (permissive, but log)
 
+	return nil
+}
+
+func (sc *StateCommon) clearPongDirect(_ netip.AddrPort, _ key.SessionPublic, pong *msgsess.Pong) {
 	delete(sc.tm.Pings(), pong.TxID)
 }
 
@@ -172,12 +176,24 @@ type EstablishingCommon struct {
 
 	lastPing  time.Time
 	pingCount uint
+
+	tracker *PingTracker
 }
 
 func mkEstComm(sc *StateCommon, attempts int) *EstablishingCommon {
-	ec := &EstablishingCommon{StateCommon: sc, attempt: attempts + 1}
+	ec := &EstablishingCommon{
+		StateCommon: sc,
+		attempt:     attempts + 1,
+		tracker:     NewPingTracker(),
+	}
 	ec.resetDeadline()
 	return ec
+}
+
+func (ec *EstablishingCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
+	ec.tracker.GotPong(ap)
+
+	ec.clearPongDirect(ap, sess, pong)
 }
 
 func (ec *EstablishingCommon) resetDeadline() {

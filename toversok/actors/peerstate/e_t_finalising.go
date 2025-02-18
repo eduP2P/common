@@ -22,9 +22,15 @@ func (f *Finalizing) Name() string {
 func (f *Finalizing) OnTick() PeerState {
 	f.ackPongDirect(f.ap, f.sess, f.pong)
 
+	bap, err := f.tracker.BestAddrPort()
+	if err != nil {
+		// We just acked a pong, so there should at least be 1 pair in there, so panic
+		panic(err)
+	}
+
 	return LogTransition(f, &Booting{
 		StateCommon: f.StateCommon,
-		ap:          f.ap,
+		ap:          bap,
 	})
 }
 

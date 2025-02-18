@@ -16,6 +16,8 @@ const EstablishedPingInterval = time.Second * 2
 type Established struct {
 	*StateCommon
 
+	tracker *PingTracker
+
 	lastPingRecv time.Time
 	lastPongRecv time.Time
 
@@ -25,11 +27,6 @@ type Established struct {
 	inactive      bool
 	inactiveSince time.Time
 
-	// TODO: this can flap,
-	//   and basically picks the first best endpoint that the other client responds with,
-	//   which may be non-ideal.
-	//   Tailscale has logic to pick and switch between different endpoints, and sort them.
-	//   We could possibly build this into the state logic.
 	currentOutEndpoint netip.AddrPort
 
 	knownInEndpoints map[netip.AddrPort]bool
@@ -106,8 +103,16 @@ func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage
 		return nil
 
 	case *msgsess.Pong:
-		e.lastPongRecv = time.Now()
-		e.ackPongDirect(ap, clearMsg.Session, m)
+		if err := e.pongDirectValid(ap, clearMsg.Session, m); err != nil {
+			L(e).Warn("dropping invalid pong", "ap", ap.String(), "err", err)
+		} else {
+			e.lastPongRecv = time.Now()
+			e.tracker.GotPong(ap)
+			e.clearPongDirect(ap, clearMsg.Session, m)
+
+			e.checkChangedPreferredEndpoint()
+		}
+
 		return nil
 
 	default:
@@ -180,4 +185,33 @@ func (e *Established) canTrustEndpoint(ap netip.AddrPort) bool {
 	}
 
 	return false
+}
+
+func (e *Established) checkChangedPreferredEndpoint() {
+	bap, err := e.tracker.BestAddrPort()
+	if err != nil {
+		// this should not happen, at this point we have at least one happy pair
+		panic(err)
+	}
+
+	if bap != e.currentOutEndpoint {
+		// not the best one, switch
+		e.switchToEndpoint(bap)
+	}
+}
+
+func (e *Established) switchToEndpoint(ep netip.AddrPort) {
+	previous := e.currentOutEndpoint
+
+	e.currentOutEndpoint = ep
+
+	e.tm.OutConnUseAddrPort(e.peer, ep)
+	e.tm.DManSetAKA(e.peer, ep)
+
+	L(e).Info(
+		"SWITCHED direct peer connection to better endpoint",
+		"peer", e.peer.Debug(),
+		"from", previous.String(),
+		"to", ep.String(),
+	)
 }
