@@ -12,6 +12,8 @@ import (
 type Booting struct {
 	*StateCommon
 
+	tracker *PingTracker
+
 	ap netip.AddrPort
 }
 
@@ -27,6 +29,7 @@ func (b *Booting) OnTick() PeerState {
 
 	return LogTransition(b, &Established{
 		StateCommon:        b.StateCommon,
+		tracker:            b.tracker,
 		lastPingRecv:       time.Now(),
 		lastPongRecv:       time.Now(),
 		nextPingDeadline:   time.Now(),
