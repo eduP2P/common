@@ -100,6 +100,18 @@ func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage
 
 		e.lastPingRecv = time.Now()
 		e.replyWithPongDirect(ap, clearMsg.Session, m)
+
+		if ap != e.currentOutEndpoint {
+			// We're not sending pings to this, yet we may want to, to prevent asymmetric glare
+			pi := e.getPeerInfo()
+			if pi == nil {
+				// Peer info unavailable
+				return nil
+			}
+
+			e.tm.SendPingDirect(ap, e.peer, pi.Session)
+		}
+
 		return nil
 
 	case *msgsess.Pong:
