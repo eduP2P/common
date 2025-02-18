@@ -2,6 +2,7 @@ package actors
 
 import (
 	"fmt"
+	"runtime/debug"
 	"slices"
 
 	"github.com/edup2p/common/types/key"
@@ -38,7 +39,7 @@ func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
 func (sm *SessionManager) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(sm).Error("panicked", "panic", v)
+			L(sm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			sm.Cancel()
 			bail(sm.ctx, v)
 		}

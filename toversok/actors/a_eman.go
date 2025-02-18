@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime/debug"
 	"slices"
 	"time"
 
@@ -67,7 +68,7 @@ type stunResponse struct {
 func (em *EndpointManager) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(em).Error("panicked", "panic", v)
+			L(em).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			em.Cancel()
 			bail(em.ctx, v)
 		}

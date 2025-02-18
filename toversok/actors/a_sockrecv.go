@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"runtime/debug"
 	"slices"
 	"time"
 
@@ -41,7 +42,7 @@ func MakeSockRecv(ctx context.Context, udp types.UDPConn) *SockRecv {
 func (r *SockRecv) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(r).Error("panicked", "err", v)
+			L(r).Error("panicked", "err", v, "stack", string(debug.Stack()))
 			r.Cancel()
 			bail(r.ctx, v)
 		}

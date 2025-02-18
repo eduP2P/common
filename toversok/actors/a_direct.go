@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
@@ -41,7 +42,7 @@ func (s *Stage) makeDM(udpSocket types.UDPConn) *DirectManager {
 func (dm *DirectManager) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(dm).Error("panicked", "panic", v)
+			L(dm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			dm.Cancel()
 			bail(dm.ctx, v)
 		}
@@ -132,8 +133,9 @@ func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
 func (dr *DirectRouter) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			// TODO logging
+			L(dr).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			dr.Cancel()
+			bail(dr.ctx, v)
 		}
 	}()
 

@@ -3,6 +3,7 @@ package actors
 import (
 	"maps"
 	"net/netip"
+	"runtime/debug"
 	"time"
 
 	"github.com/edup2p/common/toversok/actors/peerstate"
@@ -51,7 +52,7 @@ func (s *Stage) makeTM() *TrafficManager {
 func (tm *TrafficManager) Run() {
 	defer func() {
 		if v := recover(); v != nil {
-			L(tm).Error("panicked", "error", v)
+			L(tm).Error("panicked", "error", v, "stack", string(debug.Stack()))
 			tm.Cancel()
 			tm.Close()
 			bail(tm.ctx, v)
