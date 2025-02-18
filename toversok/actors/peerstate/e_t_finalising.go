@@ -30,6 +30,7 @@ func (f *Finalizing) OnTick() PeerState {
 
 	return LogTransition(f, &Booting{
 		StateCommon: f.StateCommon,
+		tracker:     f.tracker,
 		ap:          bap,
 	})
 }
