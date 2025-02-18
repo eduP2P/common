@@ -50,6 +50,11 @@ func (e *EstRendezAck) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessag
 			ping:               m,
 		})
 	case *msgsess.Pong:
+		if err := e.pongDirectValid(ap, clearMsg.Session, m); err != nil {
+			L(e).Warn("dropping invalid pong", "ap", ap.String(), "err", err)
+			return nil
+		}
+
 		e.tm.Poke()
 		return LogTransition(e, &Finalizing{
 			EstablishingCommon: e.EstablishingCommon,

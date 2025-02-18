@@ -43,7 +43,12 @@ func (i *Inactive) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) P
 		i.replyWithPongDirect(ap, clearMsg.Session, m)
 		return nil
 	case *msgsess.Pong:
-		i.ackPongDirect(ap, clearMsg.Session, m)
+		if err := i.pongDirectValid(ap, clearMsg.Session, m); err != nil {
+			L(i).Warn("dropping invalid pong", "ap", ap.String(), "err", err)
+		} else {
+			i.clearPongDirect(ap, clearMsg.Session, m)
+		}
+
 		return nil
 	default:
 		L(i).Warn("ignoring direct session message",
