@@ -82,7 +82,10 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 		return nil, fmt.Errorf("could not create control session: %w", err)
 	}
 
-	slog.Debug("created initial control connection")
+	slog.Debug(
+		"created initial control connection",
+		"ipv4", c.IPv4.String(), "ipv6", c.IPv6.String(), "expiry", c.Expiry,
+	)
 
 	rcs := &ResumableControlSession{
 		ctx: rcsCtx,
@@ -90,6 +93,7 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 
 		ipv4:       c.IPv4,
 		ipv6:       c.IPv6,
+		expiry:     c.Expiry,
 		controlKey: c.ControlKey,
 
 		session: *c.SessionID,
@@ -216,29 +220,29 @@ func (rcs *ResumableControlSession) Run() {
 					panic("not implemented")
 				}
 
-				if rcs.ipv4 != client.IPv4 {
-					slog.Error("control-given IPv4 prefix is different than cached IPv4, bailing...", "cached", rcs.ipv4, "given", client.IPv4)
-					rcs.ccc(fmt.Errorf("IPv4 changed from %s to %s", rcs.ipv4, client.IPv4))
-
-					return
-				}
-
-				if rcs.ipv6 != client.IPv6 {
-					slog.Error("control-given IPv6 prefix is different than cached IPv6, bailing...", "cached", rcs.ipv6, "given", client.IPv6)
-					rcs.ccc(fmt.Errorf("IPv6 changed from %s to %s", rcs.ipv6, client.IPv6))
-
-					return
-				}
-
-				if rcs.expiry != client.Expiry {
-					slog.Error("control-given expiry is different than cached expiry, bailing...", "cached", rcs.expiry, "given", client.Expiry)
-					rcs.ccc(fmt.Errorf("expiry changed from %s to %s", rcs.expiry, client.Expiry))
-
-					return
-				}
-
 				// retry/resume
 				continue
+			}
+
+			if rcs.ipv4 != client.IPv4 {
+				slog.Error("control-given IPv4 prefix is different than cached IPv4, bailing...", "cached", rcs.ipv4, "given", client.IPv4)
+				rcs.ccc(fmt.Errorf("IPv4 changed from %s to %s", rcs.ipv4, client.IPv4))
+
+				return
+			}
+
+			if rcs.ipv6 != client.IPv6 {
+				slog.Error("control-given IPv6 prefix is different than cached IPv6, bailing...", "cached", rcs.ipv6, "given", client.IPv6)
+				rcs.ccc(fmt.Errorf("IPv6 changed from %s to %s", rcs.ipv6, client.IPv6))
+
+				return
+			}
+
+			if rcs.expiry != client.Expiry {
+				slog.Error("control-given expiry is different than cached expiry, bailing...", "cached", rcs.expiry, "given", client.Expiry)
+				rcs.ccc(fmt.Errorf("expiry changed from %s to %s", rcs.expiry, client.Expiry))
+
+				return
 			}
 
 			slog.Debug("resumed control connection")
