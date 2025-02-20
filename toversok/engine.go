@@ -340,9 +340,9 @@ func NewEngine(
 			if err != nil {
 				panic("should never happen")
 			}
-			//if expiry != (time.Time{}) {
-			slog.Info("established session with expiry", "expiry", expiry, "in", time.Until(expiry))
-			//}
+			if expiry != (time.Time{}) {
+				slog.Info("established session with expiry", "expiry", expiry, "in", time.Until(expiry))
+			}
 		}
 	})
 
