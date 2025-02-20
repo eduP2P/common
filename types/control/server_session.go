@@ -45,6 +45,8 @@ type ServerSession struct {
 
 	server *Server
 
+	expiry time.Time
+
 	// TODO
 	//  all synced state, known changes, queued changes, etc.
 }
@@ -315,7 +317,7 @@ func (s *ServerSession) AuthenticateAccept() (err error) {
 }
 
 func (s *ServerSession) AuthAndStart() error {
-	s.IPv4, s.IPv6 = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
+	s.IPv4, s.IPv6, s.expiry = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
 
 	err := s.AuthenticateAccept()
 	if err != nil {
@@ -334,6 +336,14 @@ func (s *ServerSession) Run() {
 
 	go func() {
 		<-s.Ctx.Done()
+
+		if errors.Is(s.Ctx.Err(), ErrNeedsDisconnect) {
+			if err := s.conn.Write(&msgcontrol.Disconnect{
+				Reason: "control requested disconnect",
+			}); err != nil {
+				slog.Error("error writing disconnect message", "err", err)
+			}
+		}
 
 		s.Slog().Info("session exiting", "err", context.Cause(s.Ctx), "peer", s.Peer.Debug())
 
@@ -387,6 +397,18 @@ func (s *ServerSession) Run() {
 	if err != nil {
 		err = fmt.Errorf("could not send greets: %w", err)
 		return
+	}
+
+	if s.expiry != (time.Time{}) {
+		go func() {
+			select {
+			case <-s.Ctx.Done():
+			// FIXME on suspend/delay/wallclock change, this won't work properly,
+			//  find a time-until api that deals with wall-clock differences
+			case <-time.After(time.Until(s.expiry)):
+				s.Ccc(ErrNeedsDisconnect)
+			}
+		}()
 	}
 
 	s.Slog().Info("established session")

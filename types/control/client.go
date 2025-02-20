@@ -29,6 +29,8 @@ type Client struct {
 
 	IPv4 netip.Prefix
 	IPv6 netip.Prefix
+
+	Expiry time.Time
 }
 
 func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string, logon types.LogonCallback) (*Client, error) {
@@ -127,6 +129,8 @@ func (c *Client) Handshake(timeout time.Duration, logon types.LogonCallback) err
 
 		c.IPv4 = m.IP4
 		c.IPv6 = m.IP6
+
+		c.Expiry = m.AuthExpiry
 
 		slog.Debug("logon accepted", "as-peer", nodePubKey.Debug(), "as-sess", sessPubKey.Debug(), "with-sess-id", types.PtrOr(c.SessionID, "<nil>"), "with-ipv4", c.IPv4.String(), "with-ipv6", c.IPv6.String())
 

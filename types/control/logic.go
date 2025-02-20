@@ -217,6 +217,36 @@ func (s *Server) GetVisibilityPairs(id ClientID) (map[ClientID]VisibilityPair, e
 	return pairs, nil
 }
 
+func (s *Server) DisconnectSession(id SessID) error {
+	s.sessLock.RLock()
+	defer s.sessLock.RUnlock()
+
+	sess, ok := s.sessByID[string(id)]
+
+	if !ok {
+		return ErrSessionDoesNotExist
+	}
+
+	sess.Ccc(ErrNeedsDisconnect)
+
+	return nil
+}
+
+func (s *Server) DisconnectClient(id ClientID) error {
+	s.sessLock.RLock()
+	defer s.sessLock.RUnlock()
+
+	sess, ok := s.sessByNode[key.NodePublic(id)]
+
+	if !ok {
+		return ErrClientNotConnected
+	}
+
+	sess.Ccc(ErrNeedsDisconnect)
+
+	return nil
+}
+
 //nolint:unused
 func (s *Server) atomicDoVisibilityPairs(id key.NodePublic, f func(map[ClientID]VisibilityPair) error) error {
 	s.sessLock.RLock()

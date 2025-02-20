@@ -3,6 +3,7 @@ package ifaces
 import (
 	"context"
 	"net/netip"
+	"time"
 
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
@@ -45,6 +46,9 @@ type ControlInterface interface {
 	//
 	// As it is a netip.Prefix, it also includes the expected ipv6 range that all peers will be on.
 	IPv6() netip.Prefix
+	// Expiry of the current control session, defaults to zero-value if there is no expiry,
+	// or session is not connected.
+	Expiry() time.Time
 
 	// UpdateEndpoints informs the server of any changes in STUN-resolved endpoints. This is a set-replace operation.
 	UpdateEndpoints([]netip.AddrPort) error

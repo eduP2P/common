@@ -74,6 +74,8 @@ type LogonAccept struct {
 	IP4 netip.Prefix
 	IP6 netip.Prefix
 
+	AuthExpiry time.Time
+
 	SessionID string
 }
 
