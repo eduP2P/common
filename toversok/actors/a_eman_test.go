@@ -20,8 +20,9 @@ type MockControl struct {
 
 	controlKey func() key.ControlPublic
 
-	ipv4 func() netip.Prefix
-	ipv6 func() netip.Prefix
+	ipv4   func() netip.Prefix
+	ipv6   func() netip.Prefix
+	expiry func() time.Time
 
 	updateEndpoints func([]netip.AddrPort) error
 	updateHomeRelay func(int64) error
@@ -37,6 +38,10 @@ func (m *MockControl) IPv4() netip.Prefix {
 
 func (m *MockControl) IPv6() netip.Prefix {
 	return m.ipv6()
+}
+
+func (m *MockControl) Expiry() time.Time {
+	return m.expiry()
 }
 
 func (m *MockControl) UpdateEndpoints(endpoints []netip.AddrPort) error {

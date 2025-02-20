@@ -23,6 +23,7 @@ type Session struct {
 
 	wg WireGuardController
 	fw FirewallController
+	cs ifaces.ControlSession
 
 	quarantineMu     sync.Mutex
 	quarantinedPeers map[key.NodePublic]bool
@@ -57,13 +58,14 @@ func SetupSession(
 		stage: nil,
 	}
 
-	cc, err := co.CreateClient(sess.ctx, getNodePriv, sess.getPriv, logon)
+	var err error
+	sess.cs, err = co.CreateClient(sess.ctx, getNodePriv, sess.getPriv, logon)
 	if err != nil {
 		sess.ccc(err)
 		return nil, fmt.Errorf("could not create control client: %w", err)
 	}
 
-	if sess.wg, err = wg.Controller(*getNodePriv(), cc.IPv4(), cc.IPv6()); err != nil {
+	if sess.wg, err = wg.Controller(*getNodePriv(), sess.cs.IPv4(), sess.cs.IPv6()); err != nil {
 		err = fmt.Errorf("could not init wireguard: %w", err)
 		sess.ccc(err)
 		return nil, err
@@ -75,10 +77,10 @@ func SetupSession(
 		return nil, err
 	}
 
-	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, cc, nil)
+	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, sess.cs, nil)
 
-	cc.InstallCallbacks(sess)
-	context.AfterFunc(cc.Context(), func() {
+	sess.cs.InstallCallbacks(sess)
+	context.AfterFunc(sess.cs.Context(), func() {
 		sess.ccc(errors.New("resumable control session exited"))
 	})
 

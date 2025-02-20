@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/abiosoft/ishell/v2"
 	"github.com/edup2p/common/extwg"
@@ -882,6 +883,10 @@ func (s *StokControl) IPv4() netip.Prefix {
 
 func (s *StokControl) IPv6() netip.Prefix {
 	return *s.ip6
+}
+
+func (s *StokControl) Expiry() time.Time {
+	return time.Time{}
 }
 
 func (s *StokControl) UpdateEndpoints(endpoints []netip.AddrPort) error {

@@ -1,5 +1,7 @@
 package toversok
 
+import "time"
+
 // Observer functions as a state observer for the Engine, effectively allowing calling clients to peek into the engine state in an abstracted way.
 type Observer interface {
 	RegisterStateChangeListener(func(state EngineState))
@@ -7,7 +9,7 @@ type Observer interface {
 	CurrentState() EngineState
 
 	GetNeedsLoginState() (url string, err error)
-	GetEstablishedState() // TODO
+	GetEstablishedState() (expiry time.Time, err error)
 }
 
 type EngineState byte

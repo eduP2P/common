@@ -147,7 +147,10 @@ func (e *Engine) installSession(allowLogon bool) error {
 		logon = func(url string, _ chan<- string) error {
 			// TODO register/use device key channel
 
-			e.state.currentLoginURL = url
+			e.state.alter(func(o *stateObserver) {
+				o.currentLoginURL = url
+			})
+
 			e.state.change(CreatingSession, NeedsLogin)
 			return nil
 		}
@@ -158,6 +161,10 @@ func (e *Engine) installSession(allowLogon bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to setup session: %w", err)
 	}
+
+	e.state.alter(func(o *stateObserver) {
+		o.expiry = e.sess.cs.Expiry()
+	})
 
 	if !(e.state.change(CreatingSession, Established) || e.state.change(NeedsLogin, Established)) {
 		e.ccc(errors.New("incorrect state transition"))
@@ -188,10 +195,12 @@ func newStateObserver() stateObserver {
 }
 
 type stateObserver struct {
-	mu              sync.Mutex
-	state           EngineState
+	mu        sync.Mutex
+	state     EngineState
+	callbacks []func(state EngineState)
+
 	currentLoginURL string
-	callbacks       []func(state EngineState)
+	expiry          time.Time
 }
 
 func (s *stateObserver) CurrentState() EngineState {
@@ -218,9 +227,15 @@ func (s *stateObserver) GetNeedsLoginState() (url string, err error) {
 	return s.currentLoginURL, nil
 }
 
-func (s *stateObserver) GetEstablishedState() {
-	// TODO implement me
-	panic("implement me")
+func (s *stateObserver) GetEstablishedState() (time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state != Established {
+		return time.Time{}, ErrWrongState
+	}
+
+	return s.expiry, nil
 }
 
 func (s *stateObserver) change(oldState, newState EngineState) bool {
@@ -249,6 +264,13 @@ func (s *stateObserver) set(newState EngineState) {
 	s.state = newState
 
 	s.asyncFireCallbacks(newState)
+}
+
+func (s *stateObserver) alter(f func(observer *stateObserver)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	f(s)
 }
 
 func (s *stateObserver) asyncFireCallbacks(state EngineState) {
@@ -372,6 +394,10 @@ func (f *FakeControl) IPv4() netip.Prefix {
 
 func (f *FakeControl) IPv6() netip.Prefix {
 	return f.ipv6
+}
+
+func (f *FakeControl) Expiry() time.Time {
+	return time.Time{}
 }
 
 func (f *FakeControl) Context() context.Context {

@@ -50,6 +50,7 @@ type ResumableControlSession struct {
 	// Airlifted out of Client, expected to stay the same as long as the session does
 	ipv4       netip.Prefix
 	ipv6       netip.Prefix
+	expiry     time.Time
 	controlKey key.ControlPublic
 
 	session string
@@ -215,6 +216,27 @@ func (rcs *ResumableControlSession) Run() {
 					panic("not implemented")
 				}
 
+				if rcs.ipv4 != client.IPv4 {
+					slog.Error("control-given IPv4 prefix is different than cached IPv4, bailing...", "cached", rcs.ipv4, "given", client.IPv4)
+					rcs.ccc(fmt.Errorf("IPv4 changed from %s to %s", rcs.ipv4, client.IPv4))
+
+					return
+				}
+
+				if rcs.ipv6 != client.IPv6 {
+					slog.Error("control-given IPv6 prefix is different than cached IPv6, bailing...", "cached", rcs.ipv6, "given", client.IPv6)
+					rcs.ccc(fmt.Errorf("IPv6 changed from %s to %s", rcs.ipv6, client.IPv6))
+
+					return
+				}
+
+				if rcs.expiry != client.Expiry {
+					slog.Error("control-given expiry is different than cached expiry, bailing...", "cached", rcs.expiry, "given", client.Expiry)
+					rcs.ccc(fmt.Errorf("expiry changed from %s to %s", rcs.expiry, client.Expiry))
+
+					return
+				}
+
 				// retry/resume
 				continue
 			}
@@ -338,6 +360,10 @@ func (rcs *ResumableControlSession) IPv4() netip.Prefix {
 
 func (rcs *ResumableControlSession) IPv6() netip.Prefix {
 	return rcs.ipv6
+}
+
+func (rcs *ResumableControlSession) Expiry() time.Time {
+	return rcs.expiry
 }
 
 func (rcs *ResumableControlSession) ExpectCallbacks() ifaces.ControlCallbacks {

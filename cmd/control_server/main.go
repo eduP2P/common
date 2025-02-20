@@ -202,10 +202,12 @@ func (cs *ControlServer) OnDeviceKey(sess control.SessID, deviceKey string) {
 	slog.Info("OnDeviceKey", "sess", sess, "deviceKey", deviceKey)
 }
 
-func (cs *ControlServer) OnSessionFinalize(sess control.SessID, cid control.ClientID) (netip.Prefix, netip.Prefix) {
+func (cs *ControlServer) OnSessionFinalize(sess control.SessID, cid control.ClientID) (netip.Prefix, netip.Prefix, time.Time) {
 	slog.Info("OnSessionFinalize", "sess", sess, "cid", cid)
 
-	return cs.getIPs(key.NodePublic(cid))
+	ip4, ip6 := cs.getIPs(key.NodePublic(cid))
+
+	return ip4, ip6, time.Now().Add(time.Hour * 24 * 7)
 }
 
 func (cs *ControlServer) OnSessionDestroy(sess control.SessID, cid control.ClientID) {
