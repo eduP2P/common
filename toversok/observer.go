@@ -9,7 +9,7 @@ type Observer interface {
 	CurrentState() EngineState
 
 	GetNeedsLoginState() (url string, err error)
-	GetEstablishedState() (expiry time.Time, err error)
+	GetEstablishedState() (expiry time.Time, err error) // TODO add ipv4,ipv6?
 }
 
 type EngineState byte

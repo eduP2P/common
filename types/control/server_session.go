@@ -45,7 +45,7 @@ type ServerSession struct {
 
 	server *Server
 
-	expiry time.Time
+	Expiry time.Time
 
 	// TODO
 	//  all synced state, known changes, queued changes, etc.
@@ -305,9 +305,10 @@ func (s *ServerSession) AuthenticateAccept() (err error) {
 	s.Slog().Debug("AuthenticateAccept")
 
 	if err = s.conn.Write(&msgcontrol.LogonAccept{
-		IP4:       s.IPv4,
-		IP6:       s.IPv6,
-		SessionID: s.ID,
+		IP4:        s.IPv4,
+		IP6:        s.IPv6,
+		AuthExpiry: s.Expiry,
+		SessionID:  s.ID,
 	}); err != nil {
 		err = fmt.Errorf("error when sending accept: %w", err)
 		return
@@ -317,7 +318,7 @@ func (s *ServerSession) AuthenticateAccept() (err error) {
 }
 
 func (s *ServerSession) AuthAndStart() error {
-	s.IPv4, s.IPv6, s.expiry = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
+	s.IPv4, s.IPv6, s.Expiry = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
 
 	err := s.AuthenticateAccept()
 	if err != nil {
@@ -399,13 +400,13 @@ func (s *ServerSession) Run() {
 		return
 	}
 
-	if s.expiry != (time.Time{}) {
+	if s.Expiry != (time.Time{}) {
 		go func() {
 			select {
 			case <-s.Ctx.Done():
 			// FIXME on suspend/delay/wallclock change, this won't work properly,
 			//  find a time-until api that deals with wall-clock differences
-			case <-time.After(time.Until(s.expiry)):
+			case <-time.After(time.Until(s.Expiry)):
 				s.Ccc(ErrNeedsDisconnect)
 			}
 		}()

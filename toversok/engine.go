@@ -335,6 +335,14 @@ func NewEngine(
 			} else {
 				e.slog().Error("could not get login state when prompted for it", "err", err)
 			}
+		} else if state == Established {
+			expiry, err := e.Observer().GetEstablishedState()
+			if err != nil {
+				panic("should never happen")
+			}
+			//if expiry != (time.Time{}) {
+			slog.Info("established session with expiry", "expiry", expiry, "in", time.Until(expiry))
+			//}
 		}
 	})
 
