@@ -16,6 +16,7 @@ import (
 
 type Client struct {
 	ctx context.Context
+	ccc context.CancelCauseFunc
 
 	cc *Conn
 
@@ -31,10 +32,13 @@ type Client struct {
 }
 
 func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, controlKey key.ControlPublic, session *string, logon types.LogonCallback) (*Client, error) {
-	c := &Client{
-		ctx: parentCtx,
+	ctx, ccc := context.WithCancelCause(parentCtx)
 
-		cc: NewConn(parentCtx, mc, brw),
+	c := &Client{
+		ctx: ctx,
+		ccc: ccc,
+
+		cc: NewConn(ctx, mc, brw),
 
 		getPriv: getPriv,
 		getSess: getSess,
@@ -214,4 +218,9 @@ func (c *Client) Close() {
 	if err := c.cc.mc.Close(); err != nil {
 		slog.Error("error when closing control client", "err", err)
 	}
+}
+
+func (c *Client) Cancel(err error) {
+	c.ccc(err)
+	c.Close()
 }

@@ -374,6 +374,10 @@ func (f *FakeControl) IPv6() netip.Prefix {
 	return f.ipv6
 }
 
+func (f *FakeControl) Context() context.Context {
+	return context.Background()
+}
+
 func (f *FakeControl) InstallCallbacks(ifaces.ControlCallbacks) {
 	// NOP
 }

@@ -32,10 +32,6 @@ func (c *LogonReject) CMsgType() ControlMessageType {
 	return LogonRejectType
 }
 
-func (c *Logout) CMsgType() ControlMessageType {
-	return LogoutType
-}
-
 func (c *Ping) CMsgType() ControlMessageType {
 	return PingType
 }
@@ -66,4 +62,12 @@ func (c *PeerRemove) CMsgType() ControlMessageType {
 
 func (c *RelayUpdate) CMsgType() ControlMessageType {
 	return RelayUpdateType
+}
+
+func (c *Logout) CMsgType() ControlMessageType {
+	return LogoutType
+}
+
+func (c *Disconnect) CMsgType() ControlMessageType {
+	return DisconnectType
 }

@@ -2,6 +2,7 @@ package toversok
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -77,6 +78,9 @@ func SetupSession(
 	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, cc, nil)
 
 	cc.InstallCallbacks(sess)
+	context.AfterFunc(cc.Context(), func() {
+		sess.ccc(errors.New("resumable control session exited"))
+	})
 
 	return sess, nil
 }

@@ -94,8 +94,6 @@ func (c *Conn) Read(ttfbTimeout time.Duration) (msgcontrol.ControlMessage, error
 		to = new(msgcontrol.LogonAccept)
 	case msgcontrol.LogonRejectType:
 		to = new(msgcontrol.LogonReject)
-	case msgcontrol.LogoutType:
-		to = new(msgcontrol.Logout)
 	case msgcontrol.PingType:
 		to = new(msgcontrol.Ping)
 	case msgcontrol.PongType:
@@ -113,8 +111,13 @@ func (c *Conn) Read(ttfbTimeout time.Duration) (msgcontrol.ControlMessage, error
 		to = new(msgcontrol.PeerRemove)
 	case msgcontrol.RelayUpdateType:
 		to = new(msgcontrol.RelayUpdate)
+	case msgcontrol.LogoutType:
+		to = new(msgcontrol.Logout)
+	case msgcontrol.DisconnectType:
+		to = new(msgcontrol.Disconnect)
+
 	default:
-		panic(fmt.Sprintf("Unknown type %v", typ))
+		return nil, fmt.Errorf("unknown type %v", typ)
 	}
 
 	if err = c.UnmarshalInto(data, to); err != nil {
