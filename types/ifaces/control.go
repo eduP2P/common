@@ -1,6 +1,7 @@
 package ifaces
 
 import (
+	"context"
 	"net/netip"
 
 	"github.com/edup2p/common/types/key"
@@ -54,6 +55,8 @@ type ControlInterface interface {
 // ControlSession is an interface representing an active control session.
 type ControlSession interface {
 	ControlInterface
+
+	Context() context.Context
 
 	// InstallCallbacks installs the current session's callbacks to another interface.
 	//

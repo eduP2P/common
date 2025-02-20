@@ -18,7 +18,6 @@ const (
 	LogonDeviceKeyType
 	LogonAcceptType
 	LogonRejectType
-	LogoutType
 	PingType
 	PongType
 )
@@ -30,6 +29,8 @@ const (
 	PeerUpdateType
 	PeerRemoveType
 	RelayUpdateType
+	LogoutType
+	DisconnectType
 )
 
 // === handshake phase
@@ -109,8 +110,6 @@ type LogonReject struct {
 	RetryAfter time.Duration `json:",omitempty"`
 }
 
-type Logout struct{}
-
 type Ping struct {
 	// random data encrypted with shared key (control priv x client pub)
 	// to be signed with shared key of nodekey and sesskey
@@ -125,6 +124,18 @@ type Pong struct {
 }
 
 // === during session
+
+// -> control
+type Logout struct{}
+
+// -> client
+type Disconnect struct {
+	Reason string
+
+	RetryStrategy RetryStrategyType `json:",omitempty"`
+
+	RetryAfter time.Duration `json:",omitempty"`
+}
 
 // -> control
 type EndpointUpdate struct {

@@ -896,6 +896,10 @@ func (s *StokControl) UpdateHomeRelay(i int64) error {
 	return nil
 }
 
+func (s *StokControl) Context() context.Context {
+	return context.Background()
+}
+
 func (s *StokControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
 	s.callback = callbacks
 

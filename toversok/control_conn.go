@@ -232,6 +232,8 @@ func (rcs *ResumableControlSession) Run() {
 	}
 }
 
+var ErrDisconnected = errors.New("control requested disconnect")
+
 func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error {
 	slog.Debug("Handle", "msg", msg)
 
@@ -265,6 +267,9 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 		return rcs.ExpectCallbacks().RemovePeer(m.PubKey)
 	case *msgcontrol.RelayUpdate:
 		return rcs.ExpectCallbacks().UpdateRelays(m.Relays)
+	case *msgcontrol.Disconnect:
+		rcs.client.Cancel(fmt.Errorf("received disconnect: %w, %w", ErrDisconnected, m.RetryStrategy))
+		return nil
 	default:
 		return fmt.Errorf("got unexpected message from control: %v", msg)
 	}
@@ -344,6 +349,10 @@ func (rcs *ResumableControlSession) ExpectCallbacks() ifaces.ControlCallbacks {
 	}
 
 	return rcs.callbacks
+}
+
+func (rcs *ResumableControlSession) Context() context.Context {
+	return rcs.ctx
 }
 
 func (rcs *ResumableControlSession) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
