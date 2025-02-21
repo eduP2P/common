@@ -264,19 +264,12 @@ fi
 performance_test_value_array=$(echo $performance_test_values | tr ',' ' ')
 performance_test_value_array=($performance_test_value_array)
 
-if [[ $performance_test_reps -gt 1 ]]; then
-    for ((i=1;i<=$performance_test_reps;i++)); do
-        # Directory to store performance test results for this repetition
-        performance_test_dir=$log_dir/performance_tests_$performance_test_var/repetition$i
-
-        performance_tests $performance_test_value_array $performance_test_dir $i
-    done
-else
-    # No unnecessary subdirectories if test is run only once
-    performance_test_dir=$log_dir/performance_tests_$performance_test_var
+for ((i=1;i<=$performance_test_reps;i++)); do
+    # Directory to store performance test results for this repetition
+    performance_test_dir=$log_dir/performance_tests_$performance_test_var/repetition$i
 
     performance_tests $performance_test_value_array $performance_test_dir $i
-fi
+done
 
 clean_exit 0
 

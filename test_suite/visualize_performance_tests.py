@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import sys
 import matplotlib.pyplot as plt
+from itertools import groupby
 
 if len(sys.argv) != 2:
     print(f"""
@@ -47,7 +48,14 @@ def test_iteration():
         m = p.match(test_dir)
         test_var = m.group(1)
         
-        test_var_values, extracted_data = connection_iteration(test_path, test_var)
+        test_var_values, extracted_data = repetition_iteration(test_path, test_var)
+        extracted_data = aggregate_repetitions(extracted_data)
+
+        with open(f"{parent_path}/performance_test_data.json", 'w') as file:
+            # Delete transform key from bitrate metric, since it is not JSON serializable
+            del extracted_data["bitrate"]["transform"]
+
+            json.dump(extracted_data, file)
 
         for metric in extracted_data.keys():
             create_graph(test_var, test_var_values, metric, extracted_data, parent_path)
@@ -56,8 +64,8 @@ def test_iteration():
         plural = "s" if n_tests > 1 else ""
         print(f"Generated graphs to visualize {n_tests} performance test{plural}")
 
-# Recursively iterate over all connection subdirectories (eduP2P/WireGuard/Direct)
-def connection_iteration(test_path : str, test_var : str) -> dict:
+# Recursively iterate over all repetition<i> subdirectories
+def repetition_iteration(test_path: str, test_var: str) -> tuple[list[float], dict]:
     extracted_data = {
         "bitrate" : {
             "label" : "Measured bitrate",
@@ -86,7 +94,24 @@ def connection_iteration(test_path : str, test_var : str) -> dict:
         },
     }
 
-    paths = Path(test_path).glob("*")
+    paths = Path(test_path).rglob("repetition*")
+    
+    # Iterate over repetitions sorted from lowest to highest number (default sorting order is inconsistent)
+    for path in sorted(paths, key=lambda p: str(p)):
+        repetition_path = str(path)
+        repetition_id = repetition_path.split('/')[-1]
+
+        # Initialize the dictionary of measurements for this repetition
+        for metric in extracted_data.keys():
+            extracted_data[metric]["values"][repetition_id] = {}
+
+        test_var_values, extracted_data = connection_iteration(repetition_path, repetition_id, test_var, extracted_data)
+
+    return test_var_values, extracted_data
+
+# Recursively iterate over all connection subdirectories (eduP2P/WireGuard/Direct)
+def connection_iteration(repetition_path: str, repetition_id: str, test_var: str, extracted_data: dict) -> tuple[list[float], dict]:
+    paths = Path(repetition_path).glob("*")
 
     for path in paths:
         connection_path = str(path)
@@ -94,14 +119,14 @@ def connection_iteration(test_path : str, test_var : str) -> dict:
 
         # Initialize the lists of measurements for this connection type
         for metric in extracted_data.keys():
-            extracted_data[metric]["values"][connection_type] = []
+            extracted_data[metric]["values"][repetition_id][connection_type] = []
         
-        test_var_values, extracted_data = file_iteration(connection_type, connection_path, test_var, extracted_data)
+        test_var_values, extracted_data = file_iteration(connection_type, connection_path, repetition_id, test_var, extracted_data)
 
     return test_var_values, extracted_data
 
 # Recursively iterate over all json files in the connection subdirectories (each file corresponds to one test variable value)
-def file_iteration(connection_type : str, connection_path : str, test_var : str, extracted_data : dict) -> tuple[list[float], dict]:
+def file_iteration(connection_type: str, connection_path: str, repetition_id: str, test_var: str, extracted_data: dict) -> tuple[list[float], dict]:
     test_var_values = []
     paths = Path(connection_path).glob(f"{test_var}=*")
 
@@ -118,18 +143,19 @@ def file_iteration(connection_type : str, connection_path : str, test_var : str,
 
         with open(path_str, 'r') as file:
             data = json.load(file)
-            extracted_data = extract_data(connection_type, data, extracted_data)
+            extracted_data = extract_data(connection_type, repetition_id, data, extracted_data)
 
     # Sort data
     sorted_indices=np.argsort(test_var_values)
     test_var_values = np.array(test_var_values)[sorted_indices]
 
     for metric in extracted_data.keys():
-        extracted_data[metric]["values"][connection_type] = np.array(extracted_data[metric]["values"][connection_type])[sorted_indices]
+        sorted_measurements = np.array(extracted_data[metric]["values"][repetition_id][connection_type])[sorted_indices]
+        extracted_data[metric]["values"][repetition_id][connection_type] = list(sorted_measurements)
 
     return test_var_values, extracted_data
 
-def extract_data(connection_type : str, data : dict, extracted_data : dict) -> dict:
+def extract_data(connection_type: str, repetition_id: str, data: dict, extracted_data: dict) -> dict:
     data = data["end"]["sum"]
 
     for metric in extracted_data.keys():
@@ -143,13 +169,28 @@ def extract_data(connection_type : str, data : dict, extracted_data : dict) -> d
         except KeyError:
             pass
 
-        extracted_data[metric]["values"][connection_type].append(measurement)
+        extracted_data[metric]["values"][repetition_id][connection_type].append(measurement)
 
     return extracted_data
 
-def create_graph(test_var : str, test_var_values : list[float], metric : str, extracted_data : dict, save_path : str):
+def aggregate_repetitions(extracted_data: dict) -> dict:
+    for metric in extracted_data.keys():
+        measurements = extracted_data[metric]["values"]
+        connection_dicts = [v for _, v in measurements.items()]
+        connection_measurement_pairs = [(k, v) for c in connection_dicts for k, v in list(c.items())] 
+        aggregated_measurements = {}
+
+        # Group the measurements by connection type to compute the average
+        for connection_type, groups in groupby(sorted(connection_measurement_pairs, reverse=True), key=lambda t: t[0]):
+            aggregated_measurements[connection_type] = list(np.array([group[1] for group in groups]).mean(axis=0))
+
+        measurements["average"] = aggregated_measurements
+
+    return extracted_data
+
+def create_graph(test_var: str, test_var_values: list[float], metric: str, extracted_data: dict, save_path: str):
     metric_data = extracted_data[metric]
-    connection_measurements = metric_data["values"]
+    connection_measurements = metric_data["values"]["average"]
 
     test_var_label = TEST_VARS[test_var]["label"]
     test_var_unit = TEST_VARS[test_var]["unit"]
@@ -165,12 +206,14 @@ def create_graph(test_var : str, test_var_values : list[float], metric : str, ex
         ls=line_styles[i]  
         lw=line_widths[i]
 
-        # Plot the measured independent variable values on the X axis instead of the target values, unless the measured values or the delay are plotted on the Y axis (delay is not affected by the iperf3 measured values)
-        if metric == test_var or metric == "delay":
+        # Plot the measured independent variable values on the X axis instead of the target values unless: 
+        # - The measured values are plotted on the Y axis
+        # - One-way delay/HTTP latency are plotted respectively on the X/Y axis, since the HTTP latency and iperf3 measured values are independendent
+        if metric == test_var or metric == "delay" or test_var == "delay":
             plt.plot(test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
             x_label = test_var_label
         else:
-            measured_test_var_values = sorted(extracted_data[test_var]["values"][connection])
+            measured_test_var_values = sorted(extracted_data[test_var]["values"]["average"][connection])
             plt.plot(measured_test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
             x_label = extracted_data[test_var]["label"]
 
