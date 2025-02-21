@@ -48,14 +48,15 @@ func MakeStage(
 
 	dialRelayFunc relayhttp.RelayDialFunc,
 ) ifaces.Stage {
-	ctx := context.WithoutCancel(pCtx)
+	// FIXME ??? why the fuck did we ever decide on this
+	// ctx := context.WithoutCancel(pCtx)
 
 	if dialRelayFunc == nil {
 		dialRelayFunc = relayhttp.Dial
 	}
 
 	s := &Stage{
-		Ctx: ctx,
+		Ctx: pCtx,
 
 		connMutex: sync.RWMutex{},
 		inConn:    make(map[key.NodePublic]InConnActor),

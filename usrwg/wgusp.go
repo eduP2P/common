@@ -151,11 +151,11 @@ func (u *UserSpaceWireGuardController) ConnFor(node key.NodePublic) types.UDPCon
 }
 
 func (u *UserSpaceWireGuardController) Close() {
-	u.wgDev.Close()
-	if err := u.bind.Close(); err != nil {
+	if err := u.bind.Cancel(); err != nil {
 		slog.Error("Failed to close wireguard bind", "err", err)
 	}
 	if err := u.router.Close(); err != nil {
 		slog.Error("Failed to close router", "err", err)
 	}
+	u.wgDev.Close()
 }

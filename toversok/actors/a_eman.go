@@ -324,6 +324,6 @@ func (em *EndpointManager) collectLocalEndpoints() []netip.Addr {
 }
 
 func (em *EndpointManager) Close() {
-	// TODO implement me
-	panic("implement me")
+	em.ticker.Stop()
+	em.stunTimeout.Stop()
 }

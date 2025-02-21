@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -20,6 +22,8 @@ type ToverSokBind struct {
 	connMu     sync.RWMutex
 	conns      map[key.NodePublic]*ChannelConn
 	connChange chan bool
+
+	permClosed bool
 
 	endpointMu sync.RWMutex
 	endpoints  map[key.NodePublic]*endpoint
@@ -46,6 +50,8 @@ func (b *ToverSokBind) Close() error {
 	defer b.connMu.Unlock()
 	defer b.endpointMu.Unlock()
 
+	slog.Debug("bind close called", "stack", string(debug.Stack()))
+
 	maps.Clear(b.endpoints)
 
 	var errs []error
@@ -62,11 +68,22 @@ func (b *ToverSokBind) Close() error {
 		return fmt.Errorf("errors when closing connections: %w", errors.Join(errs...))
 	}
 
+	b.notifyConnChange()
+
 	return nil
+}
+
+func (b *ToverSokBind) Cancel() error {
+	b.permClosed = true
+	return b.Close()
 }
 
 // ReadFromConns implements conn.ReceiveFunc
 func (b *ToverSokBind) ReadFromConns(packets [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
+	if b.isPermanentlyClosed() {
+		return 0, net.ErrClosed
+	}
+
 	// We get a keys slice that could potentially get immediately outdated,
 	// but we use it to fill buffers from existing conns first.
 	b.connMu.RLock()
@@ -134,6 +151,10 @@ fill:
 	n = 1
 
 	return
+}
+
+func (b *ToverSokBind) isPermanentlyClosed() bool {
+	return b.permClosed
 }
 
 func (b *ToverSokBind) waitForValueFromConns() ([]byte, *endpoint) {
