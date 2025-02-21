@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 )
 
@@ -66,18 +65,8 @@ func (e *Engine) start(allowLogon bool) error {
 		e.sess.ccc(errors.New("engine state desynced, shutting down"))
 	}
 
-	if e.dirty {
-		if err := e.wg.Reset(); err != nil {
-			e.slog().Error("dirty start: could not reset wireguard", "err", err)
-			e.state.set(NoSession)
-			return err
-		}
-
-		if err := e.fw.Reset(); err != nil {
-			e.slog().Error("dirty start: could not reset firewall", "err", err)
-			e.state.set(NoSession)
-			return err
-		}
+	if err := e.maybeClean(); err != nil {
+		return fmt.Errorf("engine state cleaning failed: %w", err)
 	}
 
 	e.dirty = true
@@ -93,6 +82,26 @@ func (e *Engine) Context() context.Context {
 	return e.ctx
 }
 
+func (e *Engine) maybeClean() error {
+	slog.Debug("maybeClean called", "dirty", e.dirty)
+
+	if e.dirty {
+		if err := e.wg.Reset(); err != nil {
+			e.slog().Error("clean: could not reset wireguard", "err", err)
+			e.state.set(NoSession)
+			return err
+		}
+
+		if err := e.fw.Reset(); err != nil {
+			e.slog().Error("clean: could not reset firewall", "err", err)
+			e.state.set(NoSession)
+			return err
+		}
+	}
+
+	return nil
+}
+
 // StalledEngineRestartInterval represents how many seconds to wait before restarting an engine,
 // after it has stalled/failed.
 const StalledEngineRestartInterval = time.Second * 2
@@ -102,6 +111,12 @@ func (e *Engine) autoRestart() {
 		if err := e.start(false); err != nil {
 			slog.Info("autoRestart: will retry in 10 seconds")
 			time.AfterFunc(StalledEngineRestartInterval, e.autoRestart)
+		}
+	} else {
+		slog.Debug("will not auto-restart")
+
+		if err := e.maybeClean(); err != nil {
+			slog.Error("engine state cleaning failed", "err", err)
 		}
 	}
 }
@@ -346,6 +361,12 @@ func NewEngine(
 		}
 	})
 
+	context.AfterFunc(e.ctx, func() {
+		if err := e.maybeClean(); err != nil {
+			slog.Error("after-ctx: engine state cleaning failed", "err", err)
+		}
+	})
+
 	return e, nil
 }
 
@@ -384,44 +405,4 @@ func (e *Engine) Observer() Observer {
 func (e *Engine) SupplyDeviceKey(string) error {
 	// TODO
 	panic("not implemented")
-}
-
-type FakeControl struct {
-	controlKey key.ControlPublic
-	ipv4       netip.Prefix
-	ipv6       netip.Prefix
-}
-
-func (f *FakeControl) ControlKey() key.ControlPublic {
-	return f.controlKey
-}
-
-func (f *FakeControl) IPv4() netip.Prefix {
-	return f.ipv4
-}
-
-func (f *FakeControl) IPv6() netip.Prefix {
-	return f.ipv6
-}
-
-func (f *FakeControl) Expiry() time.Time {
-	return time.Time{}
-}
-
-func (f *FakeControl) Context() context.Context {
-	return context.Background()
-}
-
-func (f *FakeControl) InstallCallbacks(ifaces.ControlCallbacks) {
-	// NOP
-}
-
-func (f *FakeControl) UpdateEndpoints([]netip.AddrPort) error {
-	// NOP
-	return nil
-}
-
-func (f *FakeControl) UpdateHomeRelay(int64) error {
-	// NOP
-	return nil
 }

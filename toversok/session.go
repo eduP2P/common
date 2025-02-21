@@ -44,7 +44,6 @@ func SetupSession(
 	logon types.LogonCallback,
 ) (*Session, error) {
 	ctx, ccc := context.WithCancelCause(engineCtx)
-
 	sCtx := context.WithValue(ctx, types.CCC, ccc)
 
 	sess := &Session{

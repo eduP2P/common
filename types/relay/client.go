@@ -152,10 +152,7 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 		return nil, fmt.Errorf("could not reset deadline: %w", err)
 	}
 
-	go func() {
-		<-c.ctx.Done()
-		c.Close()
-	}()
+	context.AfterFunc(c.ctx, c.Close)
 
 	return c, nil
 }
@@ -279,7 +276,7 @@ func (c *HTTPClient) Cancel(err error) {
 }
 
 func (c *HTTPClient) Close() {
-	if c.closed || context.Cause(c.ctx) != nil {
+	if c.closed {
 		return
 	}
 
@@ -323,11 +320,8 @@ func (c *HTTPClient) RunReceive() {
 	for {
 		frTyp, frLen, err = readFrameHeader(c.reader)
 
-		select {
-		case <-c.ctx.Done():
+		if c.ctx.Err() != nil {
 			return
-		default:
-			// fallthrough
 		}
 
 		if err != nil {
