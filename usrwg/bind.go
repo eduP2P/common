@@ -8,7 +8,6 @@ import (
 	"net"
 	"reflect"
 	"runtime"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -49,8 +48,6 @@ func (b *ToverSokBind) Close() error {
 	b.connMu.Lock()
 	defer b.connMu.Unlock()
 	defer b.endpointMu.Unlock()
-
-	slog.Debug("bind close called", "stack", string(debug.Stack()))
 
 	maps.Clear(b.endpoints)
 
