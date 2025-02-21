@@ -47,6 +47,7 @@ type Engine struct {
 //
 // After the engine has successfully started once, it will automatically restart on any failure.
 func (e *Engine) Start() error {
+	e.doAutoRestart = true
 	return e.start(true)
 }
 
