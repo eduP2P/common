@@ -262,8 +262,7 @@ fi
 
 if [[ $performance == true ]]; then
     echo -e "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 25,50,75,100 -d 3 -b TS_PASS_DIRECT router1-router2 : :
-    run_system_test -k packet_loss -v 0,1.5,3,4.5 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 50,100,150,200 -d 3 -r 3 -b TS_PASS_DIRECT router1-router2 : wg0:wg0
 elif [[ -n $file ]]; then
     echo -e "\nTests from file: $file"
     
