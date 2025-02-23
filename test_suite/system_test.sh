@@ -13,8 +13,8 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
     -v <comma-separated string of positive real numbers (less than 100 for -k bitrate)>
     -d <seconds>
     -r <amount of repetitions (to improve consistency of results)>
-    -b
-        With this flag, eduP2P's performance is compared to the performance of a direct connection, and a connection using only WireGuard
+    -b <direct|wireguard|both>
+        With this flag, eduP2P's performance is compared to the performance of a direct connection and/or a connection using only WireGuard
         This flag should only be used when both peers reside in the 'public' network
     
 <NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
@@ -43,7 +43,7 @@ performance_test_duration=5 # Default value in case -d is not used
 performance_test_reps=1 # Default value in case -r is not used
 
 # Validate optional arguments
-while getopts ":k:v:d:r:bh" opt; do
+while getopts ":k:v:d:r:b:h" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
@@ -73,7 +73,10 @@ while getopts ":k:v:d:r:bh" opt; do
             ;;
 
         b)
-            baseline="-b"
+            performance_test_baseline=$OPTARG
+            validate_str $performance_test_baseline "^direct|wireguard|both$"
+
+            baseline="-b $performance_test_baseline"
             ;;
         h) 
             echo "$usage_str"
@@ -311,7 +314,7 @@ if [[ -n $performance_test_var ]]; then
     peer1_ns=${peer_ns_list[0]}
     peer1_ip=$(extract_ipv4 $peer1_ns $peer1_interface)
 
-    sudo ./performance_test.sh $baseline $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $performance_test_reps $log_dir
+    sudo ./performance_test.sh ${baseline} $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $performance_test_reps $log_dir
 
     if [[ $? -ne 0 ]]; then 
         clean_exit 1

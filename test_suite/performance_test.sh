@@ -4,8 +4,8 @@ usage_str="""
 Usage: ${0} [OPTIONAL ARGUMENTS] <NAMESPACE PEER 1> <NAMESPACE PEER 2> <VIRTUAL IP PEER 1> <PERFORMANCE TEST VARIABLE> <PERFORMANCE TEST VALUES> <PERFORMANCE TEST DURATION> <PERFORMANCE TEST REPETITIONS> <LOG DIRECTORY>
 
 [OPTIONAL ARGUMENTS]:
-    -b
-        With this flag, eduP2P's performance is compared to the performance of a direct connection, and a connection using only WireGuard
+    -b <direct|wireguard|both>
+        With this flag, eduP2P's performance is compared to the performance of a direct connection and/or a connection using only WireGuard
         This flag should only be used when both peers reside in the 'public' network
 
 Executes performance tests between the peers using iperf3, where peer 1 acts as the server and peer 2 as the client
@@ -24,10 +24,24 @@ This script must be executed with root permissions
 . ./util.sh
 
 # Validate optional arguments
-while getopts ":bh" opt; do
+while getopts ":b:h" opt; do
     case $opt in
         b)
-            baseline=true
+            baseline=$OPTARG
+            validate_str $baseline "^direct|wireguard|both$"
+
+            case $baseline in
+                "direct")
+                    baseline_direct=true
+                    ;;
+                "wireguard")
+                    baseline_wireguard=true
+                    ;;
+                "both")
+                    baseline_direct=true
+                    baseline_wireguard=true
+                    ;;
+            esac
             ;;
         h) 
             echo "$usage_str"
@@ -60,7 +74,7 @@ function clean_exit() {
     exit_code=$1
 
     # Delete baseline WireGuard interfaces and private keys, and kill keep-alive process
-    if [[ $baseline == true ]]; then
+    if [[ $baseline_wireguard == true ]]; then
         for ns in $peer1 $peer2; do
             sudo ip netns exec $ns ip link del wg_$ns
             rm private_$ns
@@ -200,8 +214,11 @@ function performance_tests() {
         performance_test $performance_test_val $performance_test_dir "eduP2P" $peer1_ip
 
         # If -b is set, the performance test is repeated over a direct/WireGuard connection instead of over the eduP2P connection
-        if [[ $baseline == true ]]; then
+        if [[ $baseline_direct == true ]]; then
             performance_test $performance_test_val $performance_test_dir "Direct" $peer1_pub_ip
+        fi
+
+        if [[ $baseline_wireguard == true ]]; then
             performance_test $performance_test_val $performance_test_dir "WireGuard" 10.0.0.1
         fi
 
@@ -245,7 +262,7 @@ function wg_setup() {
 }
 
 # For the baseline comparison, we need the peers' public IPs, which are also needed to setup a WireGuard connection between them
-if [[ $baseline == true ]]; then
+if [[ $baseline_direct == true || $baseline_wireguard == true ]]; then
     peer1_pub_ip=$(ip netns exec $peer1 ip address | grep -Eo "inet 192.168.[0-9.]+" | cut -d ' ' -f2)
     peer2_pub_ip=$(ip netns exec $peer2 ip address | grep -Eo "inet 192.168.[0-9.]+" | cut -d ' ' -f2)
 
