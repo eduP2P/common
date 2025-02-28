@@ -186,8 +186,10 @@ function performance_test() {
     wait $server_pid
 
     # Measure delay and store it in the iperf3 log file
-    delay=$(measure_delay $server_ip)
-    store_delay $delay $log_path
+    if [[ $performance_test_var != "bitrate" ]]; then
+        delay=$(measure_delay $server_ip)
+        store_delay $delay $log_path
+    fi
 }
 
 # Function to do performance tests for all performance test values

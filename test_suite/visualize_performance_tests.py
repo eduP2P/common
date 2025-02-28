@@ -94,6 +94,10 @@ def repetition_iteration(test_path: str, test_var: str) -> tuple[list[float], di
         },
     }
 
+    # Delay is not affected by the iperf3 target bitrate, so this data has not been measured
+    if(test_var == "bitrate"):
+        del extracted_data["delay"]
+
     paths = Path(test_path).rglob("repetition*")
     
     # Iterate over repetitions sorted from lowest to highest number (default sorting order is inconsistent)
