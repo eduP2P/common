@@ -202,24 +202,15 @@ def create_graph(test_var: str, test_var_values: list[float], metric: str, extra
     line_widths=[4,3,2]
 
     for i, connection in enumerate(connection_measurements.keys()):
+        x = test_var_values
         y = connection_measurements[connection]   
         ls=line_styles[i]  
         lw=line_widths[i]
+        plt.plot(x, y, linestyle=ls, linewidth=lw, label=connection)
 
-        # Plot the measured independent variable values on the X axis instead of the target values unless: 
-        # - The measured values are plotted on the Y axis
-        # - One-way delay/HTTP latency are plotted respectively on the X/Y axis, since the HTTP latency and iperf3 measured values are independendent
-        if metric == test_var or metric == "delay" or test_var == "delay":
-            plt.plot(test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
-            x_label = test_var_label
-        else:
-            measured_test_var_values = sorted(extracted_data[test_var]["values"]["average"][connection])
-            plt.plot(measured_test_var_values, y, linestyle=ls, linewidth=lw, label=connection)
-            x_label = extracted_data[test_var]["label"]
-
-    plt.xlabel(f"{x_label} ({test_var_unit})")
+    plt.xlabel(f"{test_var_label} ({test_var_unit})")
     plt.ylabel(f"{metric_label} ({metric_unit})")
-    plt.title(f"{metric_label} for varying {x_label}")
+    plt.title(f"{metric_label} for varying {test_var_label}")
     plt.ticklabel_format(useOffset=False)
     plt.legend()
     
