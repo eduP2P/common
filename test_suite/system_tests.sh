@@ -88,6 +88,8 @@ while getopts ":c:d:ef:l:ph" opt; do
     esac
 done
 
+echo FILE: $file
+
 # Shift positional parameters indexing by accounting for the optional arguments
 shift $((OPTIND-1))
 
@@ -262,11 +264,12 @@ fi
 
 if [[ $performance == true ]]; then
     echo -e "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 250,500,750,1000 -d 3 -r 3 -b TS_PASS_DIRECT router1-router2 : wg0:wg0
+    run_system_test -k bitrate -v 250,500,750,1000 -d 3 -r 3 -b both TS_PASS_DIRECT router1-router2 : wg0:wg0
 elif [[ -n $file ]]; then
     echo -e "\nTests from file: $file"
     
-    while read test_cmd; do
+    # Read line by line from $file (also last line which may not end with a newline, but still contain a command)
+    while IFS= read -r test_cmd || [ -n "$test_cmd" ]; do
         eval $test_cmd
     done < $file
 else
