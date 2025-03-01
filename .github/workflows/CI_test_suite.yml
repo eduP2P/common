@@ -78,11 +78,11 @@ jobs:
       working-directory: test_suite
       continue-on-error: true
 
-    - name: Upload performance test packet loss graph
+    - name: Upload performance test graphs
       uses: actions/upload-artifact@v4
       with:
-        name: graph_X_bitrate_Y_packet_loss
-        path: test_suite/system_test_logs/performance/1_No-NAT_No-NAT/performance_test_packet_loss.png
+        name: performance-test-graphs
+        path: test_suite/system_test_logs/performance/1_No-NAT_No-NAT/*.png
 
     - name: Upload full performance test logs
       uses: actions/upload-artifact@v4
