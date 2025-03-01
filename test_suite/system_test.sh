@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Amount of seconds to wait for one system test to finish
+SYSTEM_TEST_TIMEOUT=60
+
 usage_str="""
 Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
@@ -271,7 +274,7 @@ done
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     export LOG_FILE=${log_dir}/$peer_id.txt # Export to use in bash -c
-    timeout 30s bash -c 'tail -n +1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
+    timeout ${SYSTEM_TEST_TIMEOUT}s bash -c 'tail -n +1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
 
     # Branch on exit code of previous command
     case $? in
