@@ -8,7 +8,7 @@ type Observer interface {
 
 	CurrentState() EngineState
 
-	GetNeedsLoginState() (url string, err error)
+	GetNeedsLoginState() (url string, deviceKeyCh chan<- string, err error)
 	GetEstablishedState() (expiry time.Time, err error) // TODO add ipv4,ipv6?
 }
 

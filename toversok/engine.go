@@ -36,6 +36,8 @@ type Engine struct {
 	state         stateObserver
 	doAutoRestart bool
 	dirty         bool
+
+	deviceKey *string
 }
 
 // Start will fire up the Engine.
@@ -160,11 +162,10 @@ func (e *Engine) installSession(allowLogon bool) error {
 	var logon types.LogonCallback
 
 	if allowLogon {
-		logon = func(url string, _ chan<- string) error {
-			// TODO register/use device key channel
-
+		logon = func(url string, devKeyCh chan<- string) error {
 			e.state.alter(func(o *stateObserver) {
-				o.currentLoginURL = url
+				o.loginURL = url
+				o.loginDeviceKeyCh = devKeyCh
 			})
 
 			e.state.change(CreatingSession, NeedsLogin)
@@ -215,8 +216,9 @@ type stateObserver struct {
 	state     EngineState
 	callbacks []func(state EngineState)
 
-	currentLoginURL string
-	expiry          time.Time
+	loginURL         string
+	loginDeviceKeyCh chan<- string
+	expiry           time.Time
 }
 
 func (s *stateObserver) CurrentState() EngineState {
@@ -232,15 +234,15 @@ func (s *stateObserver) RegisterStateChangeListener(f func(state EngineState)) {
 
 var ErrWrongState = errors.New("wrong state")
 
-func (s *stateObserver) GetNeedsLoginState() (url string, err error) {
+func (s *stateObserver) GetNeedsLoginState() (url string, devKeyCh chan<- string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.state != NeedsLogin {
-		return "", ErrWrongState
+		return "", nil, ErrWrongState
 	}
 
-	return s.currentLoginURL, nil
+	return s.loginURL, s.loginDeviceKeyCh, nil
 }
 
 func (s *stateObserver) GetEstablishedState() (time.Time, error) {
@@ -345,11 +347,15 @@ func NewEngine(
 
 	e.Observer().RegisterStateChangeListener(func(state EngineState) {
 		if state == NeedsLogin {
-			url, err := e.Observer().GetNeedsLoginState()
+			url, devKeyCh, err := e.Observer().GetNeedsLoginState()
 			if err == nil {
 				e.slog().Info("control wants logon", "url", url)
 			} else {
 				e.slog().Error("could not get login state when prompted for it", "err", err)
+			}
+
+			if e.deviceKey != nil {
+				devKeyCh <- *e.deviceKey
 			}
 		} else if state == Established {
 			expiry, err := e.Observer().GetEstablishedState()
@@ -403,7 +409,10 @@ func (e *Engine) Observer() Observer {
 	return &e.state
 }
 
-func (e *Engine) SupplyDeviceKey(string) error {
-	// TODO
-	panic("not implemented")
+// SupplyDeviceKey gives the device key that'll be used when logging on.
+// This must be called BEFORE Start.
+func (e *Engine) SupplyDeviceKey(key string) error {
+	e.deviceKey = &key
+
+	return nil
 }
