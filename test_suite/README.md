@@ -14,6 +14,7 @@ A CI test suite for the eduP2P prototype.
     2.  [Performance Test Results](#performance-test-results)
     3.  [Integration Test Results](#integration-test-results)
 3.  [Bibliography](#bibliography)
+4.  [Funding](#funding)
 
 # Overview
 
@@ -60,7 +61,7 @@ installed. The list of tools is found in
 installed by running the following command (which itself requires the
 sudo and xargs packages):
 
-        xargs -a system_test_requirements.txt sudo apt-get install
+    xargs -a system_test_requirements.txt sudo apt-get install
 
 ### Performance test-specific requirements
 
@@ -172,8 +173,6 @@ are very similar, the namespaces on the right side are skipped.
 
 - **private1:** each private network needs its own namespace to properly
   isolate the private networks from the public network.
-
-- 
 
 - **router1:** a separate network namespace is necessary for each router
   in order for NAT to be applied in the router. This test suite uses
@@ -1344,3 +1343,16 @@ and hole-punching.” Available:
 </div>
 
 </div>
+
+## Funding
+
+The eduP2P test suite is funded through the [VPN
+Fund](https://nlnet.nl/themes/vpn/) established by
+[NLnet](https://nlnet.nl) and [The Commons
+Conservancy](https://commonsconservancy.org/).
+
+[<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
+[<img src="https://nlnet.nl/image/partners/commonsconservancy.svg" alt="The Commons Conservancy Logo" width="20%" />](https://commonsconservancy.org/)
+
+The test suite features that have been made possible thanks to this
+funding are described below.
