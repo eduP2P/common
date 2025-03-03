@@ -448,7 +448,10 @@ func (s *ServerSession) Run() {
 				session.UpdateHomeRelay(s.Peer, msg.HomeRelay)
 			})
 		case *msgcontrol.Pong:
+			s.Slog().Debug("received pong")
 			// TODO
+		case *msgcontrol.LogonDeviceKey:
+			s.Slog().Debug("received after-logon logon device key, ignoring...")
 		default:
 			err = fmt.Errorf("received unknown type of message: %#v", msg)
 			return

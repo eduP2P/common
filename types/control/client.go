@@ -168,7 +168,6 @@ func (c *Client) handleLogon(url string, logon types.LogonCallback) (msgcontrol.
 		}
 	}()
 
-	// TODO also add context error / close here
 	select {
 	case deviceKey := <-deviceKeyChan:
 		if err := c.cc.Write(&msgcontrol.LogonDeviceKey{
