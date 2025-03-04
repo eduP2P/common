@@ -440,9 +440,9 @@ configuring the following parameters:
 
 - **Independent variable**: the user can choose an independent variable
   during the performance tests. This variable will take different values
-  that are also configured by the user, and an iperf3 performance test
-  will be performed for each value. This way, it is possible to measure
-  the effect of the independent variable on the performance of eduP2P.
+  that are also configured by the user, and the performance test will be
+  performed for each value. This way, it is possible to measure the
+  effect of the independent variable on the performance of eduP2P.
   Currently, the test suite implements the following independent
   variables:
 
@@ -450,6 +450,9 @@ configuring the following parameters:
       during the performance test.
   2.  Bitrate: the speed at which iperf3 should try to send packets
       during the performance test (in Mbps).
+  3.  One-way delay: the amount of milliseconds that the sending of a
+      packet should be postponed (implemented using the netem tool
+      [\[8\]](#ref-man_netem)).
 
 - **Performance test baseline**: with this optional parameter, a
   ‘baseline’ is added to the performance test results, created by
@@ -543,9 +546,9 @@ two eduP2P peers are able to establish a direct connection using UDP
 hole punching when both peers are behind various types of NAT.
 
 When considering the four types of NAT described in RFC 3489
-[\[8\]](#ref-rfc3489), the results of using UDP hole punching to
+[\[9\]](#ref-rfc3489), the results of using UDP hole punching to
 establish a connection between peers are well-established
-[\[9\]](#ref-wacker2008), [\[10\]](#ref-hole_punching_table).
+[\[10\]](#ref-wacker2008), [\[11\]](#ref-hole_punching_table).
 
 This test suite uses the RFC 4787 [\[4\]](#ref-rfc4787) terminology,
 which does not categorize NAT into these four types. However, each of
@@ -1223,6 +1226,32 @@ further, however:
 
 ![](./images/performance_tests/usr_wg_x_bitrate_y_packet_loss.png)
 
+### Results with varying one-way delay
+
+Command used:
+
+    run_system_test -k delay -v 0,1,2,3 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+
+![](./images/performance_tests/x_ow_delay_y_http_latency.png)
+
+With this command, we compare how increasing the one-way delay between
+peers using eduP2P, WireGuard and a direct connection affects the
+latency of the HTTP connection between the peers. From the graph we can
+conclude that there is a linear correlation between one-way delay and
+HTTP latency, but that the latter grows faster than the former. This can
+be explained by the fact that setting up an HTTP connection requires
+multiple round trips, and therefore the one-way delay is applied several
+times.
+
+Furthermore, we see that the direct connection has the lowest HTTP
+latency, followed by WireGuard and finally eduP2P. This order makes
+sense, since WireGuard makes use of the direct connection after
+establishing an encrypted tunnel, and in turn eduP2P uses WireGuard
+internally. Taking this explanation for the higher HTTP latency of
+eduP2P into account, we can conclude that increasing the one-way delay
+does not increase eduP2P’s HTTP latency more than the HTTP latency of
+WireGuard or the direct connection.
+
 ## Integration Test Results
 
 Currently, the integration tests focus on the lowest level components
@@ -1312,9 +1341,18 @@ transfer a URL</span>.” Available:
 
 </div>
 
-<div id="ref-rfc3489" class="csl-entry">
+<div id="ref-man_netem" class="csl-entry">
 
 <span class="csl-left-margin">\[8\]
+</span><span class="csl-right-inline">“<span class="nocase">netem -
+Network Emulator</span>.” Available:
+<https://www.man7.org/linux/man-pages/man8/tc-netem.8.html></span>
+
+</div>
+
+<div id="ref-rfc3489" class="csl-entry">
+
+<span class="csl-left-margin">\[9\]
 </span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
 and J. Weinberger, “<span class="nocase">STUN - Simple Traversal of User
 Datagram Protocol (UDP) Through Network Address Translators
@@ -1325,7 +1363,7 @@ Datagram Protocol (UDP) Through Network Address Translators
 
 <div id="ref-wacker2008" class="csl-entry">
 
-<span class="csl-left-margin">\[9\]
+<span class="csl-left-margin">\[10\]
 </span><span class="csl-right-inline">A. Wacker, G. Schiele, S.
 Holzapfel, and T. Weis, “A NAT traversal mechanism for peer-to-peer
 networks,” Oct. 2008, pp. 81–83. doi:
@@ -1335,7 +1373,7 @@ networks,” Oct. 2008, pp. 81–83. doi:
 
 <div id="ref-hole_punching_table" class="csl-entry">
 
-<span class="csl-left-margin">\[10\]
+<span class="csl-left-margin">\[11\]
 </span><span class="csl-right-inline">“Understanding different NAT types
 and hole-punching.” Available:
 <https://support.dh2i.com/docs/Archive/kbs/general/understanding-different-nat-types-and-hole-punching/></span>
