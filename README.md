@@ -34,3 +34,8 @@ This project received funding through [NGI Assure](https://nlnet.nl/assure), a f
 
 [<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
 [<img src="https://nlnet.nl/image/logos/NGIAssure_tag.svg" alt="NGI Assure Logo" width="20%" />](https://nlnet.nl/assure)
+
+Furthermore, the test suite of the project received funding through NLnet's [VPN Fund](https://nlnet.nl/themes/vpn/), which is established in collaboration with [The Commons Conservancy](https://commonsconservancy.org/). A description of the test suite features made possible thanks to this funding can be found in the [test suite documentation](test_suite/README.md#funding).
+
+[<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
+[<img src="https://nlnet.nl/image/partners/commonsconservancy.svg" alt="The Commons Conservancy Logo" width="20%" />](https://commonsconservancy.org/)
