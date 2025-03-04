@@ -96,7 +96,7 @@ function measure_delay() {
     kill $http_pid
 
     # Calculate and print average delay
-    avg_delay=$(echo "$avg_delay * 0.01" | bc)
+    avg_delay=$(echo "$avg_delay / 100" | bc -l)
     echo "$avg_delay"
 }
 

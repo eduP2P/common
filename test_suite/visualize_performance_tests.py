@@ -25,7 +25,7 @@ TEST_VARS = {
         "unit" : "%"
     },
     "delay" : {
-        "label" : "Delay",
+        "label" : "Simulated one-way delay",
         "unit" : "ms"
     }
 }
@@ -79,7 +79,7 @@ def connection_iteration(test_path : str, test_var : str) -> dict:
             "values" : {}
         },
         "delay" : {
-            "label" : "Delay",
+            "label" : "Measured HTTP latency",
             "json_key" : "delay_ms",
             "unit" : "ms",
             "values" : {}
