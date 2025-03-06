@@ -133,7 +133,7 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msgsess.ClearMessage, 
 }
 
 func (sm *SessionManager) Pack(sMsg msgsess.SessionMessage, toSession key.SessionPublic) []byte {
-	clearBytes := sMsg.MarshalSessionMessage()
+	clearBytes := sMsg.Marshal()
 
 	cipherBytes := sm.session().Shared(toSession).Seal(clearBytes)
 

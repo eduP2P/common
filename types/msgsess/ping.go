@@ -28,8 +28,23 @@ type Ping struct {
 	Padding int
 }
 
-func (p *Ping) MarshalSessionMessage() []byte {
+func (p *Ping) Marshal() []byte {
+	// TODO add padding
 	return slices.Concat([]byte{byte(v1), byte(PingMessage)}, p.TxID[:], p.NodeKey[:])
+}
+
+func (p *Ping) Parse(b []byte) error {
+	if len(b) < key.Len+12 {
+		return errTooSmall
+	}
+
+	p.TxID = [12]byte(b[:12])
+	b = b[12:]
+	p.NodeKey = key.NodePublic(b[:key.Len])
+
+	// TODO count remaining bytes as padding
+
+	return nil
 }
 
 func (p *Ping) Debug() string {
