@@ -47,8 +47,6 @@ func MakeStage(
 	controlSession ifaces.ControlInterface,
 
 	dialRelayFunc relayhttp.RelayDialFunc,
-
-	injectable ifaces.Injectable,
 ) ifaces.Stage {
 	// FIXME ??? why the fuck did we ever decide on this
 	// ctx := context.WithoutCancel(pCtx)
@@ -88,7 +86,7 @@ func MakeStage(
 	s.TMan = s.makeTM()
 	s.SMan = s.makeSM(sessPriv)
 	s.EMan = s.makeEM()
-	s.MMan = s.makeMM(injectable)
+	s.MMan = s.makeMM()
 
 	return s
 }

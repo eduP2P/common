@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/sethvargo/go-limiter"
 	"github.com/sethvargo/go-limiter/memorystore"
@@ -21,12 +20,11 @@ type MDNSManager struct {
 	rlStore limiter.Store
 
 	sock *SockRecv
-	inj  ifaces.Injectable
 
 	working bool
 }
 
-func (s *Stage) makeMM(inj ifaces.Injectable) *MDNSManager {
+func (s *Stage) makeMM() *MDNSManager {
 	c := MakeCommon(s.Ctx, MdnsManInboxChLen)
 
 	store, err := memorystore.New(&memorystore.Config{
@@ -48,12 +46,6 @@ func (s *Stage) makeMM(inj ifaces.Injectable) *MDNSManager {
 		s:           s,
 		rlStore:     store,
 	}
-
-	if inj == nil {
-		L(m).Error("could not start MDNS Manager; injector is non-present")
-		return m
-	}
-	m.inj = inj
 
 	bind, err := makeMDNSListener()
 	if err != nil {
@@ -123,22 +115,14 @@ func (mm *MDNSManager) Run() {
 					continue
 				}
 
-				if !mm.inj.Available() {
-					L(mm).Debug("dropping MDNS packet due to unavailable injector", "from", msg.From.Debug())
-					continue
-				}
-
 				if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(msg.Data)); !ok {
 					// some rudimentary filtering to prevent true loop storms
 					continue
 				}
 
-				L(mm).Log(context.Background(), types.LevelTrace, "injecting external MDNS packet", "len", len(msg.Data), "from", msg.From.Debug())
+				L(mm).Log(context.Background(), types.LevelTrace, "processing external MDNS packet", "len", len(msg.Data), "from", msg.From.Debug())
 
-				err := mm.inj.InjectPacket(netip.AddrPortFrom(pi.IPv4, MDNSPort), ip4MDNSBroadcastAddress, msg.Data)
-				if err != nil {
-					L(mm).Error("failed to inject MDNS packet", "from", msg.From.Debug(), "err", err)
-				}
+				// TODO process external mDNS packet
 			default:
 				mm.logUnknownMessage(msg)
 			}

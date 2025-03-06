@@ -76,12 +76,6 @@ func SetupSession(
 		return nil, err
 	}
 
-	var inj ifaces.Injectable
-	// TODO have fallbacks, try to acquire system injection, etc.
-	if i, ok := sess.wg.(ifaces.Injectable); ok {
-		inj = i
-	}
-
 	sess.stage = actors.MakeStage(
 		sess.ctx,
 		getNodePriv,
@@ -90,7 +84,6 @@ func SetupSession(
 		sess.wg.ConnFor,
 		sess.cs,
 		nil,
-		inj,
 	)
 
 	sess.cs.InstallCallbacks(sess)
