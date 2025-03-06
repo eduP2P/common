@@ -47,6 +47,8 @@ func MakeStage(
 	controlSession ifaces.ControlInterface,
 
 	dialRelayFunc relayhttp.RelayDialFunc,
+
+	injectable ifaces.Injectable,
 ) ifaces.Stage {
 	// FIXME ??? why the fuck did we ever decide on this
 	// ctx := context.WithoutCancel(pCtx)
@@ -86,6 +88,7 @@ func MakeStage(
 	s.TMan = s.makeTM()
 	s.SMan = s.makeSM(sessPriv)
 	s.EMan = s.makeEM()
+	s.MMan = s.makeMM(injectable)
 
 	return s
 }
@@ -111,6 +114,8 @@ type Stage struct {
 	SMan ifaces.SessionManagerActor
 	// The EndpointManager
 	EMan ifaces.EndpointManagerActor
+	// The MDNSManager
+	MMan ifaces.MDNSManagerActor
 
 	connMutex sync.RWMutex
 	inConn    map[key.NodePublic]InConnActor
@@ -153,6 +158,7 @@ func (s *Stage) Start() {
 	go s.TMan.Run()
 	go s.SMan.Run()
 	go s.EMan.Run()
+	go s.MMan.Run()
 
 	go s.DMan.Run()
 	go s.DRouter.Run()
@@ -463,7 +469,7 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _, _ netip.Addr, _ msgcontrol.Properties) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4, ip6 netip.Addr, prop msgcontrol.Properties) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {
@@ -482,6 +488,9 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 		Endpoints:           types.NormaliseAddrPortSlice(endpoints),
 		RendezvousEndpoints: make([]netip.AddrPort, 0),
 		Session:             session,
+		IPv4:                ip4,
+		IPv6:                ip6,
+		MDNS:                prop.MDNS,
 	}
 
 	return nil
@@ -489,7 +498,7 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 
 var errNoPeerInfo = errors.New("could not find peer info to update")
 
-func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, _ *msgcontrol.Properties) error {
+func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error {
 	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
 		if homeRelay != nil {
 			info.HomeRelay = *homeRelay
@@ -499,6 +508,9 @@ func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []ne
 		}
 		if session != nil {
 			info.Session = *session
+		}
+		if prop != nil {
+			info.MDNS = prop.MDNS
 		}
 	})
 }
@@ -547,6 +559,19 @@ func (s *Stage) GetPeerInfo(peer key.NodePublic) *stage.PeerInfo {
 	defer s.peerInfoMutex.RUnlock()
 
 	return s.peerInfo[peer]
+}
+
+func (s *Stage) GetPeersWhere(f func(key.NodePublic, *stage.PeerInfo) bool) []key.NodePublic {
+	s.peerInfoMutex.RLock()
+	defer s.peerInfoMutex.RUnlock()
+
+	var peers []key.NodePublic
+	for peer, info := range s.peerInfo {
+		if f(peer, info) {
+			peers = append(peers, peer)
+		}
+	}
+	return peers
 }
 
 func (s *Stage) RemovePeer(peer key.NodePublic) error {

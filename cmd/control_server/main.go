@@ -249,7 +249,9 @@ func (cs *ControlServer) loadExistingNodes() {
 				continue
 			}
 
-			if err := cs.server.UpsertVisibilityPair(client, client2, control.VisibilityPair{}); err != nil {
+			if err := cs.server.UpsertVisibilityPair(client, client2, control.VisibilityPair{
+				MDNS: true,
+			}); err != nil {
 				panic(err)
 			}
 		}
@@ -262,7 +264,9 @@ func (cs *ControlServer) addNewNode(node key.NodePublic) {
 			continue
 		}
 
-		if err := cs.server.UpsertVisibilityPair(control.ClientID(node), control.ClientID(node2), control.VisibilityPair{}); err != nil {
+		if err := cs.server.UpsertVisibilityPair(control.ClientID(node), control.ClientID(node2), control.VisibilityPair{
+			MDNS: true,
+		}); err != nil {
 			panic(err)
 		}
 	}

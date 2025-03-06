@@ -11,16 +11,20 @@ import (
 
 // Mock Session Message used in this test
 type MockSessionMessage struct {
-	marshalSessionMessage func() []byte
-	debug                 func() string
+	marshal func() []byte
+	debug   func() string
 }
 
-func (m *MockSessionMessage) MarshalSessionMessage() []byte {
-	return m.marshalSessionMessage()
+func (m *MockSessionMessage) Marshal() []byte {
+	return m.marshal()
 }
 
 func (m *MockSessionMessage) Debug() string {
 	return m.debug()
+}
+
+func (m *MockSessionMessage) Parse([]byte) error {
+	panic("implement me")
 }
 
 func assertEncryptedPacket(t *testing.T, pkt []byte, sm *SessionManager, expectedDecryption *msgsess.ClearMessage, failMsg string) {
@@ -66,7 +70,7 @@ func TestSessionManager(t *testing.T) {
 
 	// Pack the test ping message
 	mockSessionMsg := &MockSessionMessage{
-		marshalSessionMessage: func() []byte {
+		marshal: func() []byte {
 			return clearBytes
 		},
 	}

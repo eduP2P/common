@@ -77,6 +77,7 @@ type TrafficManagerActor interface {
 	SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msgsess.SessionMessage)
 	SendMsgToRelay(relay int64, node key.NodePublic, sess key.SessionPublic, m msgsess.SessionMessage)
 	SendPingDirect(ap netip.AddrPort, peer key.NodePublic, session key.SessionPublic)
+	SendPingDirectWithID(ap netip.AddrPort, peer key.NodePublic, session key.SessionPublic, txid msgsess.TxID)
 
 	OutConnUseAddrPort(peer key.NodePublic, ap netip.AddrPort)
 	OutConnTrackHome(peer key.NodePublic)
@@ -102,5 +103,11 @@ type SessionManagerActor interface {
 // ===
 
 type EndpointManagerActor interface {
+	Actor
+}
+
+// ===
+
+type MDNSManagerActor interface {
 	Actor
 }

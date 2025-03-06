@@ -76,7 +76,22 @@ func SetupSession(
 		return nil, err
 	}
 
-	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, sess.cs, nil)
+	var inj ifaces.Injectable
+	// TODO have fallbacks, try to acquire system injection, etc.
+	if i, ok := sess.wg.(ifaces.Injectable); ok {
+		inj = i
+	}
+
+	sess.stage = actors.MakeStage(
+		sess.ctx,
+		getNodePriv,
+		sess.getPriv,
+		getExtSock,
+		sess.wg.ConnFor,
+		sess.cs,
+		nil,
+		inj,
+	)
 
 	sess.cs.InstallCallbacks(sess)
 	context.AfterFunc(sess.cs.Context(), func() {

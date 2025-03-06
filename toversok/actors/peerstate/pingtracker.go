@@ -40,6 +40,14 @@ func (pt *PingTracker) GotPong(ap netip.AddrPort) {
 	pt.gotPong[nap] = true
 }
 
+func (pt *PingTracker) Has(ap netip.AddrPort) bool {
+	pt.rw.Lock()
+	defer pt.rw.Unlock()
+
+	nap := types.NormaliseAddrPort(ap)
+	return pt.gotPong[nap]
+}
+
 func (pt *PingTracker) BestAddrPort() (netip.AddrPort, error) {
 	pt.rw.RLock()
 	defer pt.rw.RUnlock()
