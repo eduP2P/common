@@ -2,8 +2,6 @@ package usrwg
 
 import (
 	"fmt"
-	"github.com/google/gopacket/layers"
-	"golang.zx2c4.com/wireguard/tun"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -15,7 +13,9 @@ import (
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/usrwg/router"
 	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"golang.zx2c4.com/wireguard/device"
+	"golang.zx2c4.com/wireguard/tun"
 )
 
 func init() {
@@ -139,14 +139,15 @@ func (u *UserSpaceWireGuardController) InjectPacket(from, to netip.AddrPort, pkt
 		DstPort: layers.UDPPort(to.Port()),
 		SrcPort: layers.UDPPort(from.Port()),
 	}
-	udp.SetNetworkLayerForChecksum(ipv4)
+	if err := udp.SetNetworkLayerForChecksum(ipv4); err != nil {
+		return fmt.Errorf("failed to set udp checksum: %w", err)
+	}
 
 	err := gopacket.SerializeLayers(buf, opts,
 		ipv4,
 		udp,
 		gopacket.Payload(pkt),
 	)
-
 	if err != nil {
 		return fmt.Errorf("failed to serialize packet: %w", err)
 	}

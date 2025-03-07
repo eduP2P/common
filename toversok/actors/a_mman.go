@@ -5,17 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"net"
+	"net/netip"
+	"runtime"
+	"slices"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/sethvargo/go-limiter"
 	"github.com/sethvargo/go-limiter/memorystore"
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/ipv4"
-	"net"
-	"net/netip"
-	"runtime"
-	"slices"
-	"time"
 )
 
 type MDNSManager struct {
@@ -81,22 +82,6 @@ var (
 	ip4MDNSLoopBackAP              = netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), MDNSPort)
 	ip4MDNSBroadcastAddress        = netip.AddrPortFrom(netip.MustParseAddr("224.0.0.251"), MDNSPort)
 )
-
-// loopbackInterface returns an available logical network interface
-// for loopback tests. It returns nil if no suitable interface is
-// found.
-func loopbackInterface() *net.Interface {
-	ift, err := net.Interfaces()
-	if err != nil {
-		return nil
-	}
-	for _, ifi := range ift {
-		if ifi.Flags&net.FlagLoopback != 0 && ifi.Flags&net.FlagUp != 0 {
-			return &ifi
-		}
-	}
-	return nil
-}
 
 func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 	// TODO this only catches ipv4 traffic, which may be a bit "eh",
@@ -310,7 +295,7 @@ func (mm *MDNSManager) processMDNS(pkt []byte, local bool) []byte {
 				dirty = true
 			}
 		}
-	} else {
+	} else if msg.Response {
 		// RFC 6762:
 		//   Multicast DNS responses MUST NOT contain any questions in the
 		//   Question Section.  Any questions in the Question Section of a
@@ -322,12 +307,9 @@ func (mm *MDNSManager) processMDNS(pkt []byte, local bool) []byte {
 		// f.e. avahi doesn't properly work if the questions section is filled out, so we need to process that.
 		//
 		// The likes of Apple's mDNSResponder haven't gotten this above message, so we need to check for this.
-
-		if msg.Response {
-			if len(msg.Questions) != 0 {
-				msg.Questions = []dnsmessage.Question{}
-				dirty = true
-			}
+		if len(msg.Questions) != 0 {
+			msg.Questions = []dnsmessage.Question{}
+			dirty = true
 		}
 	}
 

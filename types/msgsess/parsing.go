@@ -3,6 +3,7 @@ package msgsess
 import (
 	"errors"
 	"fmt"
+
 	"github.com/edup2p/common/types/key"
 )
 

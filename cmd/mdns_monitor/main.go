@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net"
@@ -13,22 +11,6 @@ import (
 	"github.com/sethvargo/go-limiter/memorystore"
 	"golang.org/x/net/dns/dnsmessage"
 )
-
-//func Control(network, address string, c syscall.RawConn) (err error) {
-//	controlErr := c.Control(func(fd uintptr) {
-//		unix.SetsockoptInet4Addr(int(fd), unix.IPPROTO_IP, unix.IP_ADD_MEMBERSHIP)
-//
-//		err = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1)
-//		if err != nil {
-//			return
-//		}
-//		err = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
-//	})
-//	if controlErr != nil {
-//		err = controlErr
-//	}
-//	return
-//}
 
 func walkInterfaces() {
 	ift, err := net.Interfaces()
@@ -43,36 +25,22 @@ func walkInterfaces() {
 	}
 }
 
-// loopbackInterface returns an available logical network interface
-// for loopback tests. It returns nil if no suitable interface is
-// found.
-func loopbackInterface() *net.Interface {
-	ift, err := net.Interfaces()
-	if err != nil {
-		return nil
-	}
-	for _, ifi := range ift {
-		if ifi.Flags&net.FlagLoopback != 0 && ifi.Flags&net.FlagUp != 0 {
-			return &ifi
-		}
-	}
-	return nil
-}
-
 func main() {
 	// this code is specific to macos, for now
 
 	walkInterfaces()
 
 	IP := "224.0.0.251:5353"
-	//IP := "[ff02::fb]:5353"
+	// IP := "[ff02::fb]:5353"
 
 	ua := net.UDPAddrFromAddrPort(netip.MustParseAddrPort(IP))
 
 	iface, err := net.InterfaceByName("lo0")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	bind, err := net.ListenMulticastUDP("udp4", iface, ua)
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,7 +67,6 @@ func main() {
 
 	for {
 		n, ap, err := bind.ReadFromUDPAddrPort(buf)
-
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -115,7 +82,6 @@ func main() {
 		}
 
 		_, _, _, ok, err := store.Take(context.Background(), msg.GoString())
-
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -141,10 +107,4 @@ func main() {
 			}
 		}
 	}
-}
-
-func dataToB64Hash(b []byte) string {
-	h := sha256.Sum256(b)
-
-	return base64.StdEncoding.EncodeToString(h[:])
 }
