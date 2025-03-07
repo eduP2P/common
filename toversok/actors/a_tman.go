@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"context"
 	"maps"
 	"net/netip"
 	"runtime/debug"
@@ -204,6 +205,10 @@ func (tm *TrafficManager) spreadMDNS(pkt []byte) {
 		return info.MDNS
 	})
 
+	peersDebug := types.Map(peers, func(t key.NodePublic) string {
+		return t.Debug()
+	})
+	L(tm).Log(context.Background(), types.LevelTrace, "sending mdns packet to peers", "peers", peersDebug)
 	for _, peer := range peers {
 		tm.opportunisticSendTo(peer, &msgsess.SideBandData{
 			Type: msgsess.MDNSType,
@@ -221,6 +226,8 @@ func (tm *TrafficManager) opportunisticSendTo(to key.NodePublic, msg msgsess.Ses
 	}
 
 	tm.forState(to, func(s peerstate.PeerState) peerstate.PeerState {
+		L(tm).Log(context.Background(), types.LevelTrace, "sending opportunistic session message to peer", "peer", to.Debug())
+
 		if e, ok := s.(*peerstate.Established); ok {
 			tm.SendMsgToDirect(e.GetEndpoint(), pi.Session, msg)
 		} else {
@@ -344,19 +351,9 @@ func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 	// A state for a state, perfectly balanced, as all things should be.
 	// - Thanos, while writing this code.
 
-	state, ok := tm.peerState[peer]
+	tm.ensurePeerState(peer)
 
-	if !ok {
-		return
-	}
-
-	if state == nil {
-		L(tm).Error("found nil state when running update for peer, recovering...", "peer", peer.Debug())
-		tm.ensurePeerState(peer)
-		state = tm.peerState[peer]
-	}
-
-	newState := fn(state)
+	newState := fn(tm.peerState[peer])
 
 	if newState != nil {
 		// state transitions have happened, store the new state
