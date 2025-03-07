@@ -45,6 +45,10 @@ type TManSessionMessageFromDirect struct {
 	Msg *msgsess.ClearMessage
 }
 
+type TManSpreadMDNSPacket struct {
+	Pkt []byte
+}
+
 // ======================================================================================================
 // SessionManager msgs
 
@@ -105,6 +109,15 @@ type DManSetMTU struct {
 
 type RManRelayLatencyResults struct {
 	RelayLatency map[int64]time.Duration
+}
+
+// ======================================================================================================
+// MDNSManager msgs
+
+type MManReceivedPacket struct {
+	From key.NodePublic
+
+	Data []byte
 }
 
 // ======================================================================================================

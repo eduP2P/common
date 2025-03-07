@@ -3,6 +3,7 @@ package extwg
 import (
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -224,6 +225,15 @@ func (w *WGCtrl) GetStats(publicKey key.NodePublic) (*toversok.WGStats, error) {
 		TxBytes:       foundPeer.TransmitBytes,
 		RxBytes:       foundPeer.ReceiveBytes,
 	}, nil
+}
+
+func (w *WGCtrl) GetInterface() *net.Interface {
+	i, err := net.InterfaceByName(w.name)
+	if err != nil {
+		log.Println("cannot find interface ", w.name, ":", err)
+		return nil
+	}
+	return i
 }
 
 func (w *WGCtrl) ensureLocalConn(peer key.NodePublic) *mapping {

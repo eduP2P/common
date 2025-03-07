@@ -15,6 +15,7 @@ const (
 	TrafficManInboxChLen   = 16
 	RelayManInboxChLen     = 4
 	DirectRouterInboxChLen = 4
+	MdnsManInboxChLen      = 32
 
 	// Frame
 	SockRecvFrameChanBuffer = 256

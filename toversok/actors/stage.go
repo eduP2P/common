@@ -47,6 +47,8 @@ func MakeStage(
 	controlSession ifaces.ControlInterface,
 
 	dialRelayFunc relayhttp.RelayDialFunc,
+
+	wgIf *net.Interface,
 ) ifaces.Stage {
 	// FIXME ??? why the fuck did we ever decide on this
 	// ctx := context.WithoutCancel(pCtx)
@@ -74,6 +76,8 @@ func MakeStage(
 		bindLocal: bindLocal,
 		control:   controlSession,
 
+		wgIf: wgIf,
+
 		dialRelayFunc: dialRelayFunc,
 	}
 
@@ -86,6 +90,7 @@ func MakeStage(
 	s.TMan = s.makeTM()
 	s.SMan = s.makeSM(sessPriv)
 	s.EMan = s.makeEM()
+	s.MMan = s.makeMM()
 
 	return s
 }
@@ -111,13 +116,17 @@ type Stage struct {
 	SMan ifaces.SessionManagerActor
 	// The EndpointManager
 	EMan ifaces.EndpointManagerActor
+	// The MDNSManager
+	MMan ifaces.MDNSManagerActor
 
 	connMutex sync.RWMutex
 	inConn    map[key.NodePublic]InConnActor
 	outConn   map[key.NodePublic]OutConnActor
 
-	getNodePriv    func() *key.NodePrivate
-	getSessPriv    func() *key.SessionPrivate
+	getNodePriv func() *key.NodePrivate
+	getSessPriv func() *key.SessionPrivate
+
+	endpointMutex  sync.RWMutex
 	localEndpoints []netip.AddrPort
 	stunEndpoints  []netip.AddrPort
 
@@ -127,6 +136,8 @@ type Stage struct {
 	peerInfo      map[key.NodePublic]*stage.PeerInfo
 
 	control ifaces.ControlInterface
+
+	wgIf *net.Interface
 
 	//// A repeatable function to an outside context to acquire a new UDPconn,
 	//// once a peer conn has died for whatever reason.
@@ -153,6 +164,7 @@ func (s *Stage) Start() {
 	go s.TMan.Run()
 	go s.SMan.Run()
 	go s.EMan.Run()
+	go s.MMan.Run()
 
 	go s.DMan.Run()
 	go s.DRouter.Run()
@@ -371,15 +383,15 @@ func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 }
 
 func (s *Stage) GetEndpoints() []netip.AddrPort {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.endpointMutex.RLock()
+	defer s.endpointMutex.RUnlock()
 
 	return slices.Concat(s.localEndpoints, s.stunEndpoints)
 }
 
 func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
-	s.connMutex.Lock()
-	defer s.connMutex.Unlock()
+	s.endpointMutex.Lock()
+	defer s.endpointMutex.Unlock()
 
 	sortEndpointSlice(endpoints)
 
@@ -394,8 +406,8 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 }
 
 func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.endpointMutex.Lock()
+	defer s.endpointMutex.Unlock()
 
 	localPort := s.getLocalPort()
 
@@ -428,6 +440,15 @@ func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
 	s.localEndpoints = endpoints
 
 	s.notifyEndpointChanged()
+}
+
+func (s *Stage) getLocalEndpoints() []netip.Addr {
+	s.endpointMutex.RLock()
+	defer s.endpointMutex.RUnlock()
+
+	return types.Map(s.localEndpoints, func(t netip.AddrPort) netip.Addr {
+		return t.Addr()
+	})
 }
 
 func (s *Stage) getLocalPort() uint16 {
@@ -463,7 +484,7 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _, _ netip.Addr, _ msgcontrol.Properties) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4, ip6 netip.Addr, prop msgcontrol.Properties) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {
@@ -482,6 +503,9 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 		Endpoints:           types.NormaliseAddrPortSlice(endpoints),
 		RendezvousEndpoints: make([]netip.AddrPort, 0),
 		Session:             session,
+		IPv4:                ip4,
+		IPv6:                ip6,
+		MDNS:                prop.MDNS,
 	}
 
 	return nil
@@ -489,7 +513,7 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 
 var errNoPeerInfo = errors.New("could not find peer info to update")
 
-func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, _ *msgcontrol.Properties) error {
+func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic, prop *msgcontrol.Properties) error {
 	return s.updatePeerInfo(peer, func(info *stage.PeerInfo) {
 		if homeRelay != nil {
 			info.HomeRelay = *homeRelay
@@ -499,6 +523,9 @@ func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []ne
 		}
 		if session != nil {
 			info.Session = *session
+		}
+		if prop != nil {
+			info.MDNS = prop.MDNS
 		}
 	})
 }
@@ -547,6 +574,19 @@ func (s *Stage) GetPeerInfo(peer key.NodePublic) *stage.PeerInfo {
 	defer s.peerInfoMutex.RUnlock()
 
 	return s.peerInfo[peer]
+}
+
+func (s *Stage) GetPeersWhere(f func(key.NodePublic, *stage.PeerInfo) bool) []key.NodePublic {
+	s.peerInfoMutex.RLock()
+	defer s.peerInfoMutex.RUnlock()
+
+	var peers []key.NodePublic
+	for peer, info := range s.peerInfo {
+		if f(peer, info) {
+			peers = append(peers, peer)
+		}
+	}
+	return peers
 }
 
 func (s *Stage) RemovePeer(peer key.NodePublic) error {

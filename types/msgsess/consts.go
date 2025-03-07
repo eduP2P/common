@@ -15,8 +15,9 @@ const v1 = VersionMarker(0x1)
 type MessageType byte
 
 const (
-	PingMessage       = MessageType(0x00)
-	PongMessage       = MessageType(0x01)
+	PingMessage = MessageType(iota)
+	PongMessage
+	SideBandDataMessage
 	RendezvousMessage = MessageType(0xFF)
 )
 

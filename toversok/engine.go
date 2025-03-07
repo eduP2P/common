@@ -200,7 +200,7 @@ func (e *Engine) installSession(allowLogon bool) error {
 
 // WillRestart says whether the engine strives to be in a running state.
 func (e *Engine) WillRestart() bool {
-	return e.doAutoRestart
+	return e.doAutoRestart && e.ctx.Err() != nil
 }
 
 func (e *Engine) slog() *slog.Logger {

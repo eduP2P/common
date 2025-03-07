@@ -3,13 +3,19 @@ package usrwg
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/netip"
+	"slices"
+	"syscall"
 
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/usrwg/router"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"golang.zx2c4.com/wireguard/device"
+	"golang.zx2c4.com/wireguard/tun"
 )
 
 func init() {
@@ -32,8 +38,7 @@ func (u *UserSpaceWireGuardHost) Reset() error {
 	return nil
 }
 
-const WGGOIPCDevSetup = `private_key=%s
-`
+const WGGOIPCDevSetup = "private_key=%s\n"
 
 func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (toversok.WireGuardController, error) {
 	if u.running != nil {
@@ -97,6 +102,7 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	usrwgc := &UserSpaceWireGuardController{
 		wgDev:  wgDev,
 		bind:   bind,
+		tunDev: tunDev,
 		router: r,
 	}
 
@@ -108,7 +114,51 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 type UserSpaceWireGuardController struct {
 	wgDev  *device.Device
 	bind   *ToverSokBind
+	tunDev tun.Device
 	router router.Router
+}
+
+func (u *UserSpaceWireGuardController) Available() bool {
+	return true
+}
+
+func (u *UserSpaceWireGuardController) InjectPacket(from, to netip.AddrPort, pkt []byte) error {
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+	ipv4 := &layers.IPv4{
+		Version:  0x4,
+		TTL:      255,
+		Protocol: syscall.IPPROTO_UDP,
+		DstIP:    to.Addr().AsSlice(),
+		SrcIP:    from.Addr().AsSlice(),
+	}
+	udp := &layers.UDP{
+		DstPort: layers.UDPPort(to.Port()),
+		SrcPort: layers.UDPPort(from.Port()),
+	}
+	if err := udp.SetNetworkLayerForChecksum(ipv4); err != nil {
+		return fmt.Errorf("failed to set udp checksum: %w", err)
+	}
+
+	err := gopacket.SerializeLayers(buf, opts,
+		ipv4,
+		udp,
+		gopacket.Payload(pkt),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to serialize packet: %w", err)
+	}
+
+	packetData := slices.Concat(make([]byte, 16), buf.Bytes())
+
+	if _, err = u.tunDev.Write([][]byte{packetData}, 16); err != nil {
+		return fmt.Errorf("failed to inject packet: %w", err)
+	}
+
+	return nil
 }
 
 const WGGOIPCAddPeer = `public_key=%s
@@ -148,6 +198,20 @@ func (u *UserSpaceWireGuardController) GetStats(_ key.NodePublic) (*toversok.WGS
 
 func (u *UserSpaceWireGuardController) ConnFor(node key.NodePublic) types.UDPConn {
 	return u.bind.GetConn(node)
+}
+
+func (u *UserSpaceWireGuardController) GetInterface() *net.Interface {
+	name, err := u.tunDev.Name()
+	if err != nil {
+		slog.Warn("failed to get tun device name", "err", err)
+		return nil
+	}
+	i, err := net.InterfaceByName(name)
+	if err != nil {
+		slog.Warn("failed to get interface", "name", name, "err", err)
+		return nil
+	}
+	return i
 }
 
 func (u *UserSpaceWireGuardController) Close() {

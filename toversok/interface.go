@@ -2,6 +2,7 @@ package toversok
 
 import (
 	"context"
+	"net"
 	"net/netip"
 	"time"
 
@@ -73,6 +74,8 @@ type WireGuardController interface {
 	//
 	// Can possibly return nil, when the peer has been removed, or not yet known to the controller.
 	ConnFor(node key.NodePublic) types.UDPConn
+
+	GetInterface() *net.Interface
 }
 
 type FirewallHost interface {

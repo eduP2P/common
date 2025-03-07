@@ -56,7 +56,7 @@ func (r *SockRecv) Run() {
 	buf := make([]byte, 1<<16)
 
 	for {
-		if context.Cause(r.ctx) != nil {
+		if r.ctx.Err() != nil {
 			return
 		}
 

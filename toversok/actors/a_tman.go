@@ -1,6 +1,7 @@
 package actors
 
 import (
+	"context"
 	"maps"
 	"net/netip"
 	"runtime/debug"
@@ -111,17 +112,38 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 	case *msgactor.TManSessionMessageFromDirect:
 		n := tm.NodeForSess(m.Msg.Session)
 
-		if n != nil {
-			tm.forState(*n, func(s peerstate.PeerState) peerstate.PeerState {
-				return s.OnDirect(types.NormaliseAddrPort(m.AddrPort), m.Msg)
-			})
-		} else {
+		if n == nil {
 			L(tm).Warn("got message from direct for unknown session", "session", m.Msg.Session.Debug())
+			return
 		}
+
+		node := *n
+
+		if tm.isMDNS(m.Msg) {
+			if !tm.mdnsAllowed(node) {
+				L(tm).Warn("got direct MDNS packet from peer where it is not allowed", "peer", node.Debug())
+				return
+			}
+			tm.sendMDNS(node, m.Msg)
+			return
+		}
+
+		tm.forState(node, func(s peerstate.PeerState) peerstate.PeerState {
+			return s.OnDirect(types.NormaliseAddrPort(m.AddrPort), m.Msg)
+		})
 	case *msgactor.TManSessionMessageFromRelay:
 		if !tm.ValidKeys(m.Peer, m.Msg.Session) {
 			L(tm).Warn("got message from relay for peer with incorrect session",
 				"session", m.Msg.Session.Debug(), "peer", m.Peer.Debug(), "relay", m.Relay)
+			return
+		}
+
+		if tm.isMDNS(m.Msg) {
+			if !tm.mdnsAllowed(m.Peer) {
+				L(tm).Warn("got relay MDNS packet from peer where it is not allowed", "peer", m.Peer.Debug())
+				return
+			}
+			tm.sendMDNS(m.Peer, m.Msg)
 			return
 		}
 
@@ -146,9 +168,74 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 				return key == m.Peer
 			})
 		}
+	case *msgactor.TManSpreadMDNSPacket:
+		tm.spreadMDNS(m.Pkt)
 	default:
 		tm.logUnknownMessage(m)
 	}
+}
+
+func (tm *TrafficManager) isMDNS(msg *msgsess.ClearMessage) bool {
+	sbd, ok := msg.Message.(*msgsess.SideBandData)
+
+	return ok && sbd.Type == msgsess.MDNSType
+}
+
+func (tm *TrafficManager) mdnsAllowed(node key.NodePublic) bool {
+	pi := tm.s.GetPeerInfo(node)
+
+	if pi == nil {
+		return false
+	}
+
+	return pi.MDNS
+}
+
+func (tm *TrafficManager) sendMDNS(peer key.NodePublic, msg *msgsess.ClearMessage) {
+	sbd := msg.Message.(*msgsess.SideBandData)
+
+	go SendMessage(tm.s.MMan.Inbox(), &msgactor.MManReceivedPacket{
+		From: peer,
+		Data: sbd.Data,
+	})
+}
+
+func (tm *TrafficManager) spreadMDNS(pkt []byte) {
+	peers := tm.s.GetPeersWhere(func(_ key.NodePublic, info *stage.PeerInfo) bool {
+		return info.MDNS
+	})
+
+	peersDebug := types.Map(peers, func(t key.NodePublic) string {
+		return t.Debug()
+	})
+	L(tm).Log(context.Background(), types.LevelTrace, "sending mdns packet to peers", "peers", peersDebug)
+	for _, peer := range peers {
+		tm.opportunisticSendTo(peer, &msgsess.SideBandData{
+			Type: msgsess.MDNSType,
+			Data: pkt,
+		})
+	}
+}
+
+func (tm *TrafficManager) opportunisticSendTo(to key.NodePublic, msg msgsess.SessionMessage) {
+	pi := tm.s.GetPeerInfo(to)
+
+	if pi == nil {
+		L(tm).Warn("trying to send an opportunistic session message to a node without peerinfo", "to", to.Debug())
+		return
+	}
+
+	tm.forState(to, func(s peerstate.PeerState) peerstate.PeerState {
+		L(tm).Log(context.Background(), types.LevelTrace, "sending opportunistic session message to peer", "peer", to.Debug())
+
+		if e, ok := s.(*peerstate.Established); ok {
+			tm.SendMsgToDirect(e.GetEndpoint(), pi.Session, msg)
+		} else {
+			tm.SendMsgToRelay(pi.HomeRelay, to, pi.Session, msg)
+		}
+
+		return nil
+	})
 }
 
 func (tm *TrafficManager) DoStateTick() {
@@ -264,19 +351,9 @@ func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 	// A state for a state, perfectly balanced, as all things should be.
 	// - Thanos, while writing this code.
 
-	state, ok := tm.peerState[peer]
+	tm.ensurePeerState(peer)
 
-	if !ok {
-		return
-	}
-
-	if state == nil {
-		L(tm).Error("found nil state when running update for peer, recovering...", "peer", peer.Debug())
-		tm.ensurePeerState(peer)
-		state = tm.peerState[peer]
-	}
-
-	newState := fn(state)
+	newState := fn(tm.peerState[peer])
 
 	if newState != nil {
 		// state transitions have happened, store the new state
@@ -345,8 +422,10 @@ func (tm *TrafficManager) ValidKeys(peer key.NodePublic, session key.SessionPubl
 }
 
 func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic) {
-	txid := msgsess.NewTxID()
+	tm.SendPingDirectWithID(endpoint, peer, session, msgsess.NewTxID())
+}
 
+func (tm *TrafficManager) SendPingDirectWithID(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic, txid msgsess.TxID) {
 	nep := types.NormaliseAddrPort(endpoint)
 
 	tm.SendMsgToDirect(nep, session, &msgsess.Ping{

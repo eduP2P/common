@@ -21,4 +21,6 @@ type PeerInfo struct {
 	Endpoints           []netip.AddrPort
 	RendezvousEndpoints []netip.AddrPort
 	Session             key.SessionPublic
+	IPv4, IPv6          netip.Addr
+	MDNS                bool
 }

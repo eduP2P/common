@@ -80,6 +80,8 @@ func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage
 		return s
 	}
 
+	ap = types.NormaliseAddrPort(ap)
+
 	LogDirectMessage(e, ap, clearMsg)
 
 	// TODO check if endpoint is same as current used one
@@ -101,7 +103,7 @@ func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage
 		e.lastPingRecv = time.Now()
 		e.replyWithPongDirect(ap, clearMsg.Session, m)
 
-		if ap != e.currentOutEndpoint {
+		if ap != e.currentOutEndpoint && !e.tracker.Has(ap) {
 			// We're not sending pings to this, yet we may want to, to prevent asymmetric glare
 			pi := e.getPeerInfo()
 			if pi == nil {
@@ -109,7 +111,10 @@ func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage
 				return nil
 			}
 
-			e.tm.SendPingDirect(ap, e.peer, pi.Session)
+			L(e).Log(context.Background(), types.LevelTrace, "sending ping to ping to prevent assymetric glare", "ap", ap.String(), "current", e.currentOutEndpoint.String())
+
+			// Send ping with ID, so that it eventually blackholes
+			e.tm.SendPingDirectWithID(ap, e.peer, pi.Session, m.TxID)
 		}
 
 		return nil
@@ -164,6 +169,10 @@ func (e *Established) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgses
 	}
 }
 
+func (e *Established) GetEndpoint() netip.AddrPort {
+	return e.currentOutEndpoint
+}
+
 // canTrustEndpoint returns true if the endpoint that has been given corresponds to the peer.
 // this will check the current knownInEndpoints, and if it does not exist, will check peerInfo to see if the peer
 // sent this endpoint in the past with rendezvous. If so, adds it to the knownInEndpoints, and sends a SetAKA.
@@ -207,6 +216,7 @@ func (e *Established) checkChangedPreferredEndpoint() {
 	}
 
 	if bap != e.currentOutEndpoint {
+		L(e).Log(context.Background(), types.LevelTrace, "switching bestaddrport", "bap", bap.String(), "current", e.currentOutEndpoint.String())
 		// not the best one, switch
 		e.switchToEndpoint(bap)
 	}

@@ -292,6 +292,12 @@ func (em *EndpointManager) collectLocalEndpoints() []netip.Addr {
 
 	// handle err
 	for _, i := range ifaces {
+
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagPointToPoint != 0 {
+			// Skip interfaces that are down, or are also PPP (such as tailscale)
+			continue
+		}
+
 		addrs, err := i.Addrs()
 		if err != nil {
 			L(em).Warn("collectLocalEndpoints: could not get addresses from interface", "error", err, "iface", i.Name)
