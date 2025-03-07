@@ -180,7 +180,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = engine.Start(); err != nil {
+	var runningCtx context.Context
+
+	if runningCtx, err = engine.Start(); err != nil {
 		slog.Error("could not start engine", "err", err)
 		os.Exit(1)
 	}
@@ -201,10 +203,11 @@ func main() {
 		ccc(errors.New("interrupted"))
 	}()
 
-	<-engine.Context().Done()
+	<-runningCtx.Done()
+	ccc(errors.New("stopping"))
 
 	if !interrupted {
-		slog.Warn("engine exited with error", "err", engine.Context().Err())
+		slog.Warn("stopped with error", "err", runningCtx.Err())
 		os.Exit(1)
 	}
 }

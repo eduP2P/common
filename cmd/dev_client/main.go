@@ -819,7 +819,7 @@ func enCmd() *ishell.Cmd {
 
 	c.AddCmd(&ishell.Cmd{Name: "start", Help: "start the engine", Func: func(c *ishell.Context) {
 		if engine != nil {
-			err := engine.Start()
+			_, err := engine.Start()
 			if err != nil {
 				c.Err(err)
 			}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/control"
 	"github.com/edup2p/common/types/key"
 )
 
@@ -21,6 +22,9 @@ import (
 type Engine struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
+
+	runningCtx    context.Context
+	runningCancel context.CancelFunc
 
 	sess *Session
 
@@ -33,9 +37,8 @@ type Engine struct {
 
 	nodePriv key.NodePrivate
 
-	state         stateObserver
-	doAutoRestart bool
-	dirty         bool
+	state stateObserver
+	dirty bool
 
 	deviceKey *string
 }
@@ -48,9 +51,13 @@ type Engine struct {
 // - Reason for any other startup error.
 //
 // After the engine has successfully started once, it will automatically restart on any failure.
-func (e *Engine) Start() error {
-	e.doAutoRestart = true
-	return e.start(true)
+func (e *Engine) Start() (context.Context, error) {
+	err := e.start(true)
+	if err != nil {
+		return nil, err
+	}
+
+	return e.runningCtx, nil
 }
 
 func (e *Engine) start(allowLogon bool) error {
@@ -63,10 +70,16 @@ func (e *Engine) start(allowLogon bool) error {
 		return errors.New("cannot start; already running")
 	}
 
+	if e.runningCtx != nil {
+		e.runningCancel()
+	}
+
 	if e.sess != nil && e.sess.ctx.Err() == nil {
 		// Session is still running, even though that shouldn't be the case, as we checked for NoSession above
 		e.sess.ccc(errors.New("engine state desynced, shutting down"))
 	}
+
+	e.runningCtx, e.runningCancel = context.WithCancel(e.ctx)
 
 	if err := e.maybeClean(); err != nil {
 		return fmt.Errorf("engine state cleaning failed: %w", err)
@@ -83,6 +96,14 @@ func (e *Engine) start(allowLogon bool) error {
 
 func (e *Engine) Context() context.Context {
 	return e.ctx
+}
+
+func (e *Engine) RunningContext() context.Context {
+	if e.runningCtx != nil && e.runningCtx.Err() != nil {
+		return nil
+	}
+
+	return e.runningCtx
 }
 
 func (e *Engine) maybeClean() error {
@@ -112,6 +133,11 @@ const StalledEngineRestartInterval = time.Second * 2
 func (e *Engine) autoRestart() {
 	if e.WillRestart() {
 		if err := e.start(false); err != nil {
+			if errors.Is(err, control.ErrNeedsLogon) {
+				// Bail, we can't do anything here
+				e.runningCancel()
+			}
+
 			slog.Info("autoRestart: will retry in 10 seconds")
 			time.AfterFunc(StalledEngineRestartInterval, e.autoRestart)
 		}
@@ -131,11 +157,7 @@ func (e *Engine) Stop() {
 		return
 	}
 
-	e.doAutoRestart = false
-
-	if e.sess.ctx.Err() != nil {
-		e.sess.ccc(errors.New("shutting down"))
-	}
+	e.runningCancel()
 
 	var stillDirty bool
 
@@ -174,7 +196,7 @@ func (e *Engine) installSession(allowLogon bool) error {
 	}
 
 	var err error
-	e.sess, err = SetupSession(e.ctx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv, logon)
+	e.sess, err = SetupSession(e.runningCtx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv, logon)
 	if err != nil {
 		return fmt.Errorf("failed to setup session: %w", err)
 	}
@@ -200,7 +222,7 @@ func (e *Engine) installSession(allowLogon bool) error {
 
 // WillRestart says whether the engine strives to be in a running state.
 func (e *Engine) WillRestart() bool {
-	return e.doAutoRestart && e.ctx.Err() != nil
+	return e.runningCtx != nil && e.runningCtx.Err() != nil
 }
 
 func (e *Engine) slog() *slog.Logger {
