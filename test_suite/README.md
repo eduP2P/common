@@ -518,9 +518,11 @@ during the test. Using the Python script
 [visualize_performance_tests.py](visualize_performance_tests.py), these
 performance metrics are extracted from the json files, and graphs are
 automatically created that plot the independent variable on the X axis
-against each performance metric on the Y axis. Some of these graphs are
-shown in the [performance test results
-section](#performance-test-results)
+against each performance metric on the Y axis. Furthermore, if `-r` has
+a value greater than one, another graph is created to show the variance
+of the measurements across the different repetitions of the test. Some
+of these graphs are shown in the [performance test results
+section](#performance-test-results).
 
 ## Integration Tests
 
@@ -1232,7 +1234,7 @@ further, however:
 
 Command used:
 
-    run_system_test -k delay -v 0,1,2,3 -d 3 -b both TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k delay -v 0,1,2,3 -d 3 -b both -r 3 TS_PASS_DIRECT router1-router2 : :
 
 ![](./images/performance_tests/x_ow_delay_y_http_latency.png)
 
@@ -1253,6 +1255,36 @@ internally. Taking this explanation for the higher HTTP latency of
 eduP2P into account, we can conclude that increasing the one-way delay
 does not increase eduP2P’s HTTP latency more than the HTTP latency of
 WireGuard or the direct connection.
+
+### Consistency of results
+
+The results of the performance tests may be affected by external
+factors, such as other processes running on the same machine. Therefore,
+the performance test results may be inconsistent: two runs of the same
+performance tests may have different results.
+
+To improve the reliability of the performance tests, the `-r` option has
+been introduced to repeat the tests and aggregate their results. The
+performance tests also generate a graph illustrating the variance over
+multiple repetitions. Below, this graph is shown for the performance
+test described in [bitrate performance test with external
+WireGuard](./README.md#results-with-varying-bitrate-and-peers-using-external-wireguard).
+
+![](./images/performance_tests/performance_test_variance.png)
+
+This graph shows that there is quite a lot of variance between certain
+measurements. For example, for the eduP2P bitrate measurement (top-left)
+and WireGuard packet loss measurement (bottom-center), the absolute
+difference between the minimum and maximum measurements grows quite
+large as the target bitrate increases.
+
+Some of the measurements also contain outliers, such as the WireGuard
+jitter measurement (center) with large spikes in the third and fifth
+repetition.
+
+As seen from the black lines in the graphs, calculating the average over
+the repetitions improves the reliability of the results where the
+variance is large or outliers are present.
 
 ## Integration Test Results
 
