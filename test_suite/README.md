@@ -1429,17 +1429,32 @@ Conservancy](https://commonsconservancy.org/).
 The test suite features that have been made possible thanks to this
 funding are described below.
 
-### Simulating network delay (finished 04-03-2025)
+### Simulating network delay (finished March 4, 2025)
 
 This feature makes it possible to add artificial network delay in the
 system and performance tests.
 
 The feature can be used with the system tests by calling
-`system_tests.sh` with the option `-d <delay in ms>`.
+`system_tests.sh` with the option `-d <delay in ms>`. In the performance
+tests, this artificial delay can be configured as the independent test
+variable. More details are given in the [performance test
+documentation](./README.md#performance-tests).
 
-In the performance tests, this artificial delay can be configured as the
-independent test variable. More details are given in the [performance
-test documentation](./README.md#performance-tests). Furthermore, the
-effect of the artificial delay on the eduP2P network performance is
-reported in the [performance test
+Furthermore, the effect of the artificial delay on the eduP2P network
+performance is reported in the [performance test
 results](./README.md#results-with-varying-one-way-delay).
+
+### Repeated performance tests (finished March 7, 2025)
+
+This feature adds the option to repeat the same performance test
+multiple times and aggregate the results of each repetition by taking
+their average.
+
+The option is configured with the `-r` flag of the performance tests.
+See the [performance test documentation](./README.md#performance-tests)
+for details on how to configure and run a performance test.
+
+In the [performance test results](./README.md#consistency-of-results),
+the variance between different repetitions of the same performance test
+is analysed. This analysis shows that aggregating the results can
+improve their reliability.
