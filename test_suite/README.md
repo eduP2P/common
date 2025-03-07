@@ -455,12 +455,10 @@ configuring the following parameters:
       [\[8\]](#ref-man_netem)).
 
 - **Performance test baseline**: with this optional parameter, a
-  ‘baseline’ is added to the performance test results, created by
-  repeating the performance tests for:
-
-  1.  two peers that use WireGuard;
-  2.  two peers that use their physical IP addresses in the simulated
-      network setup.
+  ‘baseline’ is added to the performance test results. This baseline is
+  created by repeating the performance tests for two peers that use
+  WireGuard, and/or two peers that use their physical IP addresses in
+  the simulated network setup.
 
   With this baseline, it is easier to investigate whether any
   performance deficiencies in eduP2P are truly the result of a problem
@@ -474,6 +472,12 @@ configuring the following parameters:
   amount of values assigned to the independent variable. If the baseline
   parameter is used, the duration is additionally multiplied by 3.
 
+- **Performance test repetition**: the result of the performance tests
+  may be affected by external factors such as other processes running on
+  the same machine. To mitigate these undesirable external influences,
+  this parameter allows the performance tests to be repeated multiple
+  times in order to improve the reliability of their results.
+
 To run performance tests manually, [system_tests.sh](system_tests.sh)
 can be used with the `-f` option to specify a file containing system
 tests, which may use the above parameters to also execute a performance
@@ -486,7 +490,7 @@ The following command runs tests from a file named
 
 Suppose `performance_test.txt` contains the following line:
 
-    run_system_test -k bitrate -v 100,200 -d 5 TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 100,200 -d 5 -b wireguard -r 3 TS_PASS_DIRECT router1-router2 : :
 
 Then, running the system tests with the `-f performance_test.txt` option
 will execute a performance test with the following parameters:
@@ -494,6 +498,9 @@ will execute a performance test with the following parameters:
 - the independent variable to be tested is bitrate;
 - the values it should take are 100 and 200 Mbps;
 - the duration of the test for each value is 5 seconds.
+- the performance test is executed for two peers using WireGuard,
+  besides the standard execution for two peers using eduP2P.
+- the performance test is executed 3 times.
 
 The other parameters in `performance_test.txt` are not relevant to the
 performance test itself, but are necessary to run the system test in the
@@ -1151,7 +1158,7 @@ reproducibility.
 
 Command used:
 
-    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b TS_PASS_DIRECT router1-router2 : wg0:wg0
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1-router2 : wg0:wg0
 
 With this command, we compare the performance of eduP2P, WireGuard and a
 direct connection between two peers in the test suite’s network setup.
@@ -1162,8 +1169,8 @@ limit, as seen in the graph below:
 ![](./images/performance_tests/ext_wg_x_bitrate_y_bitrate.png)
 
 With the direct connection, the maximum bitrate that can be reached on
-my machine is approximately 3600 Mbps, whereas eduP2P and WireGuard both
-end at a bitrate of approximately 2800 Mbps.
+my machine is approximately 3400 Mbps, whereas eduP2P and WireGuard both
+end at a bitrate of approximately 2700 Mbps.
 
 As the measured bitrate increases, it becomes clear that there are large
 differences between the packet loss the three connections suffer, as
@@ -1172,21 +1179,16 @@ seen in the following graph:
 ![](./images/performance_tests/ext_wg_x_bitrate_y_packet_loss.png)
 
 The direct connection does not suffer any packet loss, whereas
-WireGuard’s packet loss slowly climbs up to approximately 3%, and the
-packet loss of eduP2P quickly increases to end at over 50%.
+WireGuard’s packet reaches a maximum of approximately 5%, and the packet
+loss of eduP2P quickly increases to end at over 70%.
 
+The root cause of eduP2P’s packet loss has yet to be determined.
 Although the final amount of packet loss in eduP2P seems very alarming,
 it must be noted that the maximum bitrate used in this performance test
 is very high, and when eduP2P would be used in the real world it is
 unlikely that the network bandwidth limits would allow for such a high
 bitrate. However, the packet loss of eduP2P is also quite sizeable even
 for lower bitrates, which would be a problem in the real world.
-
-The reason that eduP2P suffers so much packet loss probably has to do
-with the fact that it uses Go channels internally to pass packets
-between its isolated components. For such high bitrates, these channels
-may become full, and consequently packets sent to these channels are
-dropped.
 
 It must also be noted that although the direct connection and WireGuard
 do not suffer much packet loss on my machine, this is not the case on
@@ -1209,7 +1211,7 @@ differ on other machines.
 
 Command used:
 
-    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1-router2 : :
 
 This command repeats the performance test of the previous section, with
 the only difference being that now both peers use userspace WireGuard
@@ -1230,7 +1232,7 @@ further, however:
 
 Command used:
 
-    run_system_test -k delay -v 0,1,2,3 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k delay -v 0,1,2,3 -d 3 -b both TS_PASS_DIRECT router1-router2 : :
 
 ![](./images/performance_tests/x_ow_delay_y_http_latency.png)
 
