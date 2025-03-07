@@ -13,6 +13,7 @@ type TxID [12]byte
 func NewTxID() TxID {
 	var tx TxID
 	if _, err := crand.Read(tx[:]); err != nil {
+		// We expect the randomiser to be available here
 		panic(err)
 	}
 	return tx

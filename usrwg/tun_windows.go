@@ -13,6 +13,7 @@ func init() {
 	tun.WintunTunnelType = "ToverSok"
 	guid, err := windows.GUIDFromString("{37217669-42da-4657-a55b-13375d328250}")
 	if err != nil {
+		// We can create a GUID from a static string without error
 		panic(err)
 	}
 	tun.WintunStaticRequestedGUID = &guid

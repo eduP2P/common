@@ -34,6 +34,7 @@ func TLS(conn net.Conn, opts Opts) *tls.Conn {
 	case opts.Domain != "":
 		cfg.ServerName = opts.Domain
 	default:
+		// We assume this is sane, else some upstream provider of the opt isn't proper with what it gives
 		panic("TLS defined, but no domain provided")
 	}
 

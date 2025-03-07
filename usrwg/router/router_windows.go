@@ -571,6 +571,7 @@ func deltaNets(a, b []netip.Prefix) (add, del []netip.Prefix) {
 			add = append(add, b[j])
 			j++
 		default:
+			// Literally unexpected, since we control the return of the function
 			panic("unexpected compare result")
 		}
 	}
@@ -705,6 +706,7 @@ func deltaRouteData(a, b []*routeData) (add, del []*routeData) {
 			add = append(add, b[j])
 			j++
 		default:
+			// Literally unexpected, since we control the return of the function
 			panic("unexpected compare result")
 		}
 	}

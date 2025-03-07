@@ -206,8 +206,9 @@ func (e *Engine) installSession(allowLogon bool) error {
 	})
 
 	if !(e.state.change(CreatingSession, Established) || e.state.change(NeedsLogin, Established)) {
-		e.ccc(errors.New("incorrect state transition"))
-		panic("incorrect state transition to established")
+		err = errors.New("incorrect state transition")
+		e.ccc(err)
+		return err
 	}
 
 	context.AfterFunc(e.sess.ctx, func() {
@@ -382,7 +383,9 @@ func NewEngine(
 		} else if state == Established {
 			expiry, err := e.Observer().GetEstablishedState()
 			if err != nil {
-				panic("should never happen")
+				// We are literally in the established state, we can get the GetEstablishedState
+				// There is one tiny window where it has flopped back, and so just ignore that if that is the case
+				return
 			}
 			if expiry != (time.Time{}) {
 				slog.Info("established session with expiry", "expiry", expiry, "in", time.Until(expiry))
@@ -407,6 +410,7 @@ func (e *Engine) getExtConn() types.UDPConn {
 	if e.extBind == nil || e.extBind.Closed {
 		conn, err := e.bindExt()
 		if err != nil {
+			// We expect the bindext to work, else we more or less just can't do anything
 			panic(fmt.Sprintf("could not bind ext: %s", err))
 		}
 

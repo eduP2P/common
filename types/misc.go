@@ -91,6 +91,7 @@ func RandStringBytesMaskImprSrc(n int) string {
 	b := make([]byte, (n+1)/2) // can be simplified to n/2 if n is always even
 
 	if _, err := rand.Read(b); err != nil {
+		// We expect the randomizer to be available here
 		panic(err)
 	}
 

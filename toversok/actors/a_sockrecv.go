@@ -3,7 +3,6 @@ package actors
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -62,7 +61,9 @@ func (r *SockRecv) Run() {
 
 		err := r.Conn.SetReadDeadline(time.Now().Add(SockRecvReadTimeout))
 		if err != nil {
-			panic(fmt.Sprint("Error when setting read deadline:", err))
+			L(r).Error("failed to set read deadline", "err", err)
+			r.ctxCan()
+			return
 		}
 
 		n, ap, err := r.Conn.ReadFromUDPAddrPort(buf)
@@ -76,17 +77,17 @@ func (r *SockRecv) Run() {
 			//  unsure what to do here, as this might be a permanent error of the socket?
 			//  would this result in the closing of the channel? if so, wouldnt the corresponding outconn also die?
 			//  if so, then who detects the death of the actor and recreates it like that?
-			if context.Cause(r.ctx) != nil {
+			if r.ctx.Err() != nil {
 				// we're closing anyways, just return
 				return
 			}
 
-			if errors.Is(err, net.ErrClosed) {
-				r.Cancel()
-				return
+			if !errors.Is(err, net.ErrClosed) {
+				L(r).Error("failed to read packet", "err", err)
 			}
 
-			panic(err)
+			r.Cancel()
+			return
 		}
 
 		if n == 0 {

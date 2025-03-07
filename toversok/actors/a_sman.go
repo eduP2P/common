@@ -105,6 +105,7 @@ func (sm *SessionManager) Handle(msg msgactor.ActorMessage) {
 
 func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msgsess.ClearMessage, error) {
 	if string(frameWithMagic[:len(msgsess.Magic)]) != msgsess.Magic {
+		// We check these messages further up, so while this is a safety check, it shouldn't be triggered
 		panic("Somehow received non-session message in unpack")
 	}
 

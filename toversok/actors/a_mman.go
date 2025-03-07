@@ -45,6 +45,7 @@ func (s *Stage) makeMM() *MDNSManager {
 		SweepMinTTL:   1 * time.Minute,
 	})
 	if err != nil {
+		// memorystore does not return an error, so this is unexpected
 		panic(err)
 	}
 

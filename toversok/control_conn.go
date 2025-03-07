@@ -375,6 +375,7 @@ func (rcs *ResumableControlSession) ExpectCallbacks() ifaces.ControlCallbacks {
 	defer rcs.callbackLock.RUnlock()
 
 	if rcs.callbacks == nil {
+		// Part of the function contract; if it doesnt exist, it'll blow up
 		panic("expected callbacks to be ready at this stage")
 	}
 

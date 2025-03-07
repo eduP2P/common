@@ -1,6 +1,7 @@
 package msgcontrol
 
 import (
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -100,7 +101,7 @@ func (r RetryStrategyType) Error() string {
 	case RecreateSession:
 		return "retry by recreating session"
 	default:
-		panic("unknown retry strategy type")
+		return fmt.Sprintf("!!!unknown retry strategy type %d!!!", r)
 	}
 }
 

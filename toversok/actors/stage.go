@@ -373,6 +373,7 @@ func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 	pi := s.peerInfo[peer]
 
 	if pi == nil {
+		// We run this with the assumption that peerinfo has been given to us
 		panic("expecting to have peer information at this point")
 	}
 

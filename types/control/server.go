@@ -282,6 +282,7 @@ func randData() []byte {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
 	if err != nil {
+		// We expect the system random to at least be accessible now
 		panic(fmt.Errorf("could not read rand: %w", err))
 	}
 	return b
