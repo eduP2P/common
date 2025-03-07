@@ -24,8 +24,10 @@ The following options can be used to configure additional parameters during the 
         The delay should be provided as an integer that represents the one-way delay in milliseconds
     -l <info|debug|trace>
         Specifies the log level used in the eduP2P client of the two peers
-        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)"""
-
+        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)
+    -L <log directory>
+        Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
+        If this argument is not provided, the directory name is the current timestamp"""
 # Use functions and constants from util.sh
 . ./util.sh
 
@@ -33,7 +35,7 @@ The following options can be used to configure additional parameters during the 
 log_lvl="debug"
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:ph" opt; do
+while getopts ":c:d:ef:l:L:ph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -74,6 +76,18 @@ while getopts ":c:d:ef:l:ph" opt; do
             # Log level should be info/debug/trace
             log_lvl_regex="^info|debug|trace?$"
             validate_str $log_lvl $log_lvl_regex
+            ;;
+        L)
+            alphanum_regex="^[a-zA-Z0-9]+$"
+            validate_str $OPTARG $alphanum_regex
+            log_dir_rel=system_test_logs/$OPTARG
+
+            # Ensure log dir does not exist yet
+            ls $log_dir_rel &> /dev/null
+
+            if [[ $? -eq 0 ]]; then
+                exit_with_error "$log_dir_rel already exists"
+            fi
             ;;
         p)
             performance=true
@@ -116,8 +130,11 @@ function build_go() {
 build_go
 
 function create_log_dir() {
-    timestamp=$(date +"%Y-%m-%dT%H_%M_%S")
-    log_dir_rel=system_test_logs/${timestamp} # Relative path for pretty printing
+    if [[ -z $log_dir_rel ]]; then
+        timestamp=$(date +"%Y-%m-%dT%H_%M_%S")
+        log_dir_rel=system_test_logs/${timestamp} # Relative path for pretty printing
+    fi
+
     log_dir=${repo_dir}/test_suite/${log_dir_rel} # Absolute path for use in scripts running from different directories
     mkdir -p ${log_dir}
     echo "Logging to ${log_dir_rel}"
@@ -262,12 +279,12 @@ fi
 
 if [[ $performance == true ]]; then
     echo -e "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 25,50,75,100 -d 3 -b TS_PASS_DIRECT router1-router2 : :
-    run_system_test -k packet_loss -v 0,1.5,3,4.5 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 100,200,300,400,500 -d 3 -b both TS_PASS_DIRECT router1-router2 : wg0:wg0
 elif [[ -n $file ]]; then
     echo -e "\nTests from file: $file"
     
-    while read test_cmd; do
+    # Read line by line from $file (also last line which may not end with a newline, but still contain a command)
+    while IFS= read -r test_cmd || [ -n "$test_cmd" ]; do
         eval $test_cmd
     done < $file
 else
