@@ -48,11 +48,11 @@ func (s *Stage) makeMM() *MDNSManager {
 		panic(err)
 	}
 
-	m := &MDNSManager{
+	m := assureClose(&MDNSManager{
 		ActorCommon: c,
 		s:           s,
 		rlStore:     store,
-	}
+	})
 
 	bind, err := m.makeMDNSListener()
 	if err != nil {
@@ -189,8 +189,7 @@ func (mm *MDNSManager) Run() {
 			mm.handleSystemFrame(frame)
 		case frame := <-mm.querySock.outCh:
 			mm.handleSystemFrame(frame)
-		case <-mm.s.Ctx.Done():
-			mm.Close()
+		case <-mm.ctx.Done():
 			return
 		}
 	}
@@ -334,8 +333,7 @@ func (mm *MDNSManager) deadRun() {
 	for {
 		select {
 		case <-mm.inbox:
-		case <-mm.s.Ctx.Done():
-			mm.Close()
+		case <-mm.ctx.Done():
 			return
 		}
 	}

@@ -39,6 +39,10 @@ func (ac *ActorCommon) Cancel() {
 	ac.ctxCan()
 }
 
+func (ac *ActorCommon) Ctx() context.Context {
+	return ac.ctx
+}
+
 func (ac *ActorCommon) logUnknownMessage(am msgactor.ActorMessage) {
 	// TODO make better; somehow get actor name in there
 	slog.Error("got unknown message", "ac", ac, "am", am)

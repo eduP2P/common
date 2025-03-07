@@ -25,11 +25,11 @@ type SessionManager struct {
 var DebugSManTakeNodeAsSession = false
 
 func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
-	sm := &SessionManager{
+	sm := assureClose(&SessionManager{
 		ActorCommon: MakeCommon(s.Ctx, SessManInboxChLen),
 		s:           s,
 		session:     priv,
-	}
+	})
 
 	L(sm).Debug("sman with session key", "sess", priv().Public().Debug())
 
@@ -53,7 +53,6 @@ func (sm *SessionManager) Run() {
 	for {
 		select {
 		case <-sm.ctx.Done():
-			sm.Close()
 			return
 		case inMsg := <-sm.inbox:
 			sm.Handle(inMsg)

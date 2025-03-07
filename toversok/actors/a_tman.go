@@ -35,7 +35,7 @@ type TrafficManager struct {
 }
 
 func (s *Stage) makeTM() *TrafficManager {
-	return &TrafficManager{
+	return assureClose(&TrafficManager{
 		ActorCommon: MakeCommon(s.Ctx, TrafficManInboxChLen),
 		s:           s,
 
@@ -47,7 +47,7 @@ func (s *Stage) makeTM() *TrafficManager {
 		activeOut: make(map[key.NodePublic]bool),
 		activeIn:  make(map[key.NodePublic]bool),
 		sessMap:   make(map[key.SessionPublic]key.NodePublic),
-	}
+	})
 }
 
 func (tm *TrafficManager) Run() {
@@ -55,7 +55,6 @@ func (tm *TrafficManager) Run() {
 		if v := recover(); v != nil {
 			L(tm).Error("panicked", "error", v, "stack", string(debug.Stack()))
 			tm.Cancel()
-			tm.Close()
 			bail(tm.ctx, v)
 		}
 	}()
@@ -69,7 +68,6 @@ func (tm *TrafficManager) Run() {
 		select {
 
 		case <-tm.ctx.Done():
-			tm.Close()
 			return
 		case <-tm.ticker.C:
 			// Run periodic before inbox, as inbox can get backed up, and ping + path management would get delayed.

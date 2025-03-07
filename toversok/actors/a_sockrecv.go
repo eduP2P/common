@@ -31,12 +31,12 @@ type SockRecv struct {
 }
 
 func MakeSockRecv(ctx context.Context, udp types.UDPConn) *SockRecv {
-	return &SockRecv{
+	return assureClose(&SockRecv{
 		Conn:  udp,
 		outCh: make(chan RecvFrame, SockRecvFrameChanBuffer),
 
 		ActorCommon: MakeCommon(ctx, -1),
-	}
+	})
 }
 
 func (r *SockRecv) Run() {
@@ -95,31 +95,26 @@ func (r *SockRecv) Run() {
 
 		pkt := slices.Clone(buf[:n])
 
-		if context.Cause(r.ctx) != nil {
+		if r.ctx.Err() != nil {
 			return
 		}
 
 		select {
-		case <-r.ctx.Done():
-			r.Close()
-			return
 		case r.outCh <- RecvFrame{
 			pkt: pkt,
 			ts:  ts,
 			src: ap,
 		}:
 			// fallthrough continue
+		case <-r.ctx.Done():
+			return
 		}
 	}
 }
 
 func (r *SockRecv) Close() {
-	if r.ctx.Err() == nil {
-		if err := r.Conn.Close(); err != nil {
-			slog.Error("failed to close connection for sockrecv", "err", err)
-		}
-		close(r.outCh)
-		r.ctxCan()
-		return
+	if err := r.Conn.Close(); err != nil {
+		slog.Error("failed to close connection for sockrecv", "err", err)
 	}
+	close(r.outCh)
 }

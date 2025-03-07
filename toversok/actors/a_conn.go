@@ -3,6 +3,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"runtime/debug"
@@ -39,7 +40,7 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 
 	common := MakeCommon(s.Ctx, OutConnInboxChanBuffer)
 
-	return &OutConn{
+	return assureClose(&OutConn{
 		ActorCommon: common,
 
 		sock: MakeSockRecv(common.ctx, udp),
@@ -51,7 +52,7 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 
 		activityTimer: t,
 		isActive:      false,
-	}
+	})
 }
 
 func (oc *OutConn) Run() {
@@ -73,7 +74,6 @@ func (oc *OutConn) Run() {
 	for {
 		select {
 		case <-oc.ctx.Done():
-			oc.Close()
 			return
 		case <-oc.sock.ctx.Done():
 			oc.Cancel()
@@ -201,7 +201,7 @@ func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 	t := time.NewTimer(60 * time.Second)
 	t.Stop()
 
-	return &InConn{
+	return assureClose(&InConn{
 		ActorCommon: MakeCommon(s.Ctx, -1),
 
 		s: s,
@@ -213,7 +213,7 @@ func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 
 		pktCh: make(chan []byte, InConnFrameChanBuffer),
 		peer:  peer,
-	}
+	})
 }
 
 func (ic *InConn) Run() {
@@ -221,7 +221,6 @@ func (ic *InConn) Run() {
 		if v := recover(); v != nil {
 			L(ic).Error("panicked", "panic", v, "stack", string(debug.Stack()))
 			ic.Cancel()
-			ic.Close()
 			bail(ic.ctx, v)
 		}
 	}()
@@ -234,7 +233,6 @@ func (ic *InConn) Run() {
 	for {
 		select {
 		case <-ic.ctx.Done():
-			ic.Close()
 			return
 		case <-ic.activityTimer.C:
 			ic.UnBump()
@@ -264,6 +262,9 @@ func (ic *InConn) Close() {
 	ic.s.TMan.Inbox() <- &msgactor.TManConnGoodBye{
 		Peer: ic.peer,
 		IsIn: false,
+	}
+	if err := ic.udp.Close(); err != nil {
+		slog.Error("failed to close inconn udp", "peer", ic.peer, "err", err)
 	}
 }
 

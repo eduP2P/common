@@ -1,7 +1,7 @@
 package router
 
 import (
-	"log"
+	"fmt"
 	"net/netip"
 	"os/exec"
 )
@@ -49,7 +49,8 @@ func inet(p netip.Prefix) string {
 
 func cmd(args ...string) *exec.Cmd {
 	if len(args) == 0 {
-		log.Fatalf("exec.Cmd(%#v) invalid; need argv[0]", args)
+		// We control this input, and without argv[0] we can't do anything anyways.
+		panic(fmt.Errorf("exec.Cmd(%#v) invalid; need at least 1 argument", args))
 	}
 	return exec.Command(args[0], args[1:]...)
 }

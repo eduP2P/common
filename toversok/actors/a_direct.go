@@ -31,12 +31,12 @@ type DirectManager struct {
 
 func (s *Stage) makeDM(udpSocket types.UDPConn) *DirectManager {
 	c := MakeCommon(s.Ctx, -1)
-	return &DirectManager{
+	return assureClose(&DirectManager{
 		ActorCommon: c,
 		sock:        MakeSockRecv(c.ctx, udpSocket),
 		s:           s,
 		writeCh:     make(chan directWriteRequest, DirectManWriteChLen),
-	}
+	})
 }
 
 func (dm *DirectManager) Run() {
@@ -60,7 +60,6 @@ func (dm *DirectManager) Run() {
 	for {
 		select {
 		case <-dm.ctx.Done():
-			dm.Close()
 			return
 		case req := <-dm.writeCh:
 			L(dm).Log(context.Background(), types.LevelTrace, "direct: writing")
@@ -115,13 +114,13 @@ type DirectRouter struct {
 }
 
 func (s *Stage) makeDR() *DirectRouter {
-	return &DirectRouter{
+	return assureClose(&DirectRouter{
 		ActorCommon:   MakeCommon(s.Ctx, DirectRouterInboxChLen),
 		s:             s,
 		aka:           make(map[netip.AddrPort]key.NodePublic),
 		stunEndpoints: make(map[netip.AddrPort]bool),
 		frameCh:       make(chan ifaces.DirectedPeerFrame, DirectRouterFrameChLen),
-	}
+	})
 }
 
 func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
@@ -149,7 +148,6 @@ func (dr *DirectRouter) Run() {
 	for {
 		select {
 		case <-dr.ctx.Done():
-			dr.Close()
 			return
 		case m := <-dr.inbox:
 			switch m := m.(type) {

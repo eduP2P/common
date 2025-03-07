@@ -87,11 +87,8 @@ func (c *RestartableRelayConn) Run() {
 		c.connected = false
 
 		// Possibly the client exited because the relayConn is being closed, check for that first
-		select {
-		case <-c.ctx.Done():
+		if c.ctx.Err() != nil {
 			return
-		default:
-			// fallthrough
 		}
 		if err != nil {
 			c.L().Warn("relay client exited", "error", err)
@@ -186,7 +183,7 @@ func (c *RestartableRelayConn) loop() error {
 }
 
 func (c *RestartableRelayConn) Close() {
-	c.ctxCan()
+	// TODO nothing much to close?
 }
 
 // Queue queues the pkt for dst in a non-blocking fashion
@@ -268,7 +265,7 @@ type RelayManager struct {
 const HomeRelayChangeInterval = time.Minute * 5
 
 func (s *Stage) makeRM() *RelayManager {
-	return &RelayManager{
+	return assureClose(&RelayManager{
 		ActorCommon: MakeCommon(s.Ctx, RelayManInboxChLen),
 		s:           s,
 		homeRelay:   0,
@@ -276,7 +273,7 @@ func (s *Stage) makeRM() *RelayManager {
 		relays:  make(map[int64]RelayConnActor),
 		inCh:    make(chan ifaces.RelayedPeerFrame, RelayManFrameChLen),
 		writeCh: make(chan relayWriteRequest, RelayManWriteChLen),
-	}
+	})
 }
 
 func (rm *RelayManager) Run() {
@@ -298,7 +295,6 @@ func (rm *RelayManager) Run() {
 	for {
 		select {
 		case <-rm.ctx.Done():
-			rm.Close()
 			return
 		case m := <-rm.inbox:
 			switch m := m.(type) {
@@ -367,7 +363,7 @@ func (rm *RelayManager) Run() {
 }
 
 func (rm *RelayManager) Close() {
-	rm.ctxCan()
+	// TODO nothing much to close?
 }
 
 func (rm *RelayManager) selectRelay(latencies map[int64]time.Duration) int64 {
@@ -402,9 +398,10 @@ func (rm *RelayManager) getConn(id int64) RelayConnActor {
 func (rm *RelayManager) update(info relay.Information) {
 	if r, ok := rm.relays[info.ID]; ok {
 		r.Update(info)
+		return
 	}
 
-	r := &RestartableRelayConn{
+	r := assureClose(&RestartableRelayConn{
 		ActorCommon: MakeCommon(rm.ctx, -1),
 		man:         rm,
 		config:      info,
@@ -412,7 +409,7 @@ func (rm *RelayManager) update(info relay.Information) {
 		stay:     info.ID == rm.homeRelay,
 		bufferCh: make(chan relay.SendPacket, RelayConnSendBufferSize),
 		pokeCh:   make(chan interface{}, 1),
-	}
+	})
 
 	go r.Run()
 
@@ -441,11 +438,11 @@ type RelayRouter struct {
 }
 
 func (s *Stage) makeRR() *RelayRouter {
-	return &RelayRouter{
+	return assureClose(&RelayRouter{
 		ActorCommon: MakeCommon(s.Ctx, -1),
 		s:           s,
 		frameCh:     make(chan ifaces.RelayedPeerFrame, RelayRouterFrameChLen),
-	}
+	})
 }
 
 func (rr *RelayRouter) Push(frame ifaces.RelayedPeerFrame) {
@@ -473,7 +470,6 @@ func (rr *RelayRouter) Run() {
 	for {
 		select {
 		case <-rr.ctx.Done():
-			rr.Close()
 			return
 		case frame := <-rr.frameCh:
 			if msgsess.LooksLikeSessionWireMessage(frame.Pkt) {

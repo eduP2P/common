@@ -24,14 +24,10 @@ import (
 
 type OutConnActor interface {
 	ifaces.Actor
-
-	Ctx() context.Context
 }
 
 type InConnActor interface {
 	ifaces.Actor
-
-	Ctx() context.Context
 
 	ForwardPacket(pkt []byte)
 }
@@ -91,6 +87,8 @@ func MakeStage(
 	s.SMan = s.makeSM(sessPriv)
 	s.EMan = s.makeEM()
 	s.MMan = s.makeMM()
+
+	context.AfterFunc(s.Ctx, s.Close)
 
 	return s
 }
@@ -173,6 +171,12 @@ func (s *Stage) Start() {
 	go s.RRouter.Run()
 
 	s.started = true
+}
+
+func (s *Stage) Close() {
+	if err := s.ext.Close(); err != nil {
+		slog.Error("error closing ext for stage", "err", err)
+	}
 }
 
 // Watchdog will be run to constantly check for faults on the stage and repair them.

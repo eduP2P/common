@@ -58,3 +58,9 @@ func sortEndpointSlice(endpoints []netip.AddrPort) {
 		return endpoints[i].Addr().Less(endpoints[j].Addr()) && endpoints[i].Port() < endpoints[j].Port()
 	})
 }
+
+func assureClose[T ifaces.Actor](a T) T {
+	context.AfterFunc(a.Ctx(), a.Close)
+
+	return a
+}

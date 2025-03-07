@@ -17,14 +17,14 @@ import (
 )
 
 func (s *Stage) makeEM() *EndpointManager {
-	em := &EndpointManager{
+	em := assureClose(&EndpointManager{
 		ActorCommon: MakeCommon(s.Ctx, SessManInboxChLen),
 		s:           s,
 
 		ticker:      time.NewTicker(EManTickerInterval),
 		stunTimeout: time.NewTimer(EManStunTimeout),
 		relays:      make(map[int64]relay.Information),
-	}
+	})
 
 	em.stunTimeout.Stop()
 
@@ -82,7 +82,6 @@ func (em *EndpointManager) Run() {
 	for {
 		select {
 		case <-em.ctx.Done():
-			em.Close()
 			return
 		case <-em.ticker.C:
 			em.startSTUN()

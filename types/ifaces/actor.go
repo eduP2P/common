@@ -1,6 +1,7 @@
 package ifaces
 
 import (
+	"context"
 	"net/netip"
 	"time"
 
@@ -15,10 +16,12 @@ type Actor interface {
 
 	Inbox() chan<- msgactor.ActorMessage
 
+	Ctx() context.Context
+
 	// Cancel this actor's context.
 	Cancel()
 
-	// Close is called by the actor's Run loop when cancelled.
+	// Close is called by AfterFunc to clean up
 	Close()
 }
 
