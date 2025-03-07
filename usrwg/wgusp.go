@@ -5,6 +5,7 @@ import (
 	"github.com/google/gopacket/layers"
 	"golang.zx2c4.com/wireguard/tun"
 	"log/slog"
+	"net"
 	"net/netip"
 	"slices"
 	"syscall"
@@ -196,6 +197,20 @@ func (u *UserSpaceWireGuardController) GetStats(_ key.NodePublic) (*toversok.WGS
 
 func (u *UserSpaceWireGuardController) ConnFor(node key.NodePublic) types.UDPConn {
 	return u.bind.GetConn(node)
+}
+
+func (u *UserSpaceWireGuardController) GetInterface() *net.Interface {
+	name, err := u.tunDev.Name()
+	if err != nil {
+		slog.Warn("failed to get tun device name", "err", err)
+		return nil
+	}
+	i, err := net.InterfaceByName(name)
+	if err != nil {
+		slog.Warn("failed to get interface", "name", name, "err", err)
+		return nil
+	}
+	return i
 }
 
 func (u *UserSpaceWireGuardController) Close() {

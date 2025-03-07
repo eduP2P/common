@@ -84,6 +84,7 @@ func SetupSession(
 		sess.wg.ConnFor,
 		sess.cs,
 		nil,
+		sess.wg.GetInterface(),
 	)
 
 	sess.cs.InstallCallbacks(sess)

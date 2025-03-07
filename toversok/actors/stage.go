@@ -47,6 +47,8 @@ func MakeStage(
 	controlSession ifaces.ControlInterface,
 
 	dialRelayFunc relayhttp.RelayDialFunc,
+
+	wgIf *net.Interface,
 ) ifaces.Stage {
 	// FIXME ??? why the fuck did we ever decide on this
 	// ctx := context.WithoutCancel(pCtx)
@@ -73,6 +75,8 @@ func MakeStage(
 		ext:       bindExt(),
 		bindLocal: bindLocal,
 		control:   controlSession,
+
+		wgIf: wgIf,
 
 		dialRelayFunc: dialRelayFunc,
 	}
@@ -130,6 +134,8 @@ type Stage struct {
 	peerInfo      map[key.NodePublic]*stage.PeerInfo
 
 	control ifaces.ControlInterface
+
+	wgIf *net.Interface
 
 	//// A repeatable function to an outside context to acquire a new UDPconn,
 	//// once a peer conn has died for whatever reason.
