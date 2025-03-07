@@ -123,8 +123,10 @@ type Stage struct {
 	inConn    map[key.NodePublic]InConnActor
 	outConn   map[key.NodePublic]OutConnActor
 
-	getNodePriv    func() *key.NodePrivate
-	getSessPriv    func() *key.SessionPrivate
+	getNodePriv func() *key.NodePrivate
+	getSessPriv func() *key.SessionPrivate
+
+	endpointMutex  sync.RWMutex
 	localEndpoints []netip.AddrPort
 	stunEndpoints  []netip.AddrPort
 
@@ -381,15 +383,15 @@ func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 }
 
 func (s *Stage) GetEndpoints() []netip.AddrPort {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.endpointMutex.RLock()
+	defer s.endpointMutex.RUnlock()
 
 	return slices.Concat(s.localEndpoints, s.stunEndpoints)
 }
 
 func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
-	s.connMutex.Lock()
-	defer s.connMutex.Unlock()
+	s.endpointMutex.Lock()
+	defer s.endpointMutex.Unlock()
 
 	sortEndpointSlice(endpoints)
 
@@ -404,8 +406,8 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 }
 
 func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.endpointMutex.Lock()
+	defer s.endpointMutex.Unlock()
 
 	localPort := s.getLocalPort()
 
@@ -438,6 +440,15 @@ func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
 	s.localEndpoints = endpoints
 
 	s.notifyEndpointChanged()
+}
+
+func (s *Stage) getLocalEndpoints() []netip.Addr {
+	s.endpointMutex.RLock()
+	defer s.endpointMutex.RUnlock()
+
+	return types.Map(s.localEndpoints, func(t netip.AddrPort) netip.Addr {
+		return t.Addr()
+	})
 }
 
 func (s *Stage) getLocalPort() uint16 {
