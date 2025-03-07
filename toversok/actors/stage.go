@@ -46,9 +46,6 @@ func MakeStage(
 
 	wgIf *net.Interface,
 ) ifaces.Stage {
-	// FIXME ??? why the fuck did we ever decide on this
-	// ctx := context.WithoutCancel(pCtx)
-
 	if dialRelayFunc == nil {
 		dialRelayFunc = relayhttp.Dial
 	}

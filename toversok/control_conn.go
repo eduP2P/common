@@ -75,8 +75,7 @@ type ResumableControlSession struct {
 func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.ControlPublic, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, logon types.LogonCallback) (*ResumableControlSession, error) {
 	rcsCtx, rcsCcc := context.WithCancelCause(ctx)
 
-	clientCtx := context.WithoutCancel(rcsCtx)
-	c, err := controlhttp.Dial(clientCtx, opts, getPriv, getSess, controlKey, nil, logon)
+	c, err := controlhttp.Dial(rcsCtx, opts, getPriv, getSess, controlKey, nil, logon)
 	if err != nil {
 		rcsCcc(err)
 		return nil, fmt.Errorf("could not create control session: %w", err)
@@ -144,7 +143,6 @@ func (rcs *ResumableControlSession) Run() {
 
 			if types.IsContextDone(rcs.ctx) {
 				slog.Info("control session ended, closing client")
-				rcs.client.Close()
 				return
 			}
 
@@ -190,10 +188,8 @@ func (rcs *ResumableControlSession) Run() {
 				return
 			}
 
-			clientCtx := context.WithoutCancel(rcs.ctx)
-
 			client, err = controlhttp.Dial(
-				clientCtx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session, nil,
+				rcs.ctx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session, nil,
 			)
 
 			r := msgcontrol.NoRetryStrategy

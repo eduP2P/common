@@ -2,6 +2,7 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -158,7 +159,7 @@ func (c *RestartableRelayConn) loop() error {
 
 		case <-checker.C:
 			if c.shouldIdle() {
-				c.client.Close()
+				c.client.Cancel(errors.New("should idle"))
 				return nil
 			}
 
@@ -209,7 +210,7 @@ func (c *RestartableRelayConn) Update(info relay.Information) {
 
 	// Close the client to trigger a reconnect
 	if c.client != nil {
-		c.client.Close()
+		c.client.Cancel(errors.New("relay client exited"))
 	}
 }
 

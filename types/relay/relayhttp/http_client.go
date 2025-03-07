@@ -36,9 +36,10 @@ func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, 
 	}
 
 	if !expectKey.IsZero() && c.RelayKey() != expectKey {
-		c.Close()
+		err = fmt.Errorf("relay key did not match expected key")
+		c.Cancel(err)
 
-		return nil, fmt.Errorf("relay key did not match expected key")
+		return nil, err
 	}
 
 	return c, nil

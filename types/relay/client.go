@@ -39,6 +39,7 @@ type Client interface {
 	Err() error
 
 	Close()
+	Cancel(error)
 }
 
 // HTTPClient is a Relay client that lives as long as its conn does
@@ -307,7 +308,7 @@ func (c *HTTPClient) RunReceive() {
 
 	defer func() {
 		if v := recover(); v != nil {
-			c.ccc(fmt.Errorf("reader panicked: %s", v))
+			c.Cancel(fmt.Errorf("reader panicked: %s", v))
 		}
 	}()
 

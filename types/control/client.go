@@ -53,6 +53,8 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 		return nil, err
 	}
 
+	context.AfterFunc(c.ctx, c.Close)
+
 	return c, nil
 }
 
@@ -225,5 +227,4 @@ func (c *Client) Close() {
 
 func (c *Client) Cancel(err error) {
 	c.ccc(err)
-	c.Close()
 }
