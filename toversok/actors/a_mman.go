@@ -219,12 +219,12 @@ func (mm *MDNSManager) handleSystemFrame(frame RecvFrame) {
 		return
 	}
 
-	// TODO proper filtering
+	if !mm.isSelf(frame.src.Addr()) {
+		L(mm).Log(context.Background(), types.LevelTrace, "dropping mDNS packet due to non-local origin", "from", frame.src)
+		return
+	}
 
-	//if !frame.src.Addr().IsLoopback() {
-	//	// drop non-loopback, is from LAN
-	//	continue
-	//}
+	// TODO proper in-depth filtering
 
 	L(mm).Debug("spreading local MDNS packet to peers", "len", len(frame.pkt), "from", frame.src.String())
 
@@ -281,6 +281,10 @@ func (mm *MDNSManager) isLocal(addr netip.Addr) bool {
 	return addr.IsLoopback() || slices.IndexFunc(mm.s.getLocalEndpoints(), func(cAddr netip.Addr) bool {
 		return cAddr == addr
 	}) != -1
+}
+
+func (mm *MDNSManager) isSelf(addr netip.Addr) bool {
+	return mm.isLocal(addr) || addr == mm.s.control.IPv4().Addr() || addr == mm.s.control.IPv6().Addr()
 }
 
 func (mm *MDNSManager) processMDNS(pkt []byte, local bool) []byte {
