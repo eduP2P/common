@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Amount of seconds to wait for one system test to finish
+SYSTEM_TEST_TIMEOUT=60
+
 usage_str="""
 Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
@@ -12,8 +15,9 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
     -k <bitrate|delay|packet_loss>
     -v <comma-separated string of positive real numbers (less than 100 for -k bitrate)>
     -d <seconds>
-    -b
-        With this flag, eduP2P's performance is compared to the performance of a direct connection, and a connection using only WireGuard
+    -r <amount of repetitions (to improve consistency of results)>
+    -b <direct|wireguard|both>
+        With this flag, eduP2P's performance is compared to the performance of a direct connection and/or a connection using only WireGuard
         This flag should only be used when both peers reside in the 'public' network
     
 <NAMESPACE CONFIGURATION> specifies the peer and router namespaces to be used in this system test. It should be a string with one of the following formats:
@@ -38,10 +42,11 @@ If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corre
 # Use functions and constants from util.sh
 . ./util.sh
 
-performance_test_duration=0 # Default value in case -d is not used
+performance_test_duration=5 # Default value in case -d is not used
+performance_test_reps=1 # Default value in case -r is not used
 
 # Validate optional arguments
-while getopts ":k:v:d:bh" opt; do
+while getopts ":k:v:d:r:b:h" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
@@ -61,8 +66,20 @@ while getopts ":k:v:d:bh" opt; do
             performance_test_duration=$OPTARG
             validate_str $performance_test_duration "^[0-9]+$"
             ;;
+        r)
+            performance_test_reps=$OPTARG
+            validate_str $performance_test_duration "^[0-9]+$"
+
+            if [[ $performance_test_reps -eq 0 ]]; then
+                exit_with_error "value of -r should be at least 1"
+            fi
+            ;;
+
         b)
-            baseline="-b"
+            performance_test_baseline=$OPTARG
+            validate_str $performance_test_baseline "^direct|wireguard|both$"
+
+            baseline="-b $performance_test_baseline"
             ;;
         h) 
             echo "$usage_str"
@@ -257,7 +274,7 @@ done
 for i in {0..1}; do 
     peer_id="peer$((i+1))"
     export LOG_FILE=${log_dir}/$peer_id.txt # Export to use in bash -c
-    timeout 30s bash -c 'tail -n +1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
+    timeout ${SYSTEM_TEST_TIMEOUT}s bash -c 'tail -n +1 -f $LOG_FILE | sed -n "/TS_PASS/q2; /TS_FAIL/q3"' # bash -c is necessary to use timeout with | and still get the right exit codes
 
     # Branch on exit code of previous command
     case $? in
@@ -300,7 +317,7 @@ if [[ -n $performance_test_var ]]; then
     peer1_ns=${peer_ns_list[0]}
     peer1_ip=$(extract_ipv4 $peer1_ns $peer1_interface)
 
-    sudo ./performance_test.sh $baseline $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $log_dir
+    sudo ./performance_test.sh ${baseline} $peer1_ns ${peer_ns_list[1]} $peer1_ip $performance_test_var $performance_test_values $performance_test_duration $performance_test_reps $log_dir
 
     if [[ $? -ne 0 ]]; then 
         clean_exit 1
