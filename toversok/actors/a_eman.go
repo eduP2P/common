@@ -66,7 +66,6 @@ type stunResponse struct {
 //  - UPnP? Other stuff?
 
 func (em *EndpointManager) Run() {
-
 	defer em.Cancel()
 	defer func() {
 		if v := recover(); v != nil {
