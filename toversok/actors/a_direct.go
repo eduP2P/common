@@ -40,18 +40,18 @@ func (s *Stage) makeDM(udpSocket types.UDPConn) *DirectManager {
 }
 
 func (dm *DirectManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(dm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			dm.Cancel()
-			bail(dm.ctx, v)
-		}
-	}()
-
 	if !dm.running.CheckOrMark() {
 		L(dm).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer dm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(dm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(dm.ctx, v)
+		}
+	}()
 
 	go dm.sock.Run()
 
@@ -130,18 +130,18 @@ func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
 }
 
 func (dr *DirectRouter) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(dr).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			dr.Cancel()
-			bail(dr.ctx, v)
-		}
-	}()
-
 	if !dr.running.CheckOrMark() {
 		L(dr).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer dr.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(dr).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(dr.ctx, v)
+		}
+	}()
 
 	runtime.LockOSThread()
 

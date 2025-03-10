@@ -66,18 +66,14 @@ type stunResponse struct {
 //  - UPnP? Other stuff?
 
 func (em *EndpointManager) Run() {
+
+	defer em.Cancel()
 	defer func() {
 		if v := recover(); v != nil {
 			L(em).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			em.Cancel()
 			bail(em.ctx, v)
 		}
 	}()
-
-	if !em.running.CheckOrMark() {
-		L(em).Warn("tried to run agent, while already running")
-		return
-	}
 
 	for {
 		select {

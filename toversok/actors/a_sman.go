@@ -37,18 +37,18 @@ func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
 }
 
 func (sm *SessionManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(sm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			sm.Cancel()
-			bail(sm.ctx, v)
-		}
-	}()
-
 	if !sm.running.CheckOrMark() {
 		L(sm).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer sm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(sm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(sm.ctx, v)
+		}
+	}()
 
 	for {
 		select {

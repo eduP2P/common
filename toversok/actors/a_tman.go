@@ -51,18 +51,18 @@ func (s *Stage) makeTM() *TrafficManager {
 }
 
 func (tm *TrafficManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(tm).Error("panicked", "error", v, "stack", string(debug.Stack()))
-			tm.Cancel()
-			bail(tm.ctx, v)
-		}
-	}()
-
 	if !tm.running.CheckOrMark() {
 		L(tm).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer tm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(tm).Error("panicked", "error", v, "stack", string(debug.Stack()))
+			bail(tm.ctx, v)
+		}
+	}()
 
 	for {
 		select {

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"time"
 
@@ -140,6 +141,19 @@ func dataToB64Hash(b []byte) string {
 }
 
 func (mm *MDNSManager) Run() {
+	if !mm.running.CheckOrMark() {
+		L(mm).Warn("tried to run agent, while already running")
+		return
+	}
+
+	defer mm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(mm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(mm.ctx, v)
+		}
+	}()
+
 	if !mm.working {
 		mm.deadRun()
 		return

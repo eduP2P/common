@@ -39,18 +39,18 @@ func MakeSockRecv(ctx context.Context, udp types.UDPConn) *SockRecv {
 }
 
 func (r *SockRecv) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(r).Error("panicked", "err", v, "stack", string(debug.Stack()))
-			r.Cancel()
-			bail(r.ctx, v)
-		}
-	}()
-
 	if !r.running.CheckOrMark() {
 		L(r).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer r.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(r).Error("panicked", "err", v, "stack", string(debug.Stack()))
+			bail(r.ctx, v)
+		}
+	}()
 
 	buf := make([]byte, 1<<16)
 
@@ -62,7 +62,6 @@ func (r *SockRecv) Run() {
 		err := r.Conn.SetReadDeadline(time.Now().Add(SockRecvReadTimeout))
 		if err != nil {
 			L(r).Error("failed to set read deadline", "err", err)
-			r.ctxCan()
 			return
 		}
 
@@ -86,7 +85,6 @@ func (r *SockRecv) Run() {
 				L(r).Error("failed to read packet", "err", err)
 			}
 
-			r.Cancel()
 			return
 		}
 

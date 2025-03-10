@@ -54,6 +54,8 @@ func (c *RestartableRelayConn) Poke() {
 }
 
 func (c *RestartableRelayConn) Run() {
+	defer c.Cancel()
+
 	for {
 		if c.shouldIdle() {
 			select {
@@ -278,18 +280,18 @@ func (s *Stage) makeRM() *RelayManager {
 }
 
 func (rm *RelayManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(rm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			rm.Cancel()
-			bail(rm.ctx, v)
-		}
-	}()
-
 	if !rm.running.CheckOrMark() {
 		L(rm).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer rm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(rm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(rm.ctx, v)
+		}
+	}()
 
 	runtime.LockOSThread()
 
@@ -453,18 +455,18 @@ func (rr *RelayRouter) Push(frame ifaces.RelayedPeerFrame) {
 }
 
 func (rr *RelayRouter) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(rr).Warn("panicked", "error", v, "stack", string(debug.Stack()))
-			rr.Cancel()
-			bail(rr.ctx, v)
-		}
-	}()
-
 	if !rr.running.CheckOrMark() {
 		L(rr).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer rr.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(rr).Warn("panicked", "error", v, "stack", string(debug.Stack()))
+			bail(rr.ctx, v)
+		}
+	}()
 
 	runtime.LockOSThread()
 

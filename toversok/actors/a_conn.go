@@ -56,18 +56,18 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 }
 
 func (oc *OutConn) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(oc).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			oc.Cancel()
-			bail(oc.ctx, v)
-		}
-	}()
-
 	if !oc.running.CheckOrMark() {
 		L(oc).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer oc.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(oc).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(oc.ctx, v)
+		}
+	}()
 
 	go oc.sock.Run()
 
@@ -76,7 +76,7 @@ func (oc *OutConn) Run() {
 		case <-oc.ctx.Done():
 			return
 		case <-oc.sock.ctx.Done():
-			oc.Cancel()
+			return
 		case <-oc.activityTimer.C:
 			oc.UnBump()
 		case msg := <-oc.inbox:
@@ -98,8 +98,7 @@ func (oc *OutConn) Run() {
 				// sock closed, the peer is dead
 				// TODO:
 				//   trigger some kind of healing logic elsewhere?
-				oc.Cancel()
-				continue
+				return
 			}
 
 			if oc.useRelay {
@@ -217,18 +216,18 @@ func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 }
 
 func (ic *InConn) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(ic).Error("panicked", "panic", v, "stack", string(debug.Stack()))
-			ic.Cancel()
-			bail(ic.ctx, v)
-		}
-	}()
-
 	if !ic.running.CheckOrMark() {
 		L(ic).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer ic.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(ic).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(ic.ctx, v)
+		}
+	}()
 
 	for {
 		select {
@@ -240,7 +239,6 @@ func (ic *InConn) Run() {
 			n, err := ic.udp.Write(frame)
 			if err != nil {
 				if errors.Is(err, net.ErrClosed) {
-					ic.Cancel()
 					return
 				}
 				// TODO failsafe logic
