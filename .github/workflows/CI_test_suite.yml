@@ -110,11 +110,10 @@ jobs:
     
     - name: Unzip artifact
       working-directory: test_suite
-      run: unzip performance_test_data.zip -d previous_performance
-      continue-on-error: true
+      run: unzip performance-test-data.zip -d previous_performance
     
     - name: Check if artifact was successfully downloaded and extracted
-      run: ls; ls test_suite/
+      run: ls test_suite/
 
   # IntegrationTests:
   #   runs-on: ubuntu-latest
