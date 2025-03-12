@@ -102,12 +102,18 @@ jobs:
 
     - name: Download artifact from previous commit
       uses: dawidd6/action-download-artifact@v9
+      working-directory: test_suite
       with: 
-        commit: d714530587846aa184cec41049b90ec3c023cd11
-        name: performance-test-data-d714530587846aa184cec41049b90ec3c023cd11
-
-    - name: Check if artifact was successfully downloaded
-      run: ls
+        commit: 3379e5ff95c38276268f65791cab7754062b2298
+        name: performance-test-data
+        skip_unpack: true
+    
+    - name: Unzip artifact
+      working-directory: test_suite
+      run: unzip performance_test_data.zip -d previous_performance
+    
+    - name: Check if artifact was successfully downloaded and extracted
+      run: ls test_suite/
 
   # IntegrationTests:
   #   runs-on: ubuntu-latest
