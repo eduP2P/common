@@ -102,10 +102,10 @@ jobs:
 
     - name: Download artifact from previous commit
       uses: dawidd6/action-download-artifact@v9
-      working-directory: test_suite
       with: 
         commit: 3379e5ff95c38276268f65791cab7754062b2298
         name: performance-test-data
+        path: ./test_suite
         skip_unpack: true
     
     - name: Unzip artifact
