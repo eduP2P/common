@@ -114,9 +114,7 @@ jobs:
       continue-on-error: true
     
     - name: Check if artifact was successfully downloaded and extracted
-      run: 
-        - ls test_suite/
-        - ls
+      run: ls; ls test_suite/
 
   # IntegrationTests:
   #   runs-on: ubuntu-latest
