@@ -26,7 +26,7 @@ COMPARISON_CONFIG = {
         "packet_loss": {
             "better": lambda new, baseline: new < 0.9 * baseline,
             # Second condition to prevent performance being considered worse when baseline = 0 and new is very small
-            "worse": lambda new, baseline: new > 1.1 * baseline or (baseline == 0 and new > baseline + 1)
+            "worse": lambda new, baseline: new > 1.1 * baseline or (baseline == 0 and new > baseline + 0.1)
         }
     }
 }
