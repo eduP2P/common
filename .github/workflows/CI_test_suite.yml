@@ -108,6 +108,7 @@ jobs:
         name: performance-test-data
         path: ./test_suite
         skip_unpack: true
+        workflow_conclusion: ""
 
     - name: Debug previous commit hash
       if: ${{ github.event_name == 'push' }}
@@ -121,6 +122,7 @@ jobs:
         name: performance-test-data
         path: ./test_suite
         skip_unpack: true
+        workflow_conclusion: ""
     
     - name: Unzip artifact
       working-directory: test_suite
