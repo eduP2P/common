@@ -109,6 +109,10 @@ jobs:
         path: ./test_suite
         skip_unpack: true
 
+    - name: Debug previous commit hash
+      if: ${{ github.event_name == 'push' }}
+      run: echo $${ github.event.before }
+
     - name: Download artifact from previous commit
       if: ${{ github.event_name == 'push' }}
       uses: dawidd6/action-download-artifact@v9
