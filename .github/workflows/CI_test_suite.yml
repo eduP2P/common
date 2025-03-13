@@ -88,7 +88,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: performance-test-data
-        path: test_suite/system_test_logs/performance/*/performance_test_*_data.json
+        path: test_suite/system_test_logs/performance/*/performance_test_data.json
 
     - name: Upload full performance test logs
       uses: actions/upload-artifact@v4
@@ -100,10 +100,20 @@ jobs:
       if: ${{ steps.system-test.outcome == 'failure' }}
       run: exit 1
 
-    - name: Download artifact from previous commit
+    - name: Download artifact from target branch head
+      if: ${{ github.event_name == 'pull_request' }}
       uses: dawidd6/action-download-artifact@v9
       with: 
-        commit: 3379e5ff95c38276268f65791cab7754062b2298
+        branch: ${{ github.base_ref }}
+        name: performance-test-data
+        path: ./test_suite
+        skip_unpack: true
+
+    - name: Download artifact from previous commit
+      if: ${{ github.event_name == 'push' }}
+      uses: dawidd6/action-download-artifact@v9
+      with: 
+        commit: $${ github.event.before }
         name: performance-test-data
         path: ./test_suite
         skip_unpack: true
@@ -114,6 +124,10 @@ jobs:
     
     - name: Check if artifact was successfully downloaded and extracted
       run: ls test_suite/
+
+    - name: Compare current and artifact performance
+      working-directory: test_suite
+      run: python compare_performance.py previous_performance/ performance/
 
   # IntegrationTests:
   #   runs-on: ubuntu-latest
