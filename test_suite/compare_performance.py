@@ -26,7 +26,7 @@ COMPARISON_CONFIG = {
         "packet_loss": {
             "better": lambda new, baseline: new < 0.9 * baseline,
             # Second condition to prevent performance being considered worse when baseline = 0 and new is very small
-            "worse": lambda new, baseline: new > 1.1 * baseline or (baseline == 0 and new > baseline + 0.1)
+            "worse": lambda new, baseline: new > 1.1 * baseline or (baseline == 0 and new > baseline + 0.01)
         }
     }
 }
@@ -76,25 +76,26 @@ def compare_measurements(new_data: dict, baseline_data: dict, rel_path: str):
         for i, (new_val, baseline_val) in enumerate(zip(new_values, baseline_values)):
             if is_worse(new_val, baseline_val):
                 performance_worse = True
-                print(f"\tPerformance decrease for {rel_path}, metric {metric}, value at index {i}")
+                print(f"\t\tPerformance decrease for {rel_path}, metric {metric}, index {i}: {baseline_val:.1f} -> {new_val:.1f}")
 
             if is_better(new_val, baseline_val):
                 performance_better = True and not performance_worse # Worse performance has higher priority than better performance
-                print(f"\tPerformance increase for {rel_path}, metric {metric}, value at index {i}")
+                print(f"\t\tPerformance increase for {rel_path}, metric {metric}, index {i}: {baseline_val:.1f} -> {new_val:.1f}")
 
         
 
 # Iterate over all data files from baseline performance test data
 print(f"Comparing performance of all tests present in baseline data...")
 cwd = os.getcwd()
-baseline_files = Path(f"{cwd}/{baseline}").rglob("performance_test_*_data.json*")
+baseline_files = Path(f"{cwd}/{baseline}").rglob("performance_test_data.json*")
 
 for path in baseline_files:
     path = str(path)
 
     # Get relative path by removing current working directory + baseline directory prefix
     rel_path = path[len(cwd) + len(baseline) + 1:]
-    
+    print(f"\tComparing performance of {rel_path}...")
+
     # Attempt to open same performance test file in new data
     try:
         with open(f"{cwd}/{new}/{rel_path}") as f_new:
