@@ -74,7 +74,7 @@ jobs:
 
     - name: Run performance test with varying bitrate
       id: system-test
-      run: ./system_tests.sh -p -L performance -c 0.5
+      run: ./system_tests.sh -p -L performance
       working-directory: test_suite
       continue-on-error: true
 
