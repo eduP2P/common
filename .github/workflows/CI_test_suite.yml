@@ -124,18 +124,11 @@ jobs:
       working-directory: test_suite
       run: unzip performance-test-data.zip -d previous_performance
 
-    - name: Debug directory contents
-      run: |
-        echo ROOT"
-        ls/
-        echo TEST SUITE"
-        ls test_suite/
-
     - name: Compare current and artifact performance
       id: performance-comparison
       working-directory: test_suite
       run: |
-        python compare_performance.py previous_performance/ performance/
+        python compare_performance.py previous_performance/ system_test_logs/performance/
         echo "exit-code=$?" >> $GITHUB_OUTPUT 
       continue-on-error: true
 
