@@ -64,37 +64,37 @@ jobs:
       with:
         python-version: '3.12'
 
-    # - name: System tests dependencies
-    #   run: xargs -a system_test_requirements.txt sudo apt-get install
-    #   working-directory: test_suite
+    - name: System tests dependencies
+      run: xargs -a system_test_requirements.txt sudo apt-get install
+      working-directory: test_suite
 
-    # - name: Performance tests dependencies
-    #   run: pip install -r python_requirements.txt
-    #   working-directory: test_suite
+    - name: Performance tests dependencies
+      run: pip install -r python_requirements.txt
+      working-directory: test_suite
 
-    # - name: Run performance test with varying bitrate
-    #   id: system-test
-    #   run: ./system_tests.sh -p -L performance
-    #   working-directory: test_suite
-    #   continue-on-error: true
+    - name: Run performance test with varying bitrate
+      id: system-test
+      run: ./system_tests.sh -p -L performance
+      working-directory: test_suite
+      continue-on-error: true
 
-    # - name: Upload performance test graphs
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: performance-test-graphs
-    #     path: test_suite/system_test_logs/performance/*/*.png
+    - name: Upload performance test graphs
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-test-graphs
+        path: test_suite/system_test_logs/performance/*/*.png
 
-    # - name: Upload performance test data
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: performance-test-data
-    #     path: test_suite/system_test_logs/performance/*/performance_test_*_data.json
+    - name: Upload performance test data
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-test-data
+        path: test_suite/system_test_logs/performance/*/performance_test_*_data.json
 
-    # - name: Upload full performance test logs
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: performance-test-logs
-    #     path: test_suite/system_test_logs/
+    - name: Upload full performance test logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-test-logs
+        path: test_suite/system_test_logs/
 
     - name: Fail job if performance test failed (for clarity in GitHub UI)
       if: ${{ steps.system-test.outcome == 'failure' }}

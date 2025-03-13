@@ -60,18 +60,22 @@ def test_iteration():
             # Delete transform key from bitrate metric, since it is not JSON serializable
             del extracted_data["bitrate"]["transform"]
 
+            # Delete json_key key from all metrics, since they are no longer needed
+            for k in extracted_data.keys():
+                del extracted_data[k]["json_key"]
+
             # Merge test variable info and measurements into one dictionary
             data_dict = {
                 "test_var": test_var_dict,
                 "measurements": extracted_data
             }
 
-            json.dump(data_dict, file)
+            json.dump(data_dict, file, indent=4)
 
         for metric in extracted_data.keys():
-            create_performance_graph(n_tests, test_var, test_var_values, metric, extracted_data, parent_path)
+            create_performance_graph(test_var, test_var_values, metric, extracted_data, parent_path)
 
-        create_variance_grid(n_tests, data_dict, parent_path)
+        create_variance_grid(data_dict, parent_path)
 
     if n_tests > 0:
         plural = "s" if n_tests > 1 else ""
@@ -210,7 +214,7 @@ def axis_label(label_unit_dict: dict) -> str:
     return f"{label_unit_dict["label"]} ({label_unit_dict["unit"]})"
 
 # Graph to illustrate the performance of eduP2P, possibly by comparing against WireGuard and/or a direct connection
-def create_performance_graph(test_idx: int, test_var: str, test_var_values: list[float], metric: str, extracted_data: dict, save_path: str):
+def create_performance_graph(test_var: str, test_var_values: list[float], metric: str, extracted_data: dict, save_path: str):
     metric_data = extracted_data[metric]
     connection_measurements = metric_data["values"]["average"]
     test_var_label = TEST_VARS[test_var]["label"]
@@ -233,11 +237,11 @@ def create_performance_graph(test_idx: int, test_var: str, test_var_values: list
     plt.ticklabel_format(useOffset=False)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f"{save_path}/performance_test_{test_idx}_{metric}.png")
+    plt.savefig(f"{save_path}/performance_test_{metric}.png")
     plt.clf()
 
 # Create an <n_metrics> * <n_connections> grid of plots showing the variance in measurements across repetitions for each metric and connection type
-def create_variance_grid(test_idx: int, data_dict: dict, save_path: str):
+def create_variance_grid(data_dict: dict, save_path: str):
     test_var_info = data_dict["test_var"]
     test_var_values = test_var_info["values"]
 
@@ -277,7 +281,7 @@ def create_variance_grid(test_idx: int, data_dict: dict, save_path: str):
     fig.set_figheight(n_metrics * subplot_size)
     fig.set_figwidth(n_connections * subplot_size)
     fig.tight_layout()
-    fig.savefig(f"{save_path}/performance_test_{test_idx}_variance.png", bbox_inches="tight") # bbox_inches prevents suptitle and legend from being cropped
+    fig.savefig(f"{save_path}/performance_test_variance.png", bbox_inches="tight") # bbox_inches prevents suptitle and legend from being cropped
 
 # Fill one column of the variance grid with graphs
 def create_variance_col(ax: np.ndarray[plt.Axes], i: int, test_var_values: list[float], measurements: dict):
