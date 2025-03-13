@@ -110,10 +110,6 @@ jobs:
         skip_unpack: true
         workflow_conclusion: ""
 
-    - name: Debug previous commit hash
-      if: ${{ github.event_name == 'push' }}
-      run: echo ${{ github.event.before }}
-
     - name: Download artifact from previous commit
       if: ${{ github.event_name == 'push' }}
       uses: dawidd6/action-download-artifact@v9
@@ -127,9 +123,6 @@ jobs:
     - name: Unzip artifact
       working-directory: test_suite
       run: unzip performance-test-data.zip -d previous_performance
-    
-    - name: Check if artifact was successfully downloaded and extracted
-      run: ls test_suite/
 
     - name: Compare current and artifact performance
       id: performance-comparison
