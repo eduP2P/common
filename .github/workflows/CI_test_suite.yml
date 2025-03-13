@@ -134,24 +134,20 @@ jobs:
 
     - name: Report result of comparison in GitHub job summary
       run: |
-        case ${{ steps.performance-comparison.outputs.exit-code }} in
-          "0")
-            echo "### ✅ No significant performance change" >> $GITHUB_STEP_SUMMARY
-            exit 0
-            ;;
-          "1")
-            echo "### ❌ Unable to compare performance, see the output of the 'Compare current and artifact performance' step for details" >> $GITHUB_STEP_SUMMARY
-            exit 1
-            ;;
-          "2")
-            echo "### 📉 Performance has become worse :(" >> $GITHUB_STEP_SUMMARY
-            exit 0
-            ;;
-          "3")
-            echo "### 📈 Performance has improved!" >> $GITHUB_STEP_SUMMARY
-            exit 1
-            ;;
-        esac
+        exit_code=${{ steps.performance-comparison.outputs.exit-code }}
+        if [[ $exit_code -eq 0]]; then 
+          echo "### ✅ No significant performance change" >> $GITHUB_STEP_SUMMARY
+          exit 0
+        elif [[ $exit_code -eq 2]]; then
+          echo "### 📉 Performance has become worse :(" >> $GITHUB_STEP_SUMMARY
+          exit 0
+        elif [[ $exit_code -eq 3]]; then
+          echo "### 📈 Performance has improved!" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        else
+          echo "### ❌ Unable to compare performance, see the output of the 'Compare current and artifact performance' step for details" >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
 
   # IntegrationTests:
   #   runs-on: ubuntu-latest
