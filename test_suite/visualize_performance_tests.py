@@ -56,7 +56,7 @@ def test_iteration():
         test_var_dict = TEST_VARS[test_var]
         test_var_dict["values"] = test_var_values
 
-        with open(f"{parent_path}/performance_test_{n_tests}_data.json", 'w') as file:
+        with open(f"{parent_path}/performance_test_data.json", 'w') as file:
             # Delete transform key from bitrate metric, since it is not JSON serializable
             del extracted_data["bitrate"]["transform"]
 
