@@ -20,11 +20,11 @@ The two parameters should be either system test logs containing only performance
 baseline=sys.argv[1]
 new=sys.argv[2]
 
-# This dictionary defines which measurements to compare, and when to consider two measurements worse/better/better_factor
+# This dictionary defines which measurements to compare, and when to consider two measurements worse/better/similar
 COMPARISON_CONFIG = {
     "Target bitrate": { 
         "packet_loss": {
-            "worse": lambda new, baseline: new > 1.1 * baseline,
+            "worse": lambda new, baseline: new > 1.1 * baseline and new > baseline + 1, # Second condition for edge case baseline = 0
             "better": lambda new, baseline: new < 0.9 * baseline
         }
     }
