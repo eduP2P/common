@@ -74,7 +74,7 @@ jobs:
 
     - name: Run performance test with varying bitrate
       id: system-test
-      run: ./system_tests.sh -p -L performance -c 0.5
+      run: ./system_tests.sh -p -L performance -c 1
       working-directory: test_suite
       continue-on-error: true
 
@@ -135,19 +135,19 @@ jobs:
     - name: Report result of comparison in GitHub job summary
       run: |
         case ${{ steps.performance-comparison.outputs.exit-code }} in
-          0)
+          "0")
             echo "### ✅ No significant performance change" >> $GITHUB_STEP_SUMMARY
             exit 0
             ;;
-          1)
+          "1")
             echo "### ❌ Unable to compare performance, see the output of the 'Compare current and artifact performance' step for details" >> $GITHUB_STEP_SUMMARY
             exit 1
             ;;
-          2)
+          "2")
             echo "### 📉 Performance has become worse :(" >> $GITHUB_STEP_SUMMARY
             exit 0
             ;;
-          3)
+          "3")
             echo "### 📈 Performance has improved!" >> $GITHUB_STEP_SUMMARY
             exit 1
             ;;
