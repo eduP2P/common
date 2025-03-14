@@ -120,6 +120,7 @@ func dialOneTCP(ctx context.Context, ap netip.AddrPort) (net.Conn, error) {
 
 	var d net.Dialer
 	d.LocalAddr = nil
+	d.KeepAlive = time.Second * 10
 
 	return d.DialContext(ctx, "tcp", ap.String())
 }
