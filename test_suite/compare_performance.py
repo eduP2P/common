@@ -14,7 +14,9 @@ if len(sys.argv) - 1 != 2:
     print(f"""
 Usage: python {sys.argv[0]} <BASELINE PERFORMANCE TEST DATA> <NEW PERFORMANCE TEST DATA>
 
-The two parameters should be either system test logs containing only performance tests, or extracted performance-test-data artifacts from GitHub Actions""")
+The two parameters should be either system test logs containing only performance tests, or extracted performance-test-data artifacts from GitHub Actions
+
+The output of this script is formatted as markdown such that it can be used in GitHub job step summaries""")
     exit(EXIT_COMPARISON_FAILED)
 
 baseline=sys.argv[1]
@@ -37,7 +39,8 @@ performance_worse = False
 performance_better = False
 
 def failure(reason: str):
-    print(f"Comparison failed: {reason}")
+    print("# ❌ Performance comparison failed")
+    print(reason)
     exit(EXIT_COMPARISON_FAILED)
 
 def check_same_performance_test(new_data: dict, baseline_data: dict, rel_path: str):
@@ -55,7 +58,11 @@ def check_same_performance_test(new_data: dict, baseline_data: dict, rel_path: s
     if not all_required_metrics:
         failure(f"for {rel_path}, some of the measurements in the baseline data are not present in the new data")
 
-def compare_measurements(new_data: dict, baseline_data: dict, rel_path: str):
+def report_performance_change(better: bool, metric: str, idx: int, baseline: float, new: float):
+    change = "improved" if better else "degraded"
+    print(f"- {metric} {change} at index {idx}: {baseline:.1f} -> {new:.1f}")
+    
+def compare_measurements(new_data: dict, baseline_data: dict):
     test_var = baseline_data["test_var"]["label"] 
 
     if not(test_var in COMPARISON_CONFIG.keys()):
@@ -69,6 +76,7 @@ def compare_measurements(new_data: dict, baseline_data: dict, rel_path: str):
     baseline_measurements = baseline_data["measurements"]
 
     for metric in metrics_to_compare:
+        metric_label = baseline_measurements[metric]["label"]
         new_values = new_measurements[metric]["values"]["average"]["eduP2P"]
         baseline_values = baseline_measurements[metric]["values"]["average"]["eduP2P"]
         is_worse = COMPARISON_CONFIG[test_var][metric]["worse"]
@@ -76,26 +84,26 @@ def compare_measurements(new_data: dict, baseline_data: dict, rel_path: str):
         
         for i, (new_val, baseline_val) in enumerate(zip(new_values, baseline_values)):
             if is_worse(new_val, baseline_val):
+                report_performance_change(True, metric_label, i, baseline_val, new_val)
                 performance_worse = True
-                print(f"\t\tPerformance decrease for {rel_path}, metric {metric}, index {i}: {baseline_val:.1f} -> {new_val:.1f}")
 
             if is_better(new_val, baseline_val):
+                report_performance_change(True, metric_label, i, baseline_val, new_val)
                 performance_better = True and not performance_worse # Worse performance has higher priority than better performance
-                print(f"\t\tPerformance increase for {rel_path}, metric {metric}, index {i}: {baseline_val:.1f} -> {new_val:.1f}")
 
         
 
 # Iterate over all data files from baseline performance test data
-print(f"Comparing performance of all tests present in baseline data...")
 cwd = os.getcwd()
 baseline_files = Path(f"{cwd}/{baseline}").rglob("performance_test_data.json*")
+print("# Comparison details")
 
 for path in baseline_files:
     path = str(path)
 
     # Get relative path by removing current working directory + baseline directory prefix
     rel_path = path[len(cwd) + len(baseline) + 1:]
-    print(f"\tComparing performance of {rel_path}...")
+    print(f"### Comparing {rel_path}...")
 
     # Attempt to open same performance test file in new data
     try:
@@ -108,16 +116,16 @@ for path in baseline_files:
         baseline_data = json.load(f_baseline)
 
     check_same_performance_test(new_data, baseline_data, rel_path)
-    compare_measurements(new_data, baseline_data, rel_path)
+    compare_measurements(new_data, baseline_data)
 
 # Print final conclusion about performance
 if performance_worse:
-    print(f"Conclusion: performance has decreased")
+    print(f"# 📉 Total performance has degraded")
     exit(EXIT_PERFORMANCE_WORSE)
 elif performance_better:
-    print(f"Conclusion: performance has increased")
+    print(f"# 📈 Total performance has improved!")
     exit(EXIT_PERFORMANCE_BETTER)
 
-print(f"Conclusion: performance has not significantly changed")
+print(f"# ✅ No significant performance change")
 exit(EXIT_PERFORMANCE_SIMILAR)
 
