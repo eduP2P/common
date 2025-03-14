@@ -124,30 +124,11 @@ jobs:
       working-directory: test_suite
       run: unzip performance-test-data.zip -d previous_performance
 
-    - name: Compare current and artifact performance
+    - name: Compare current and artifact performance, and redirect results to job step summary
       id: performance-comparison
       working-directory: test_suite
-      run: |
-        python compare_performance.py previous_performance/ system_test_logs/performance/
-        echo "exit-code=$?" >> $GITHUB_OUTPUT 
-      continue-on-error: true
+      run: python compare_performance.py previous_performance/ system_test_logs/performance/ >> $GITHUB_OUTPUT
 
-    - name: Report result of comparison in GitHub job summary
-      run: |
-        echo ${{ steps.performance-comparison.outputs.exit-code }}
-        if [[ ${{ steps.performance-comparison.outputs.exit-code }} -eq 0 ]]; then 
-          echo "### ✅ No significant performance change" >> $GITHUB_STEP_SUMMARY
-          exit 0
-        elif [[ ${{ steps.performance-comparison.outputs.exit-code }} -eq 2 ]]; then
-          echo "### 📉 Performance has become worse :(" >> $GITHUB_STEP_SUMMARY
-          exit 0
-        elif [[ ${{ steps.performance-comparison.outputs.exit-code }} -eq 3 ]]; then
-          echo "### 📈 Performance has improved!" >> $GITHUB_STEP_SUMMARY
-          exit 1
-        else
-          echo "### ❌ Unable to compare performance, see the output of the 'Compare current and artifact performance' step for details" >> $GITHUB_STEP_SUMMARY
-          exit 1
-        fi
 
   # IntegrationTests:
   #   runs-on: ubuntu-latest

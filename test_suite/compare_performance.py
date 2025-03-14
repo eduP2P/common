@@ -6,8 +6,8 @@ from pathlib import Path
 # Exit codes
 EXIT_PERFORMANCE_SIMILAR = 0
 EXIT_COMPARISON_FAILED = 1
-EXIT_PERFORMANCE_WORSE = 2
-EXIT_PERFORMANCE_BETTER = 3
+EXIT_PERFORMANCE_WORSE = 1
+EXIT_PERFORMANCE_BETTER = 0
 
 # Ensure both parameters are provided
 if len(sys.argv) - 1 != 2:
@@ -24,9 +24,10 @@ new=sys.argv[2]
 COMPARISON_CONFIG = {
     "Target bitrate": { 
         "packet_loss": {
-            "better": lambda new, baseline: new < 0.9 * baseline,
+            # Second condition to prevent performance being considered better when new = 0 and baseline is very small
+            "better": lambda new, baseline: new < 0.9 * baseline and new < baseline - 1,
             # Second condition to prevent performance being considered worse when baseline = 0 and new is very small
-            "worse": lambda new, baseline: new > 1.1 * baseline or (baseline == 0 and new > baseline + 0.01)
+            "worse": lambda new, baseline: new > 1.1 * baseline or (baseline == 0 and new > baseline + 1)
         }
     }
 }
