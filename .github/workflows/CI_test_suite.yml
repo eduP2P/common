@@ -127,7 +127,7 @@ jobs:
     - name: Compare current and artifact performance, and redirect results to job step summary
       id: performance-comparison
       working-directory: test_suite
-      run: python compare_performance.py previous_performance/ system_test_logs/performance/ >> $GITHUB_OUTPUT
+      run: python compare_performance.py previous_performance/ system_test_logs/performance/ > $GITHUB_STEP_SUMMARY
 
 
   # IntegrationTests:
