@@ -84,7 +84,7 @@ def compare_measurements(new_data: dict, baseline_data: dict):
         
         for i, (new_val, baseline_val) in enumerate(zip(new_values, baseline_values)):
             if is_worse(new_val, baseline_val):
-                report_performance_change(True, metric_label, i, baseline_val, new_val)
+                report_performance_change(False, metric_label, i, baseline_val, new_val)
                 performance_worse = True
 
             if is_better(new_val, baseline_val):
