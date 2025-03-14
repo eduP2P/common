@@ -58,12 +58,13 @@ def check_same_performance_test(new_data: dict, baseline_data: dict, rel_path: s
     if not all_required_metrics:
         failure(f"for {rel_path}, some of the measurements in the baseline data are not present in the new data")
 
-def report_performance_change(better: bool, metric: str, idx: int, baseline: float, new: float):
+def report_performance_change(better: bool, metric: str, idx: int, test_var: str, test_var_values: list[float], baseline: float, new: float):
     change = "improved" if better else "degraded"
-    print(f"- {metric} {change} at index {idx}: {baseline:.1f} -> {new:.1f}")
+    print(f"- For {test_var} = {test_var_values[idx]}, {metric} {change}: {baseline:.1f} -> {new:.1f}")
     
 def compare_measurements(new_data: dict, baseline_data: dict):
     test_var = baseline_data["test_var"]["label"] 
+    test_var_values = baseline_data["test_var"]["values"]
 
     if not(test_var in COMPARISON_CONFIG.keys()):
         return
@@ -84,14 +85,12 @@ def compare_measurements(new_data: dict, baseline_data: dict):
         
         for i, (new_val, baseline_val) in enumerate(zip(new_values, baseline_values)):
             if is_worse(new_val, baseline_val):
-                report_performance_change(False, metric_label, i, baseline_val, new_val)
+                report_performance_change(False, metric_label, i, test_var, test_var_values, baseline_val, new_val)
                 performance_worse = True
 
             if is_better(new_val, baseline_val):
-                report_performance_change(True, metric_label, i, baseline_val, new_val)
+                report_performance_change(True, metric_label, i, test_var, test_var_values, baseline_val, new_val)
                 performance_better = True and not performance_worse # Worse performance has higher priority than better performance
-
-        
 
 # Iterate over all data files from baseline performance test data
 cwd = os.getcwd()
