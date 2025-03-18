@@ -22,9 +22,9 @@ The following options can be used to configure additional parameters during the 
     -d <delay>
         Add delay to packets transmitted by the eduP2P clients, control server and relay server
         The delay should be provided as an integer that represents the one-way delay in milliseconds
-    -l <info|debug|trace>
+    -l <debug|info|warn|error>
         Specifies the log level used in the eduP2P client of the two peers
-        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)
+        If one of the peers uses userspace WireGuard, the log level debug must be used, since the other peer's IP address is not logged otherwise
     -L <log directory>
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
         If this argument is not provided, the directory name is the current timestamp"""
@@ -73,8 +73,7 @@ while getopts ":c:d:ef:l:L:ph" opt; do
         l)  
             log_lvl=$OPTARG
 
-            # Log level should be info/debug/trace
-            log_lvl_regex="^info|debug|trace?$"
+            log_lvl_regex="^debug|info|warn|error?$"
             validate_str $log_lvl $log_lvl_regex
             ;;
         L)

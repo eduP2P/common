@@ -37,7 +37,7 @@ If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corre
 
 <IP ADDRESS LIST> is a string of IP addresses separated by a space that may be the destination IP of packets crossing this NAT device, and is necessary to simulate an Address-Dependent Mapping
 
-<LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)"""
+<LOG LEVEL> should be one of {debug|info|warn|error}, and MUST be debug if one of the peers uses userspace WireGuard (the other peer's IP address is not logged otherwise)"""
 
 # Use functions and constants from util.sh
 . ./util.sh
