@@ -117,12 +117,12 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 
 		node := *n
 
-		if tm.isMDNS(m.Msg) {
+		if ok, ip6 := tm.isMDNS(m.Msg); ok {
 			if !tm.mdnsAllowed(node) {
 				L(tm).Warn("got direct MDNS packet from peer where it is not allowed", "peer", node.Debug())
 				return
 			}
-			tm.sendMDNS(node, m.Msg)
+			tm.sendMDNS(node, m.Msg, ip6)
 			return
 		}
 
@@ -136,12 +136,12 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 			return
 		}
 
-		if tm.isMDNS(m.Msg) {
+		if ok, ip6 := tm.isMDNS(m.Msg); ok {
 			if !tm.mdnsAllowed(m.Peer) {
 				L(tm).Warn("got relay MDNS packet from peer where it is not allowed", "peer", m.Peer.Debug())
 				return
 			}
-			tm.sendMDNS(m.Peer, m.Msg)
+			tm.sendMDNS(m.Peer, m.Msg, ip6)
 			return
 		}
 
@@ -167,16 +167,20 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 			})
 		}
 	case *msgactor.TManSpreadMDNSPacket:
-		tm.spreadMDNS(m.Pkt)
+		tm.spreadMDNS(m.Pkt, m.IP6)
 	default:
 		tm.logUnknownMessage(m)
 	}
 }
 
-func (tm *TrafficManager) isMDNS(msg *msgsess.ClearMessage) bool {
+func (tm *TrafficManager) isMDNS(msg *msgsess.ClearMessage) (isMDNS bool, ip6 bool) {
 	sbd, ok := msg.Message.(*msgsess.SideBandData)
 
-	return ok && sbd.Type == msgsess.MDNSType
+	if ok {
+		return sbd.Type == msgsess.MDNSv4Type || sbd.Type == msgsess.MDNSv6Type, sbd.Type == msgsess.MDNSv6Type
+	}
+
+	return false, false
 }
 
 func (tm *TrafficManager) mdnsAllowed(node key.NodePublic) bool {
@@ -189,16 +193,17 @@ func (tm *TrafficManager) mdnsAllowed(node key.NodePublic) bool {
 	return pi.MDNS
 }
 
-func (tm *TrafficManager) sendMDNS(peer key.NodePublic, msg *msgsess.ClearMessage) {
+func (tm *TrafficManager) sendMDNS(peer key.NodePublic, msg *msgsess.ClearMessage, ip6 bool) {
 	sbd := msg.Message.(*msgsess.SideBandData)
 
 	go SendMessage(tm.s.MMan.Inbox(), &msgactor.MManReceivedPacket{
 		From: peer,
 		Data: sbd.Data,
+		IP6:  ip6,
 	})
 }
 
-func (tm *TrafficManager) spreadMDNS(pkt []byte) {
+func (tm *TrafficManager) spreadMDNS(pkt []byte, ip6 bool) {
 	peers := tm.s.GetPeersWhere(func(_ key.NodePublic, info *stage.PeerInfo) bool {
 		return info.MDNS
 	})
@@ -207,9 +212,17 @@ func (tm *TrafficManager) spreadMDNS(pkt []byte) {
 		return t.Debug()
 	})
 	L(tm).Log(context.Background(), types.LevelTrace, "sending mdns packet to peers", "peers", peersDebug)
+
+	var t msgsess.SideBandDataType
+	if ip6 {
+		t = msgsess.MDNSv6Type
+	} else {
+		t = msgsess.MDNSv4Type
+	}
+
 	for _, peer := range peers {
 		tm.opportunisticSendTo(peer, &msgsess.SideBandData{
-			Type: msgsess.MDNSType,
+			Type: t,
 			Data: pkt,
 		})
 	}

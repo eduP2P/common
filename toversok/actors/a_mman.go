@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"syscall"
 	"time"
 
 	"github.com/edup2p/common/types"
@@ -18,6 +20,7 @@ import (
 	"github.com/sethvargo/go-limiter/memorystore"
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 type MDNSManager struct {
@@ -26,8 +29,11 @@ type MDNSManager struct {
 
 	rlStore limiter.Store
 
-	broadSock *SockRecv
-	uniSock   *SockRecv
+	b4Sock *SockRecv
+	b6Sock *SockRecv
+
+	u4Sock *SockRecv
+	u6Sock *SockRecv
 
 	working bool
 }
@@ -56,22 +62,45 @@ func (s *Stage) makeMM() *MDNSManager {
 		rlStore:     store,
 	})
 
-	bind, err := m.makeMDNSListener()
+	b4bind, err := m.makeMDNSv4Listener()
 	if err != nil {
-		L(m).Error("could not start MDNS Manager; MDNS listener creation failed", "err", err)
+		L(m).Warn("MDNS ipv4 listener creation failed", "err", err)
+	} else {
+		m.b4Sock = MakeSockRecv(c.ctx, b4bind)
+	}
+
+	b6bind, err := m.makeMDNSv6Listener()
+	if err != nil {
+		L(m).Warn("MDNS ipv6 listener creation failed", "err", err)
+	} else {
+		m.b6Sock = MakeSockRecv(c.ctx, b6bind)
+	}
+
+	if m.b4Sock == nil && m.b6Sock == nil {
+		L(m).Error("could not start MDNS Manager; creating both MDNS broadcast sockets failed")
 
 		return m
 	}
-	m.broadSock = MakeSockRecv(c.ctx, bind)
 
-	uniBind, err := m.makeUnicastListener()
+	u4bind, err := m.makeIPv4UnicastListener()
 	if err != nil {
-		L(m).Error("could not start MDNS Manager; MDNS sender creation failed", "err", err)
+		L(m).Warn("MDNS ipv4 sender creation failed", "err", err)
+	} else {
+		m.u4Sock = MakeSockRecv(c.ctx, u4bind)
+	}
+
+	u6bind, err := m.makeIPv6UnicastListener()
+	if err != nil {
+		L(m).Warn("MDNS ipv4 sender creation failed", "err", err)
+	} else {
+		m.u6Sock = MakeSockRecv(c.ctx, u6bind)
+	}
+
+	if m.u4Sock == nil && m.u6Sock == nil {
+		L(m).Error("could not start MDNS Manager; creating both MDNS unicast sockets failed")
 
 		return m
 	}
-
-	m.uniSock = MakeSockRecv(c.ctx, uniBind)
 
 	m.working = true
 
@@ -81,8 +110,13 @@ func (s *Stage) makeMM() *MDNSManager {
 var (
 	MDNSPort             uint16 = 5353
 	ip4MDNSBroadcastBare        = netip.MustParseAddr("224.0.0.251")
-	ip4MDNSBroadcastAP          = netip.AddrPortFrom(ip4MDNSBroadcastBare, MDNSPort)
-	ip4MDNSLoopBackAP           = netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), MDNSPort)
+	ip6MDNSBroadcastBare        = netip.MustParseAddr("ff02::fb")
+
+	ip4MDNSBroadcastAP = netip.AddrPortFrom(ip4MDNSBroadcastBare, MDNSPort)
+	ip6MDNSBroadcastAP = netip.AddrPortFrom(ip6MDNSBroadcastBare, MDNSPort)
+
+	ip4MDNSLoopBackAP = netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), MDNSPort)
+	ip6MDNSLoopBackAP = netip.AddrPortFrom(netip.IPv6Loopback(), MDNSPort)
 )
 
 func getLoopBackInterface() (*net.Interface, error) {
@@ -100,9 +134,7 @@ func getLoopBackInterface() (*net.Interface, error) {
 	return nil, fmt.Errorf("no loopback interface found")
 }
 
-func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
-	// TODO this only catches ipv4 traffic, which may be a bit "eh",
-	//  it may be worth considering firing up one for each stack.
+func (mm *MDNSManager) makeMDNSv4Listener() (types.UDPConn, error) {
 	ua := net.UDPAddrFromAddrPort(ip4MDNSBroadcastAP)
 
 	conn, err := net.ListenUDP("udp4", ua)
@@ -110,7 +142,7 @@ func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 		return nil, fmt.Errorf("ListenUDP error: %w", err)
 	}
 
-	pc := ipv4.NewPacketConn(conn)
+	pc4 := ipv4.NewPacketConn(conn)
 
 	ift, err := net.Interfaces()
 	if err != nil {
@@ -118,15 +150,15 @@ func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 	}
 	for _, ifi := range ift {
 		if ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagPointToPoint == 0 {
-			if err := pc.JoinGroup(&ifi, &net.UDPAddr{IP: ip4MDNSBroadcastBare.AsSlice()}); err != nil {
-				L(mm).Warn("Multicast JoinGroup failed", "err", err, "iface", ifi.Name)
+			if err := pc4.JoinGroup(&ifi, &net.UDPAddr{IP: ip4MDNSBroadcastBare.AsSlice()}); err != nil {
+				L(mm).Warn("pc4 Multicast JoinGroup failed", "err", err, "iface", ifi.Name)
 			}
 		}
 	}
 
-	if loop, err := pc.MulticastLoopback(); err == nil {
+	if loop, err := pc4.MulticastLoopback(); err == nil {
 		if !loop {
-			if err := pc.SetMulticastLoopback(true); err != nil {
+			if err := pc4.SetMulticastLoopback(true); err != nil {
 				return nil, fmt.Errorf("cannot set multicast loopback: %w", err)
 			}
 		}
@@ -137,21 +169,63 @@ func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 		return nil, fmt.Errorf("cannot get loopback interface: %w", err)
 	}
 
-	if err := pc.SetMulticastInterface(lo); err != nil {
+	if err := pc4.SetMulticastInterface(lo); err != nil {
 		return nil, fmt.Errorf("cannot set multicast interface: %w", err)
 	}
 
-	if err := pc.SetTTL(255); err != nil {
+	if err := pc4.SetTTL(255); err != nil {
 		return nil, fmt.Errorf("cannot set TTL: %w", err)
 	}
-	if err := pc.SetMulticastTTL(255); err != nil {
+	if err := pc4.SetMulticastTTL(255); err != nil {
 		return nil, fmt.Errorf("cannot set Multicast TTL: %w", err)
 	}
 
 	return conn, nil
 }
 
-func (mm *MDNSManager) makeUnicastListener() (types.UDPConn, error) {
+func (mm *MDNSManager) makeMDNSv6Listener() (types.UDPConn, error) {
+	ua := net.UDPAddrFromAddrPort(ip6MDNSBroadcastAP)
+
+	conn, err := net.ListenUDP("udp6", ua)
+	if err != nil {
+		return nil, fmt.Errorf("ListenUDP error: %w", err)
+	}
+
+	pc6 := ipv6.NewPacketConn(conn)
+
+	ift, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("cannot get interfaces: %w", err)
+	}
+	for _, ifi := range ift {
+		if ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagPointToPoint == 0 {
+			if err := pc6.JoinGroup(&ifi, &net.UDPAddr{IP: ip6MDNSBroadcastBare.AsSlice()}); err != nil && !errors.Is(err, syscall.EAFNOSUPPORT) {
+				L(mm).Warn("pc6 Multicast JoinGroup failed", "err", err, "iface", ifi.Name)
+			}
+		}
+	}
+
+	if loop, err := pc6.MulticastLoopback(); err == nil {
+		if !loop {
+			if err := pc6.SetMulticastLoopback(true); err != nil {
+				return nil, fmt.Errorf("cannot set multicast loopback: %w", err)
+			}
+		}
+	}
+
+	lo, err := getLoopBackInterface()
+	if err != nil {
+		return nil, fmt.Errorf("cannot get loopback interface: %w", err)
+	}
+
+	if err := pc6.SetMulticastInterface(lo); err != nil {
+		return nil, fmt.Errorf("cannot set multicast interface: %w", err)
+	}
+
+	return conn, nil
+}
+
+func (mm *MDNSManager) makeIPv4UnicastListener() (types.UDPConn, error) {
 	var laddr *net.UDPAddr
 	addr := ip4MDNSLoopBackAP
 
@@ -163,6 +237,20 @@ func (mm *MDNSManager) makeUnicastListener() (types.UDPConn, error) {
 	}
 
 	return net.DialUDP("udp4", laddr, net.UDPAddrFromAddrPort(addr))
+}
+
+func (mm *MDNSManager) makeIPv6UnicastListener() (types.UDPConn, error) {
+	var laddr *net.UDPAddr
+	addr := ip6MDNSLoopBackAP
+
+	if runtime.GOOS == "windows" {
+		laddr = net.UDPAddrFromAddrPort(
+			netip.AddrPortFrom(mm.s.control.IPv6().Addr(), 0),
+		)
+		addr = ip6MDNSBroadcastAP
+	}
+
+	return net.DialUDP("udp6", laddr, net.UDPAddrFromAddrPort(addr))
 }
 
 func dataToB64Hash(b []byte) string {
@@ -190,8 +278,8 @@ func (mm *MDNSManager) Run() {
 		return
 	}
 
-	go mm.broadSock.Run()
-	go mm.uniSock.Run()
+	go mm.b4Sock.Run()
+	go mm.u4Sock.Run()
 
 	for {
 		select {
@@ -205,7 +293,12 @@ func (mm *MDNSManager) Run() {
 					continue
 				}
 
-				if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(msg.Data)); !ok {
+				extra := "ip4"
+				if msg.IP6 {
+					extra = "ip6"
+				}
+
+				if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(msg.Data)+extra); !ok {
 					// some rudimentary filtering to prevent true loop storms
 					continue
 				}
@@ -221,9 +314,17 @@ func (mm *MDNSManager) Run() {
 				if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 					// On macOS, we can't use the broadsock's WriteTo, since it just doesn't generate a packet.
 					// However, we can use our specialised query sock to poke responses in unicast, even if they're QM.
-					_, err = mm.uniSock.Conn.Write(pkt)
+					if msg.IP6 {
+						_, err = mm.u6Sock.Conn.Write(pkt)
+					} else {
+						_, err = mm.u4Sock.Conn.Write(pkt)
+					}
 				} else {
-					_, err = mm.broadSock.Conn.WriteToUDPAddrPort(pkt, ip4MDNSBroadcastAP)
+					if msg.IP6 {
+						_, err = mm.b6Sock.Conn.WriteToUDPAddrPort(pkt, ip6MDNSBroadcastAP)
+					} else {
+						_, err = mm.b4Sock.Conn.WriteToUDPAddrPort(pkt, ip4MDNSBroadcastAP)
+					}
 				}
 				if err != nil {
 					L(mm).Warn("failed to process external MDNS packet", "err", err)
@@ -231,9 +332,13 @@ func (mm *MDNSManager) Run() {
 			default:
 				mm.logUnknownMessage(msg)
 			}
-		case frame := <-mm.broadSock.outCh:
+		case frame := <-mm.b4Sock.outCh:
 			mm.handleSystemFrame(frame)
-		case frame := <-mm.uniSock.outCh:
+		case frame := <-mm.b6Sock.outCh:
+			mm.handleSystemFrame(frame)
+		case frame := <-mm.u4Sock.outCh:
+			mm.handleSystemFrame(frame)
+		case frame := <-mm.u6Sock.outCh:
 			mm.handleSystemFrame(frame)
 		case <-mm.ctx.Done():
 			return
@@ -244,12 +349,19 @@ func (mm *MDNSManager) Run() {
 func (mm *MDNSManager) handleSystemFrame(frame RecvFrame) {
 	// got MDNS message from system; forward
 
-	if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(frame.pkt)); !ok {
+	nap := types.NormaliseAddr(frame.src.Addr())
+
+	extra := "ip4"
+	if nap.Is6() {
+		extra = "ip6"
+	}
+
+	if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(frame.pkt)+extra); !ok {
 		// some rudimentary filtering to prevent true loop storms
 		return
 	}
 
-	if !mm.isSelf(frame.src.Addr()) {
+	if !mm.isSelf(nap) {
 		L(mm).Log(context.Background(), types.LevelTrace, "dropping mDNS packet due to non-local origin", "from", frame.src)
 		return
 	}
@@ -260,7 +372,7 @@ func (mm *MDNSManager) handleSystemFrame(frame RecvFrame) {
 
 	pkt := mm.processMDNS(frame.pkt, true)
 
-	SendMessage(mm.s.TMan.Inbox(), &msgactor.TManSpreadMDNSPacket{Pkt: pkt})
+	SendMessage(mm.s.TMan.Inbox(), &msgactor.TManSpreadMDNSPacket{Pkt: pkt, IP6: nap.Is6()})
 }
 
 func (mm *MDNSManager) debugMDNS(msg *dnsmessage.Message) {

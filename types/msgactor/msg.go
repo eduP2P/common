@@ -47,6 +47,7 @@ type TManSessionMessageFromDirect struct {
 
 type TManSpreadMDNSPacket struct {
 	Pkt []byte
+	IP6 bool
 }
 
 // ======================================================================================================
@@ -118,6 +119,8 @@ type MManReceivedPacket struct {
 	From key.NodePublic
 
 	Data []byte
+
+	IP6 bool
 }
 
 // ======================================================================================================
