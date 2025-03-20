@@ -287,48 +287,7 @@ func (mm *MDNSManager) Run() {
 			// got MDNS message from external; inject
 			switch msg := msg.(type) {
 			case *msgactor.MManReceivedPacket:
-				pi := mm.s.GetPeerInfo(msg.From)
-				if pi == nil {
-					L(mm).Warn("ignoring MDNS packet due to nonexistent peerinfo", "from", msg.From.Debug())
-					continue
-				}
-
-				extra := "ip4"
-				if msg.IP6 {
-					extra = "ip6"
-				}
-
-				if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(msg.Data)+extra); !ok {
-					// some rudimentary filtering to prevent true loop storms
-					continue
-				}
-
-				L(mm).Debug("processing external MDNS packet", "len", len(msg.Data), "from", msg.From.Debug())
-
-				pkt := mm.processMDNS(msg.Data, false)
-
-				var err error
-
-				// TODO process external mDNS packet
-
-				if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-					// On macOS, we can't use the broadsock's WriteTo, since it just doesn't generate a packet.
-					// However, we can use our specialised query sock to poke responses in unicast, even if they're QM.
-					if msg.IP6 {
-						_, err = mm.u6Sock.Conn.Write(pkt)
-					} else {
-						_, err = mm.u4Sock.Conn.Write(pkt)
-					}
-				} else {
-					if msg.IP6 {
-						_, err = mm.b6Sock.Conn.WriteToUDPAddrPort(pkt, ip6MDNSBroadcastAP)
-					} else {
-						_, err = mm.b4Sock.Conn.WriteToUDPAddrPort(pkt, ip4MDNSBroadcastAP)
-					}
-				}
-				if err != nil {
-					L(mm).Warn("failed to process external MDNS packet", "err", err)
-				}
+				mm.handleReceivedPacket(msg)
 			default:
 				mm.logUnknownMessage(msg)
 			}
@@ -343,6 +302,51 @@ func (mm *MDNSManager) Run() {
 		case <-mm.ctx.Done():
 			return
 		}
+	}
+}
+
+func (mm *MDNSManager) handleReceivedPacket(msg *msgactor.MManReceivedPacket) {
+	pi := mm.s.GetPeerInfo(msg.From)
+	if pi == nil {
+		L(mm).Warn("ignoring MDNS packet due to nonexistent peerinfo", "from", msg.From.Debug())
+		return
+	}
+
+	extra := "ip4"
+	if msg.IP6 {
+		extra = "ip6"
+	}
+
+	if _, _, _, ok, _ := mm.rlStore.Take(context.Background(), dataToB64Hash(msg.Data)+extra); !ok {
+		// some rudimentary filtering to prevent true loop storms
+		return
+	}
+
+	L(mm).Debug("processing external MDNS packet", "len", len(msg.Data), "from", msg.From.Debug())
+
+	pkt := mm.processMDNS(msg.Data, false)
+
+	var err error
+
+	// TODO process external mDNS packet
+
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		// On macOS, we can't use the broadsock's WriteTo, since it just doesn't generate a packet.
+		// However, we can use our specialised query sock to poke responses in unicast, even if they're QM.
+		if msg.IP6 {
+			_, err = mm.u6Sock.Conn.Write(pkt)
+		} else {
+			_, err = mm.u4Sock.Conn.Write(pkt)
+		}
+	} else {
+		if msg.IP6 {
+			_, err = mm.b6Sock.Conn.WriteToUDPAddrPort(pkt, ip6MDNSBroadcastAP)
+		} else {
+			_, err = mm.b4Sock.Conn.WriteToUDPAddrPort(pkt, ip4MDNSBroadcastAP)
+		}
+	}
+	if err != nil {
+		L(mm).Warn("failed to process external MDNS packet", "err", err)
 	}
 }
 
