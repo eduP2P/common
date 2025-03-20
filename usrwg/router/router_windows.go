@@ -43,7 +43,7 @@ func isWindowsService() bool {
 	v, err := svc.IsWindowsService()
 	if err != nil {
 		// Expect that we can at least poke the local windows service, else we're in trouble.
-		panic("svc.IsWindowsService failed:", err)
+		panic(fmt.Errorf("svc.IsWindowsService failed: %w", err))
 	}
 	return v
 }
