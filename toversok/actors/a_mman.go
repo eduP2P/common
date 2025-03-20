@@ -27,7 +27,7 @@ type MDNSManager struct {
 	rlStore limiter.Store
 
 	broadSock *SockRecv
-	querySock *SockRecv
+	uniSock   *SockRecv
 
 	working bool
 }
@@ -64,14 +64,14 @@ func (s *Stage) makeMM() *MDNSManager {
 	}
 	m.broadSock = MakeSockRecv(c.ctx, bind)
 
-	queryBind, err := m.makeQueryListener()
+	uniBind, err := m.makeUnicastListener()
 	if err != nil {
 		L(m).Error("could not start MDNS Manager; MDNS sender creation failed", "err", err)
 
 		return m
 	}
 
-	m.querySock = MakeSockRecv(c.ctx, queryBind)
+	m.uniSock = MakeSockRecv(c.ctx, uniBind)
 
 	m.working = true
 
@@ -79,16 +79,31 @@ func (s *Stage) makeMM() *MDNSManager {
 }
 
 var (
-	MDNSPort                uint16 = 5353
-	ip4uaMDNSBare                  = net.UDPAddr{IP: net.IPv4(224, 0, 0, 251)}
-	ip4MDNSLoopBackAP              = netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), MDNSPort)
-	ip4MDNSBroadcastAddress        = netip.AddrPortFrom(netip.MustParseAddr("224.0.0.251"), MDNSPort)
+	MDNSPort             uint16 = 5353
+	ip4MDNSBroadcastBare        = netip.MustParseAddr("224.0.0.251")
+	ip4MDNSBroadcastAP          = netip.AddrPortFrom(ip4MDNSBroadcastBare, MDNSPort)
+	ip4MDNSLoopBackAP           = netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), MDNSPort)
 )
+
+func getLoopBackInterface() (*net.Interface, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("could not list network interfaces: %w", err)
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback != 0 {
+			return &iface, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no loopback interface found")
+}
 
 func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 	// TODO this only catches ipv4 traffic, which may be a bit "eh",
 	//  it may be worth considering firing up one for each stack.
-	ua := net.UDPAddrFromAddrPort(ip4MDNSBroadcastAddress)
+	ua := net.UDPAddrFromAddrPort(ip4MDNSBroadcastAP)
 
 	conn, err := net.ListenUDP("udp4", ua)
 	if err != nil {
@@ -103,7 +118,7 @@ func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 	}
 	for _, ifi := range ift {
 		if ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagPointToPoint == 0 {
-			if err := pc.JoinGroup(&ifi, &ip4uaMDNSBare); err != nil {
+			if err := pc.JoinGroup(&ifi, &net.UDPAddr{IP: ip4MDNSBroadcastBare.AsSlice()}); err != nil {
 				L(mm).Warn("Multicast JoinGroup failed", "err", err, "iface", ifi.Name)
 			}
 		}
@@ -117,10 +132,26 @@ func (mm *MDNSManager) makeMDNSListener() (types.UDPConn, error) {
 		}
 	}
 
+	lo, err := getLoopBackInterface()
+	if err != nil {
+		return nil, fmt.Errorf("cannot get loopback interface: %w", err)
+	}
+
+	if err := pc.SetMulticastInterface(lo); err != nil {
+		return nil, fmt.Errorf("cannot set multicast interface: %w", err)
+	}
+
+	if err := pc.SetTTL(255); err != nil {
+		return nil, fmt.Errorf("cannot set TTL: %w", err)
+	}
+	if err := pc.SetMulticastTTL(255); err != nil {
+		return nil, fmt.Errorf("cannot set Multicast TTL: %w", err)
+	}
+
 	return conn, nil
 }
 
-func (mm *MDNSManager) makeQueryListener() (types.UDPConn, error) {
+func (mm *MDNSManager) makeUnicastListener() (types.UDPConn, error) {
 	var laddr *net.UDPAddr
 	addr := ip4MDNSLoopBackAP
 
@@ -128,7 +159,7 @@ func (mm *MDNSManager) makeQueryListener() (types.UDPConn, error) {
 		laddr = net.UDPAddrFromAddrPort(
 			netip.AddrPortFrom(mm.s.control.IPv4().Addr(), 0),
 		)
-		addr = ip4MDNSBroadcastAddress
+		addr = ip4MDNSBroadcastAP
 	}
 
 	return net.DialUDP("udp4", laddr, net.UDPAddrFromAddrPort(addr))
@@ -160,7 +191,7 @@ func (mm *MDNSManager) Run() {
 	}
 
 	go mm.broadSock.Run()
-	go mm.querySock.Run()
+	go mm.uniSock.Run()
 
 	for {
 		select {
@@ -187,12 +218,12 @@ func (mm *MDNSManager) Run() {
 
 				// TODO process external mDNS packet
 
-				if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+				if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 					// On macOS, we can't use the broadsock's WriteTo, since it just doesn't generate a packet.
 					// However, we can use our specialised query sock to poke responses in unicast, even if they're QM.
-					_, err = mm.querySock.Conn.Write(pkt)
+					_, err = mm.uniSock.Conn.Write(pkt)
 				} else {
-					_, err = mm.broadSock.Conn.WriteToUDPAddrPort(pkt, ip4MDNSBroadcastAddress)
+					_, err = mm.broadSock.Conn.WriteToUDPAddrPort(pkt, ip4MDNSBroadcastAP)
 				}
 				if err != nil {
 					L(mm).Warn("failed to process external MDNS packet", "err", err)
@@ -202,7 +233,7 @@ func (mm *MDNSManager) Run() {
 			}
 		case frame := <-mm.broadSock.outCh:
 			mm.handleSystemFrame(frame)
-		case frame := <-mm.querySock.outCh:
+		case frame := <-mm.uniSock.outCh:
 			mm.handleSystemFrame(frame)
 		case <-mm.ctx.Done():
 			return
