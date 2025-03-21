@@ -101,6 +101,7 @@ jobs:
       run: exit 1
 
     - name: Download artifact from target branch head
+      id: download_target_branch
       if: ${{ github.event_name == 'pull_request' }}
       uses: dawidd6/action-download-artifact@v9
       with: 
@@ -109,8 +110,10 @@ jobs:
         path: ./test_suite
         skip_unpack: true
         workflow_conclusion: ""
+      continue-on-error: true
 
     - name: Download artifact from previous commit
+      id: download_previous_commit
       if: ${{ github.event_name == 'push' }}
       uses: dawidd6/action-download-artifact@v9
       with: 
@@ -119,7 +122,14 @@ jobs:
         path: ./test_suite
         skip_unpack: true
         workflow_conclusion: ""
+      continue-on-error: true
     
+    - name: Stop job and give warning if downloading previous artifact failed 
+      if: ${{ steps.download_target_branch.outcome == 'failure' || steps.download_previous_commit.outcome == 'failure' }}
+      run: |
+        echo "# ⚠️ Could not make performance comparison: downloading performance test data of target branch head/previous commit failed. See the corresponding PerformanceTests job step for details" >> $GITHUB_STEP_SUMMARY
+        exit 0
+
     - name: Unzip artifact
       working-directory: test_suite
       run: unzip performance-test-data.zip -d previous_performance
