@@ -26,10 +26,8 @@ new=sys.argv[2]
 COMPARISON_CONFIG = {
     "Target bitrate": { 
         "packet_loss": {
-            # Second condition to prevent performance being considered better when new = 0 and baseline is very small
-            "better": lambda new, baseline: new < 0.8 * baseline and new < baseline - 2,
-            # Second condition to prevent performance being considered worse when baseline = 0 and new is very small
-            "worse": lambda new, baseline: new > 1.2 * baseline or (baseline == 0 and new > baseline + 2)
+            "better": lambda new, baseline: new < 0.8 * baseline and new < baseline - 5,
+            "worse": lambda new, baseline: new > 1.2 * baseline and new > baseline + 5
         }
     }
 }
