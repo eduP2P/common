@@ -60,13 +60,17 @@ def test_iteration():
             # Delete transform key from bitrate metric, since it is not JSON serializable
             del extracted_data["bitrate"]["transform"]
 
+            # Delete json_key key from all metrics, since they are no longer needed
+            for k in extracted_data.keys():
+                del extracted_data[k]["json_key"]
+
             # Merge test variable info and measurements into one dictionary
             data_dict = {
                 "test_var": test_var_dict,
                 "measurements": extracted_data
             }
 
-            json.dump(data_dict, file)
+            json.dump(data_dict, file, indent=4)
 
         for metric in extracted_data.keys():
             create_performance_graph(test_var, test_var_values, metric, extracted_data, parent_path)

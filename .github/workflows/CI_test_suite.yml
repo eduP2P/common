@@ -82,7 +82,13 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: performance-test-graphs
-        path: test_suite/system_test_logs/performance/1_No-NAT_No-NAT/*.png
+        path: test_suite/system_test_logs/performance/*/*.png
+
+    - name: Upload performance test data
+      uses: actions/upload-artifact@v4
+      with:
+        name: performance-test-data
+        path: test_suite/system_test_logs/performance/*/performance_test_data.json
 
     - name: Upload full performance test logs
       uses: actions/upload-artifact@v4
@@ -93,6 +99,48 @@ jobs:
     - name: Fail job if performance test failed (for clarity in GitHub UI)
       if: ${{ steps.system-test.outcome == 'failure' }}
       run: exit 1
+
+    - name: Download artifact from target branch head
+      id: download_target_branch
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: dawidd6/action-download-artifact@v9
+      with: 
+        branch: ${{ github.base_ref }}
+        name: performance-test-data
+        path: ./test_suite
+        skip_unpack: true
+        workflow_conclusion: ""
+      continue-on-error: true
+
+    - name: Download artifact from previous commit
+      id: download_previous_commit
+      if: ${{ github.event_name == 'push' }}
+      uses: dawidd6/action-download-artifact@v9
+      with: 
+        commit: ${{ github.event.before }}
+        name: performance-test-data
+        path: ./test_suite
+        skip_unpack: true
+        workflow_conclusion: ""
+      continue-on-error: true
+    
+    - name: Stop job and give warning if downloading previous artifact failed 
+      if: ${{ steps.download_target_branch.outcome == 'failure' || steps.download_previous_commit.outcome == 'failure' }}
+      run: |
+        echo "# ⚠️ Could not make performance comparison" >> $GITHUB_STEP_SUMMARY
+        echo "Downloading performance test data of target branch head/previous commit failed. See the corresponding PerformanceTests job step for details" >> $GITHUB_STEP_SUMMARY
+
+    - name: Unzip artifact
+      working-directory: test_suite
+      if: ${{ steps.download_target_branch.outcome == 'success' || steps.download_previous_commit.outcome == 'success' }}
+      run: unzip performance-test-data.zip -d previous_performance
+
+    - name: Compare current and artifact performance, and redirect results to job step summary
+      id: performance-comparison
+      working-directory: test_suite
+      if: ${{ steps.download_target_branch.outcome == 'success' || steps.download_previous_commit.outcome == 'success' }}
+      run: python compare_performance.py previous_performance/ system_test_logs/performance/ > $GITHUB_STEP_SUMMARY
+
 
   IntegrationTests:
     runs-on: ubuntu-latest
