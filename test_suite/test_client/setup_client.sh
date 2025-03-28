@@ -62,8 +62,7 @@ function clean_exit() {
     # Remove temporary test_client output file
     sudo rm $out
 
-    # Remove http server output files if they exist
-    rm $http_ipv4_out &> /dev/null
+    # Remove http server output file if it exists
     rm $http_ipv6_out &> /dev/null
 
     # Kill http servers if they are running
@@ -79,7 +78,7 @@ trap "clean_exit 1" SIGTERM
 # Get own virtual IPs and peer's virtual IPs with external WireGuard
 if [[ -n $wg_interface ]]; then
     # Store virtual IPs as "<IPv4> <IPv6>" when they are logged
-    ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
+    ips=$(timeout 10s tail -n +1 -f -s 0.1 $out | sed -rn "/.*sudo ip address add (\S+) dev ${wg_interface}; sudo ip address add (\S+) dev ${wg_interface}.*/{s//\1 \2/p;q}")
 
     if [[ -z $ips ]]; then 
         echo "TS_FAIL: could not find own virtual IPs in logs"
@@ -103,7 +102,7 @@ if [[ -n $wg_interface ]]; then
     peer_ips=$(wg show $wg_interface allowed-ips | cut -d$'\t' -f2) # IPs are shown as "<wg pubkey>\t<IPv4> <IPv6>"
 
     while [[ -z $peer_ips ]]; do
-        sleep 1s
+        sleep 0.1s
         let "timeout--"
 
         if [[ $timeout -eq 0 ]]; then
@@ -123,7 +122,7 @@ else
     timeout=10
     
     while ! ip address show ts0 | grep -Eq "inet [0-9.]+"; do
-        sleep 1s
+        sleep 0.1s
         let "timeout--"
 
         if [[ $timeout -eq 0 ]]; then
@@ -136,8 +135,8 @@ else
     ipv4=$(extract_ipv4 $peer_ns ts0)
     ipv6=$(extract_ipv6 $peer_ns ts0)
 
-    # Store peer IPs as "<IPv4> <IPv6>"" when they are logged
-    peer_ips=$(timeout 10s tail -n +1 -f $out | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
+    # Store peer IPs as "<IPv4> <IPv6>" when they are logged
+    peer_ips=$(timeout 10s tail -f -n +1 -s 0.1 $out | sed -rn "/.*IPv4:(\S+) IPv6:(\S+).*/{s//\1 \2/p;q}")
 
     if [[ -z $peer_ips ]]; then 
         echo "TS_FAIL: could not find peer's virtual IPs in logs"
@@ -151,12 +150,17 @@ fi
 
 # Start HTTP servers on own virtual IPs for peer to access, and save their pids to kill them during cleanup
 http_ipv4_out="http_ipv4_output_${id}.txt"
-python3 -m http.server -b $ipv4 80 &> $http_ipv4_out &
+python3 -m http.server -b $ipv4 80 &> /dev/null &
 http_ipv4_pid=$!
 
 http_ipv6_out="http_ipv6_output_${id}.txt"
 python3 -m http.server -b $ipv6 80 &> $http_ipv6_out &
 http_ipv6_pid=$!
+
+# Desynchronize peers to avoid error and subsequent recovery delay caused by handshake initation in both directions at same time
+if [[ $id == "peer1" ]]; then
+    sleep 0.1s
+fi
 
 # Try connecting to peer's HTTP server hosted on IP addres
 function try_connect() {
@@ -172,14 +176,13 @@ try_connect "http://${peer_ipv4}"
 
 # Peers try to establish a direct connection after initial connection; if expecting a direct connection, give them some time to establish one
 if [[ $test_target == "TS_PASS_DIRECT" ]]; then
-    timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
+    timeout 10s tail -f -n +1 -s 0.1 $out | sed -n "/ESTABLISHED direct peer connection/q"
 fi
 
 try_connect "http://[${peer_ipv6}]"
 
-# Wait until timeout or until peer connected to server (peer's IP will appear in server output)
-timeout 10s tail -f -n +1 $http_ipv4_out | sed -n "/${peer_ipv4}/q"
-timeout 10s tail -f -n +1 $http_ipv6_out | sed -n "/${peer_ipv6}/q"
+# Wait until timeout or until peer connected to second server (peer's IP will appear in server output)
+timeout 10s tail -f -n +1 -s 0.1 $http_ipv6_out | sed -n "/${peer_ipv6}/q"
 
 echo "TS_PASS"
 clean_exit 0
