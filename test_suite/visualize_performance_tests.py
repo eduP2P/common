@@ -207,7 +207,7 @@ def aggregate_repetitions(extracted_data: dict) -> dict:
 
 # Given a dictionary containing the label and unit of a metric, returns a string to describe the metric on a graph axis
 def axis_label(label_unit_dict: dict) -> str:
-    return f"{label_unit_dict["label"]} ({label_unit_dict["unit"]})"
+    return f"{label_unit_dict['label']} ({label_unit_dict['unit']})"
 
 # Graph to illustrate the performance of eduP2P, possibly by comparing against WireGuard and/or a direct connection
 def create_performance_graph(test_var: str, test_var_values: list[float], metric: str, extracted_data: dict, save_path: str):
