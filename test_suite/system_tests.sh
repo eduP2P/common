@@ -27,7 +27,9 @@ The following options can be used to configure additional parameters during the 
         If one of the peers uses userspace WireGuard, the log level trace/debug must be used, since the other peer's IP address is not logged otherwise
     -L <log directory>
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
-        If this argument is not provided, the directory name is the current timestamp"""
+        If this argument is not provided, the directory name is the current timestamp
+    -b
+        Build the client, control server and relay server binaries before running the tests"""
 
 # Use functions and constants from util.sh
 . ./util.sh
@@ -36,7 +38,7 @@ The following options can be used to configure additional parameters during the 
 log_lvl="debug"
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:L:ph" opt; do
+while getopts ":c:d:ef:l:L:bph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -89,6 +91,9 @@ while getopts ":c:d:ef:l:L:ph" opt; do
                 exit_with_error "$log_dir_rel already exists"
             fi
             ;;
+        b)
+            build=true
+            ;;
         p)
             performance=true
             ;;
@@ -120,15 +125,6 @@ function cleanup () {
 # Run cleanup when script exits
 trap cleanup EXIT 
 
-function build_go() {
-    for binary in test_client control_server relay_server; do
-        binary_dir="${repo_dir}/test_suite/$binary"
-        go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
-    done
-}
-
-build_go
-
 function create_log_dir() {
     if [[ -z $log_dir_rel ]]; then
         timestamp=$(date +"%Y-%m-%dT%H_%M_%S")
@@ -141,6 +137,20 @@ function create_log_dir() {
 }
 
 create_log_dir
+
+function build_go() {
+    for binary in test_client control_server relay_server; do
+        binary_dir="${repo_dir}/test_suite/$binary"
+        go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
+    done
+}
+
+if [[ $performance == true ]]; then
+    echo "Building binaries..."
+    build_go
+else
+    echo "Skipped building binaries"
+fi
 
 function setup_networks() {
     cd nat_simulation/
