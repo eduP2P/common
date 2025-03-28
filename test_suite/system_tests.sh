@@ -145,7 +145,7 @@ function build_go() {
     done
 }
 
-if [[ $performance == true ]]; then
+if [[ $build == true ]]; then
     echo "Building binaries..."
     build_go
 else
