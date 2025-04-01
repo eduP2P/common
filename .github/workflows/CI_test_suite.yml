@@ -37,8 +37,8 @@ jobs:
       uses: docker/setup-buildx-action@v3
 
     - name: Build Dockerfile to run system tests in parallel
-      uses: docker/build-push-action@v6
       working-directory: test_suite
+      uses: docker/build-push-action@v6
       with:
         push: false
         tags: system_tests
