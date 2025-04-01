@@ -41,9 +41,12 @@ jobs:
       with:
         file: test_suite/Dockerfile
         push: false
-        tags: system_tests
+        tags: system_tests:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+    - name: debug "unable to find image"
+      run: docker image ls
 
     - name: Run system tests in parallel
       id: system-test
