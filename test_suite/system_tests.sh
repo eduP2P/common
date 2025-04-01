@@ -125,6 +125,7 @@ function create_log_dir() {
 
 create_log_dir
 
+# ================================ FUNCTIONS FOR SEQUENTIAL SYSTEM TESTS ================================
 function cleanup () {
     # Kill the two servers if they have already been started by the script
     sudo pkill control_server
@@ -238,10 +239,19 @@ function sequential_setup() {
     n_failed=0
 }
 
+# Log messages that should not be printed when the tests are run in parallel
+function log_sequential() {
+    msg=$1
+
+    if [[ -z $n_threads ]]; then
+        echo -e $msg
+    fi
+}
+
+# ================================ FUNCTIONS FOR PARALLEL SYSTEM TESTS ================================
 function parallel_setup() {
     echo """
-Dividing the system tests among $n_threads threads. The output of each thread can be found in the logs.
-"""
+Dividing the system tests among $n_threads threads. The output of each thread can be found in the logs."""
 
     # The current system tests command will be run in parallel docker containers with a few modifications:
     system_test_opts=$(echo $@ | sed -r -e "s/-f \S+//"   `# Potential -f flag is removed, as each docker container will be assigned a file containing a subset of the current system tests` \
@@ -265,21 +275,43 @@ Dividing the system tests among $n_threads threads. The output of each thread ca
     done
 }
 
+function log_parallel() {
+    thread=$1
+    msg=$2
+
+    let "move_cursor = n_threads - thread"
+
+    # Move cursor up to the line for the current thread
+    echo -ne "\033[${move_cursor}A\tThread $((thread+1)): $msg\r"
+
+    # Move cursor back to original position
+    echo -ne "\033[${move_cursor}B\r"
+
+}
+
+function monitor_thread_progress() {
+    current_thread=0
+
+    while : # while True
+    do
+        for i in $(seq 0 $((n_threads-1))); do
+            if [[ ${completed[$i]} -ne ${assigned[$i]} ]]; then
+                completed[$i]=$(docker logs ${container_ids[$i]} | grep -Ec "result=\S+TS_(PASS|FAIL)") # \S+ matches special characters that give color to test result
+                log_parallel $i $(progress_bar ${completed[$i]} ${assigned[$i]})
+            fi
+        done
+
+        sleep 1s
+    done
+}
+
+# ================================ SYSTEM TESTS LOGIC ================================
 # Check if -t flag was specified
 if [[ -n $n_threads ]]; then
     parallel_setup
 else
     sequential_setup
 fi
-
-# Log messages that should not be printed when the tests are run in parallel
-function log_sequential() {
-    msg=$1
-
-    if [[ -z $n_threads ]]; then
-        echo -e $msg
-    fi
-}
 
 # Usage: run_system_test [optional arguments of system_test.sh] <first 4 positional parameters of system_test.sh>
 function run_system_test() {
@@ -395,6 +427,9 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
 fi
 
 function print_summary() {
+    n_failed=$1
+    n_tests=$2
+
     if [[ $n_failed -eq 0 ]]; then
         echo -e "${GREEN}All tests passed!${NC}"
     else
@@ -411,6 +446,8 @@ if [[ -n $n_threads ]]; then
 
     for i in $(seq 1 $n_threads); do
         thread="thread$i"
+
+        # Run the thread in a docker container, and store its ID
         container_id=$(docker run \
                           --network=host `# Host driver gives faster curl connectivity check` \
                           --cap-add CAP_SYS_ADMIN --cap-add NET_ADMIN --security-opt apparmor=unconfined --device /dev/net/tun:/dev/net/tun `# Permissions required to create network setup` \
@@ -418,27 +455,40 @@ if [[ -n $n_threads ]]; then
                           -dt system_tests -f $docker_log_dir/$thread/tests.txt -L $thread `# Run tests from this thread's file and store the logs in the mounted directory` \
                                            $system_test_opts) # Copy the remaining options from the current system tests command
         container_ids+=($container_id)
+
+        # Print progress bar for this thread
+        echo -e "\tThread $i: $(progress_bar 0 ${assigned[$((i-1))]})\r"
     done
 
-    exit_codes=$(docker wait ${container_ids[@]}) # Each exit code represents the amount of failed tests in the corresponding container
+    monitor_thread_progress &
+    progress_pid=$!
+
+    exit_codes=( $(docker wait ${container_ids[@]}) ) # Each exit code represents the amount of failed tests in the corresponding container
+
+    kill $progress_pid # Stop monitoring progress after all containers have finished
+
+    # Print summary for each thread individually
+    for i in $(seq 0 $((n_threads-1))); do
+        log_parallel $i "$(progress_bar ${assigned[$i]} ${assigned[$i]}) - $(print_summary ${exit_codes[$i]} ${assigned[$i]})"
+    done
 
     # Replace space delimiters by + and pipe into calculator
-    n_failed=$(echo $exit_codes | tr " " + | bc)
+    n_failed=$(echo ${exit_codes[@]} | tr " " + | bc)
     n_tests=$(echo ${assigned[@]} | tr " " + | bc)
 
-
-    # Log the containers' output
+    # Log the containers' outputs
     for i in $(seq 1 $n_threads); do
         thread="thread$i"
         id=${container_ids[$((i-1))]}
         docker logs $id > $log_dir/$thread/cmd_output.txt
     done
 
+    # Containers are only used one time, now that they have finished running they can be removed
     docker rm ${container_ids[@]} > /dev/null
 else
     # Create graphs for performance tests, if any were included
     python3 visualize_performance_tests.py $log_dir
 fi
 
-print_summary
+print_summary $n_failed $n_tests
 exit $n_failed
