@@ -162,6 +162,11 @@ wg_interface_regex="^([^:]*):([^:]*)$"
 validate_str $wg_interface_str $wg_interface_regex 
 wg_interfaces=(${BASH_REMATCH[1]} ${BASH_REMATCH[2]})
 
+# Remove conntrack entries from potential previous tests
+for router_ns in ${router_ns_list[@]}; do
+    sudo ip netns exec $router_ns conntrack -D &> /dev/null
+done
+
 # Prepare a string describing the NAT setup
 NAT_TYPES=("EI" "AD" "APD")
 
