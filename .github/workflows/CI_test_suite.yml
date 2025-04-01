@@ -40,7 +40,7 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         file: test_suite/Dockerfile
-        push: false
+        load: true
         tags: system_tests:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
