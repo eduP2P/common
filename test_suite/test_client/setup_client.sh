@@ -52,6 +52,7 @@ fi
 
 # Create temporary file to store test_client output
 out="test_client_out_${id}.txt"
+touch $out
 
 # Run test_client and store its output in the temporary file
 (sudo ./test_client --control-host=$control_ip --control-port=$control_port --control-key=control:$control_pub_key --ext-wg-device=$wg_interface --log-level=$log_lvl --config=$id.json 2>&1 | tee $out &)
@@ -147,6 +148,9 @@ else
     peer_ipv4=$(echo $peer_ips | cut -d ' ' -f1)
     peer_ipv6=$(echo $peer_ips | cut -d ' ' -f2)
 fi
+
+# Necessary to avoid failures with hairpinning tests, probably caused by delay in adding nftables rules to simulate hairpinning
+sleep 0.5s
 
 # Start HTTP servers on own virtual IPs for peer to access, and save their pids to kill them during cleanup
 http_ipv4_out="http_ipv4_output_${id}.txt"
