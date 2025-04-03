@@ -125,12 +125,11 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 const tunMtu = 1280
 
 func (u *UserSpaceWireGuardHost) createTUN() (tun.Device, error) {
-
 	if u.tunFile != nil {
 		return createTUNFromFile(u.tunFile, tunMtu)
-	} else {
-		return createTUN(tunMtu)
 	}
+
+	return createTUN(tunMtu)
 }
 
 type UserSpaceWireGuardController struct {
