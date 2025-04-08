@@ -124,11 +124,9 @@ func (s *Stage) makeDR() *DirectRouter {
 }
 
 func (dr *DirectRouter) Push(frame ifaces.DirectedPeerFrame) {
-
-	// go func() {
-	dr.frameCh <- frame
-	// }()
-
+	go func() {
+		dr.frameCh <- frame
+	}()
 }
 
 func (dr *DirectRouter) Run() {
