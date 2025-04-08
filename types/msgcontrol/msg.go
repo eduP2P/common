@@ -19,8 +19,6 @@ const (
 	LogonDeviceKeyType
 	LogonAcceptType
 	LogonRejectType
-	PingType
-	PongType
 )
 
 const (
@@ -32,6 +30,8 @@ const (
 	RelayUpdateType
 	LogoutType
 	DisconnectType
+	PingType
+	PongType
 )
 
 // === handshake phase

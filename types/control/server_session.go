@@ -452,6 +452,9 @@ func (s *ServerSession) Run() {
 			// TODO
 		case *msgcontrol.LogonDeviceKey:
 			s.Slog().Debug("received after-logon logon device key, ignoring...")
+		case *msgcontrol.Logout:
+			s.Slog().Debug("received logout")
+			// TODO
 		default:
 			err = fmt.Errorf("received unknown type of message: %#v", msg)
 			return
