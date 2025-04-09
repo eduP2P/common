@@ -15,27 +15,40 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    # - name: Set up Go
+    #   uses: actions/setup-go@v5
+    #   with:
+    #     go-version-file: go.mod
+
+    # - name: Set up Python
+    #   uses: actions/setup-python@v5
+    #   with:
+    #     python-version: '3.12'
+
+    # - name: System tests dependencies
+    #   run: xargs -a system_test_requirements.txt sudo apt-get install
+    #   working-directory: test_suite
+
+    # - name: Performance tests dependencies
+    #   run: pip install -r python_requirements.txt
+    #   working-directory: test_suite
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Dockerfile to run system tests in parallel
+      uses: docker/build-push-action@v6
       with:
-        go-version-file: go.mod
+        file: test_suite/Dockerfile
+        load: true
+        tags: system_tests:latest
+        build-args: BRANCH=${{ github.ref_name }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: System tests dependencies
-      run: xargs -a system_test_requirements.txt sudo apt-get install
-      working-directory: test_suite
-
-    - name: Performance tests dependencies
-      run: pip install -r python_requirements.txt
-      working-directory: test_suite
-
-    - name: Run system tests
+    - name: Run system tests in parallel
       id: system-test
-      run: ./system_tests.sh -b
+      run: ./system_tests.sh -t 2
       working-directory: test_suite
       continue-on-error: true
 
