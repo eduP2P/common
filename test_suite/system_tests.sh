@@ -482,7 +482,7 @@ if [[ -n $n_threads ]]; then
             progress_bar=$(progress_bar ${assigned[$i]} ${assigned[$i]})
             log_parallel $i "$progress_bar - $test_summary"
         else
-            echo -e "\tThread $i: $test_summary"
+            echo -e "\tThread $((i+1)): $test_summary"
         fi
     done
 
