@@ -29,7 +29,8 @@ The following options can be used to configure additional parameters during the 
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
         If this argument is not provided, the directory name is the current timestamp
     -t <number of threads between 2 and 8>
-        Run the system tests in parallel with the specified number of threads.
+        Run the system tests in parallel with the specified number of threads. 
+        It is not recommended to combine this flag with -p, as multithreading will likely degrade the performance and the graphs will not be created automatically
     -b
         Build the client, control server and relay server binaries before running the tests"""
 
