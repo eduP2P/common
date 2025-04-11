@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/edup2p/common/types"
 )
@@ -40,6 +42,18 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 			s.Logger().Warn("hijack failed", "error", err, "peer", r.RemoteAddr)
 			http.Error(w, "HTTP does not support general TCP support", 500)
 			return
+		}
+
+		if tcpConn, ok := netConn.(*net.TCPConn); ok {
+			if err := tcpConn.SetKeepAlive(true); err != nil {
+				s.Logger().Warn("set keep alive failed", "error", err, "peer", r.RemoteAddr)
+			}
+
+			if err := tcpConn.SetKeepAlivePeriod(11 * time.Second); err != nil {
+				s.Logger().Warn("set keep alive period failed", "error", err, "peer", r.RemoteAddr)
+			}
+		} else {
+			s.Logger().Warn("could not get *net.TCPConn, to set keepalive", "peer", r.RemoteAddr)
 		}
 
 		defer func() {

@@ -8,7 +8,8 @@ import (
 type SideBandDataType byte
 
 const (
-	MDNSType SideBandDataType = iota
+	MDNSv4Type SideBandDataType = iota
+	MDNSv6Type SideBandDataType = iota
 )
 
 type SideBandData struct {

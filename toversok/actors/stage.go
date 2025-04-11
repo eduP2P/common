@@ -50,8 +50,11 @@ func MakeStage(
 		dialRelayFunc = relayhttp.Dial
 	}
 
+	ctx, cancel := context.WithCancel(pCtx)
+
 	s := &Stage{
-		Ctx: pCtx,
+		Ctx:    ctx,
+		cancel: cancel,
 
 		connMutex: sync.RWMutex{},
 		inConn:    make(map[key.NodePublic]InConnActor),
@@ -85,15 +88,35 @@ func MakeStage(
 	s.EMan = s.makeEM()
 	s.MMan = s.makeMM()
 
-	context.AfterFunc(s.Ctx, s.Close)
+	s.installAfterFunc()
 
 	return s
+}
+
+func (s *Stage) installAfterFunc() {
+	context.AfterFunc(s.Ctx, s.Close)
+
+	// TODO: self-heal. Currently these just cancel the stage, which then propagates back upwards, but we should figure
+	//  out if its possible to heal components.
+
+	context.AfterFunc(s.DMan.Ctx(), s.cancel)
+	context.AfterFunc(s.DRouter.Ctx(), s.cancel)
+
+	context.AfterFunc(s.RMan.Ctx(), s.cancel)
+	context.AfterFunc(s.RRouter.Ctx(), s.cancel)
+
+	context.AfterFunc(s.TMan.Ctx(), s.cancel)
+	context.AfterFunc(s.SMan.Ctx(), s.cancel)
+	context.AfterFunc(s.EMan.Ctx(), s.cancel)
+	context.AfterFunc(s.MMan.Ctx(), s.cancel)
 }
 
 // Stage for the Actors
 type Stage struct {
 	// The parent context of the stage that all actors must parent
 	Ctx context.Context
+
+	cancel context.CancelFunc
 
 	// The DirectManager
 	DMan ifaces.DirectManagerActor
@@ -613,4 +636,8 @@ func (s *Stage) UpdateRelays(relays []relay.Information) error {
 func (s *Stage) ControlSTUN() []netip.AddrPort {
 	// TODO
 	return []netip.AddrPort{}
+}
+
+func (s *Stage) Context() context.Context {
+	return s.Ctx
 }

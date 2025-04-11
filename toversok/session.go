@@ -91,6 +91,9 @@ func SetupSession(
 	context.AfterFunc(sess.cs.Context(), func() {
 		sess.ccc(errors.New("resumable control session exited"))
 	})
+	context.AfterFunc(sess.stage.Context(), func() {
+		sess.ccc(errors.New("stage exited"))
+	})
 
 	return sess, nil
 }

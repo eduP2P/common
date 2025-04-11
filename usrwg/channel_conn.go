@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type ChannelConn struct {
 	// Packets written by the frontend
 	outgoing chan []byte
 
+	doClose sync.Once
+
 	currentReadDeadline time.Time
 }
 
@@ -24,9 +27,8 @@ const ChannelConnBufferSize = 16
 
 func makeChannelConn() *ChannelConn {
 	return &ChannelConn{
-		incoming:            make(chan []byte, ChannelConnBufferSize),
-		outgoing:            make(chan []byte, ChannelConnBufferSize),
-		currentReadDeadline: time.Time{},
+		incoming: make(chan []byte, ChannelConnBufferSize),
+		outgoing: make(chan []byte, ChannelConnBufferSize),
 	}
 }
 
@@ -69,10 +71,10 @@ func (cc *ChannelConn) WriteToUDPAddrPort(_ []byte, _ netip.AddrPort) (int, erro
 }
 
 func (cc *ChannelConn) Close() error {
-	// TODO boolean to check if is already closed?
-
-	close(cc.outgoing)
-	close(cc.incoming)
+	cc.doClose.Do(func() {
+		close(cc.outgoing)
+		close(cc.incoming)
+	})
 
 	return nil
 }
