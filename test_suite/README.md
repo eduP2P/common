@@ -63,6 +63,10 @@ sudo and xargs packages):
 
     xargs -a system_test_requirements.txt sudo apt-get install
 
+Optionally, the system tests can be run in parallel. In this mode the
+system tests are distributed over Docker containers, so it requires
+installing [Docker Engine](https://docs.docker.com/engine/install/).
+
 ### Performance test-specific requirements
 
 The performance tests are run as a part of the system tests, and require
@@ -106,6 +110,28 @@ physical setup for two reasons:
     network congestion than a physical network.
 
 The simulated network setup is described in detail in the next section.
+As mentioned in the [system test
+requirements](#system-test-specific-requirements), the tests may be run
+in parallel using Docker. The user can specify the amount of “threads”
+with the `-t` flag, which determines over how many Docker containers the
+tests will be distributed. The reason for using Docker is that it allows
+the concurrent tests to be executed in isolated networks. Naturally,
+running the tests in parallel allows the tests to run much faster. One
+disadvantage of the parallel tests is that a Docker image must be built
+before running the tests. This takes quite a while the first time the
+image is built, but by making use of Docker’s caching, building the
+image again after revisions to the code is significantly faster.
+
+The parallel system tests are also being used in the CI GitHub workflow
+when new code is pushed to a branch. For pull requests, the sequential
+version of the tests is still used because we cannot simply clone the
+branch head inside the Docker image in this case. Currently, running the
+system tests in parallel in CI does not the system test job to run
+faster. The reason for this is that loading and storing the Docker image
+from the GitHub Actions cache takes too long for the speed-up in
+actually running the tests to matter. This problem could potentially be
+solved by deploying a self-hosted runner with persistent memory to
+perform the CI workflow.
 
 ### Network Simulation Setup
 
@@ -562,8 +588,8 @@ establish a connection between peers are well-established
 This test suite uses the RFC 4787 [\[4\]](#ref-rfc4787) terminology,
 which does not categorize NAT into these four types. However, each of
 these four types of NAT described in RFC 3489 uses a different
-combination of the NAT mapping and filtering behaviour described in RFC 4787.
-Below, the four types of NAT from RFC 3489 are listed, while
+combination of the NAT mapping and filtering behaviour described in RFC
+4787. Below, the four types of NAT from RFC 3489 are listed, while
 noting the RFC 4787 mapping and filtering behaviour they are equivalent
 to:
 
@@ -582,12 +608,12 @@ an ‘X’ if UDP hole punching is successful in the scenario where one peer
 is behind the NAT indicated by the cell’s row header, and the other peer
 is behind the NAT indicated by the cell’s column header.
 
-| NAT Type                 | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
-|:-------------------------|:----------|:----------------|:---------------------|:----------|
-| **Full Cone**            | X         | X               | X                    | X         |
-| **Restricted Cone**      | X         | X               | X                    | X         |
-| **Port Restricted Cone** | X         | X               | X                    |           |
-| **Symmetric**            | X         | X               |                      |           |
+| NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
+|:---|:---|:---|:---|:---|
+| **Full Cone** | X | X | X | X |
+| **Restricted Cone** | X | X | X | X |
+| **Port Restricted Cone** | X | X | X |  |
+| **Symmetric** | X | X |  |  |
 
 As seen in the table, UDP hole punching succeeds unless one peer is
 behind a Port Restricted Cone NAT or Symmetric NAT, and the other peer
@@ -696,12 +722,12 @@ of RFC 4787 NAT mapping and filtering behaviour.
 The results of repeating the UDP hole punching experiment with eduP2P
 are shown in the table below:
 
-| NAT Type                 | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
-|:-------------------------|:----------|:----------------|:---------------------|:----------|
-| **Full Cone**            | X         | X               | X                    | X         |
-| **Restricted Cone**      | X         | X               | X                    |           |
-| **Port Restricted Cone** | X         | X               | X                    |           |
-| **Symmetric**            | X         |                 |                      |           |
+| NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
+|:---|:---|:---|:---|:---|
+| **Full Cone** | X | X | X | X |
+| **Restricted Cone** | X | X | X |  |
+| **Port Restricted Cone** | X | X | X |  |
+| **Symmetric** | X |  |  |  |
 
 Comparing this table with the one in the previous section, we see that
 eduP2P is not able to establish a direct connection when one peer is
@@ -994,17 +1020,17 @@ The results of extending the UDP hole punching experiment to all
 combinations of RFC 4787 mapping (EIM, ADM, ADPM) and filtering (EIF,
 ADF, ADPF) behaviours are shown in the table below:
 
-| NAT Type      | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
-|:--------------|:--------|:--------|:---------|:--------|:--------|:---------|:---------|:---------|:----------|
-| **EIM-EIF**   | X       | X       | X        | X       | X       | X        | X        | X        | X         |
-| **EIM-ADF**   | X       | X       | X        | X       | X       | X        | X        | X        | X         |
-| **EIM-ADPF**  | X       | X       | X        | X       |         |          | X        |          |           |
-| **ADM-EIF**   | X       | X       | X        | X       | X       | X        | X        | X        | X         |
-| **ADM-ADF**   | X       | X       |          | X       |         |          | X        |          |           |
-| **ADM-ADPF**  | X       | X       |          | X       |         |          | X        |          |           |
-| **ADPM-EIF**  | X       | X       | X        | X       | X       | X        | X        | X        | X         |
-| **ADPM-ADF**  | X       | X       |          | X       |         |          | X        |          |           |
-| **ADPM-ADPF** | X       | X       |          | X       |         |          | X        |          |           |
+| NAT Type | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| **EIM-EIF** | X | X | X | X | X | X | X | X | X |
+| **EIM-ADF** | X | X | X | X | X | X | X | X | X |
+| **EIM-ADPF** | X | X | X | X |  |  | X |  |  |
+| **ADM-EIF** | X | X | X | X | X | X | X | X | X |
+| **ADM-ADF** | X | X |  | X |  |  | X |  |  |
+| **ADM-ADPF** | X | X |  | X |  |  | X |  |  |
+| **ADPM-EIF** | X | X | X | X | X | X | X | X | X |
+| **ADPM-ADF** | X | X |  | X |  |  | X |  |  |
+| **ADPM-ADPF** | X | X |  | X |  |  | X |  |  |
 
 Based on these results, we can conclude that there are three
 (overlapping) types of NAT scenarios where the UDP hole punching process
@@ -1390,8 +1416,8 @@ Network Emulator</span>.” Available:
 </span><span class="csl-right-inline">J. Rosenberg, C. Huitema, R. Mahy,
 and J. Weinberger, “<span class="nocase">STUN - Simple Traversal of User
 Datagram Protocol (UDP) Through Network Address Translators
-(NATs)</span>.” in Request for comments. RFC 3489; RFC Editor, Mar. 2003. 
-doi: [10.17487/RFC3489](https://doi.org/10.17487/RFC3489).</span>
+(NATs)</span>.” in Request for comments. RFC 3489; RFC Editor, Mar.
+2003. doi: [10.17487/RFC3489](https://doi.org/10.17487/RFC3489).</span>
 
 </div>
 
@@ -1428,33 +1454,3 @@ Conservancy](https://commonsconservancy.org/).
 
 The test suite features that have been made possible thanks to this
 funding are described below.
-
-### Simulating network delay (finished March 4, 2025)
-
-This feature makes it possible to add artificial network delay in the
-system and performance tests.
-
-The feature can be used with the system tests by calling
-`system_tests.sh` with the option `-d <delay in ms>`. In the performance
-tests, this artificial delay can be configured as the independent test
-variable. More details are given in the [performance test
-documentation](./README.md#performance-tests).
-
-Furthermore, the effect of the artificial delay on the eduP2P network
-performance is reported in the [performance test
-results](./README.md#results-with-varying-one-way-delay).
-
-### Repeated performance tests (finished March 7, 2025)
-
-This feature adds the option to repeat the same performance test
-multiple times and aggregate the results of each repetition by taking
-their average.
-
-The option is configured with the `-r` flag of the performance tests.
-See the [performance test documentation](./README.md#performance-tests)
-for details on how to configure and run a performance test.
-
-In the [performance test results](./README.md#consistency-of-results),
-the variance between different repetitions of the same performance test
-is analysed. This analysis shows that aggregating the results can
-improve their reliability.
