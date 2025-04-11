@@ -29,7 +29,8 @@ The following options can be used to configure additional parameters during the 
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
         If this argument is not provided, the directory name is the current timestamp
     -t <number of threads between 2 and 8>
-        Run the system tests in parallel with the specified number of threads.
+        Run the system tests in parallel with the specified number of threads. 
+        It is not recommended to combine this flag with -p, as multithreading will likely degrade the performance and the graphs will not be created automatically
     -b
         Build the client, control server and relay server binaries before running the tests"""
 
@@ -456,20 +457,34 @@ if [[ -n $n_threads ]]; then
                                            $system_test_opts) # Copy the remaining options from the current system tests command
         container_ids+=($container_id)
 
-        # Print progress bar for this thread
-        echo -e "\tThread $i: $(progress_bar 0 ${assigned[$((i-1))]})\r"
+        # Print progress bar for this thread, unless test is run as GitHub Action
+        if [[ -z $GITHUB_ACTION ]]; then
+            echo -e "\tThread $i: $(progress_bar 0 ${assigned[$((i-1))]})\r"
+        fi
     done
 
-    monitor_thread_progress &
-    progress_pid=$!
+    # Report on progress of each thread
+    if [[ -z $GITHUB_ACTION ]]; then
+        monitor_thread_progress &
+        progress_pid=$!
+    fi
 
     exit_codes=( $(docker wait ${container_ids[@]}) ) # Each exit code represents the amount of failed tests in the corresponding container
 
-    kill $progress_pid # Stop monitoring progress after all containers have finished
+    if [[ -z $GITHUB_ACTION ]]; then
+        kill $progress_pid # Stop monitoring progress after all containers have finished
+    fi
 
     # Print summary for each thread individually
     for i in $(seq 0 $((n_threads-1))); do
-        log_parallel $i "$(progress_bar ${assigned[$i]} ${assigned[$i]}) - $(print_summary ${exit_codes[$i]} ${assigned[$i]})"
+        test_summary=$(print_summary ${exit_codes[$i]} ${assigned[$i]})
+
+        if [[ -z $GITHUB_ACTION ]]; then
+            progress_bar=$(progress_bar ${assigned[$i]} ${assigned[$i]})
+            log_parallel $i "$progress_bar - $test_summary"
+        else
+            echo -e "\tThread $((i+1)): $test_summary"
+        fi
     done
 
     # Replace space delimiters by + and pipe into calculator
