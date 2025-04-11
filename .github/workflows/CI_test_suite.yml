@@ -96,7 +96,7 @@ jobs:
 
     - name: Run system tests in parallel
       id: system-test
-      run: GITHUB_ACTION=true ./system_tests.sh -t 2
+      run: GITHUB_ACTION=true ./system_tests.sh -t 4
       working-directory: test_suite
       continue-on-error: true
 
