@@ -36,7 +36,7 @@ jobs:
 
     - name: Run system tests sequentially
       id: system-test
-      run: ./system_tests.sh
+      run: ./system_tests.sh -b
       working-directory: test_suite
       continue-on-error: true
 
