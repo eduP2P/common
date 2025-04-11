@@ -23,7 +23,7 @@ RUN apt-get update &&\
 # Go packages
 COPY --from=get-requirements /common/go.mod /go/src/go.mod
 WORKDIR /go/src
-RUN go mod download -x
+RUN go mod download 
 
 # Clone repository, prevent cache from using old version by adding current version to Dockerfile
 WORKDIR /go
