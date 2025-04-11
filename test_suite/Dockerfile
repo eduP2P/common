@@ -20,12 +20,6 @@ RUN apt-get update &&\
     apt-get -y install sudo &&\
     xargs -a system_test_requirements.txt sudo apt-get -y install
 
-# Python requirements
-COPY --from=get-requirements /common/test_suite/python_requirements.txt /go/python_requirements.txt
-RUN apt-get -y install python3-pip &&\
-    python3 -m pip config set global.break-system-packages true &&\
-    pip install -r python_requirements.txt
-
 # Go packages
 COPY --from=get-requirements /common/go.mod /go/src/go.mod
 WORKDIR /go/src
