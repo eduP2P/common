@@ -28,7 +28,7 @@ RUN apt-get -y install python3-pip &&\
 
 # Go packages
 COPY --from=get-requirements /common/go.mod /go/go.mod
-RUN go mod download
+RUN go mod download -x && rm /go/go.mod
 
 # Clone repository, prevent cache from using old version by adding current version to Dockerfile
 ADD https://api.github.com/repos/eduP2P/common/git/refs/heads/${BRANCH} version.json
