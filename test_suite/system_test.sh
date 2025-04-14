@@ -239,6 +239,9 @@ function clean_exit() {
     # Kill background processes, such as the setup_client.sh scripts
     sudo kill $(jobs -p) &> /dev/null
 
+    # Remove restrictive permissions on certain log files
+    sudo chmod --recursive 777 $log_dir
+
     exit $exit_code
 }
 
@@ -271,7 +274,7 @@ for i in {0..1}; do
     
     touch $peer_logfile # Make sure file already exists so tail command later in script does not fail
     sudo ip netns exec $peer_ns ./setup_client.sh `# Run script in peer's network namespace` \
-    $peer_id $peer_ns $test_target $control_pub_key $control_ip $control_port $log_lvl ${wg_interfaces[$i]} `# Positional parameters` \
+    $peer_id $peer_ns $test_target $control_pub_key $control_ip $control_port $log_lvl $log_dir ${wg_interfaces[$i]} `# Positional parameters` \
     2>&1 | tee $peer_logfile &> /dev/null & # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 usage_str="""
-Usage: ${0} <PEER ID> <PEER NAMESPACE> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> [WIREGUARD INTERFACE]
+Usage: ${0} <PEER ID> <PEER NAMESPACE> <TEST TARGET> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <LOG LEVEL> <LOG DIRECTORY> [WIREGUARD INTERFACE]
 
 <LOG LEVEL> should be one of {trace|debug|info} (in order of most to least log messages), but can NOT be info if one if the peers is using userspace WireGuard (then IP of the other peer is not logged)
 
@@ -27,8 +27,8 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required positional parameters have been passed
-min_req=7
-max_req=8
+min_req=8
+max_req=9
 
 if [[ $# < $min_req || $# > $max_req ]]; then
     exit_with_error "expected $min_req or $max_req positional parameters, but received $#"
@@ -41,7 +41,8 @@ control_pub_key=$4
 control_ip=$5
 control_port=$6
 log_lvl=$7
-wg_interface=$8
+log_dir=$8
+wg_interface=$9
 
 # Create WireGuard interface if wg_interface is set
 if [[ -n $wg_interface ]]; then
@@ -62,9 +63,6 @@ function clean_exit() {
 
     # Remove temporary test_client output file
     sudo rm $out
-
-    # Remove http server output file if it exists
-    rm $http_ipv6_out &> /dev/null
 
     # Kill http servers if they are running
     kill $http_ipv4_pid &> /dev/null
@@ -153,10 +151,11 @@ fi
 sleep 0.5s
 
 # Start HTTP servers on own virtual IPs for peer to access, and save their pids to kill them during cleanup
-python3 -m http.server -b $ipv4 80 &> /dev/null &
+http_ipv4_out="$log_dir/${id}_http_ipv4.txt"
+python3 -m http.server -b $ipv4 80 &> $http_ipv4_out &
 http_ipv4_pid=$!
 
-http_ipv6_out="http_ipv6_output_${id}.txt"
+http_ipv6_out="$log_dir/${id}_http_ipv6.txt"
 python3 -m http.server -b $ipv6 80 &> $http_ipv6_out &
 http_ipv6_pid=$!
 
