@@ -22,12 +22,18 @@ The following options can be used to configure additional parameters during the 
     -d <delay>
         Add delay to packets transmitted by the eduP2P clients, control server and relay server
         The delay should be provided as an integer that represents the one-way delay in milliseconds
-    -l <info|debug|trace>
+    -l <trace|debug|info|warn|error>
         Specifies the log level used in the eduP2P client of the two peers
-        The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)
+        If one of the peers uses userspace WireGuard, the log level trace/debug must be used, since the other peer's IP address is not logged otherwise
     -L <log directory>
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
-        If this argument is not provided, the directory name is the current timestamp"""
+        If this argument is not provided, the directory name is the current timestamp
+    -t <number of threads between 2 and 8>
+        Run the system tests in parallel with the specified number of threads. 
+        It is not recommended to combine this flag with -p, as multithreading will likely degrade the performance and the graphs will not be created automatically
+    -b
+        Build the client, control server and relay server binaries before running the tests"""
+
 # Use functions and constants from util.sh
 . ./util.sh
 
@@ -35,7 +41,7 @@ The following options can be used to configure additional parameters during the 
 log_lvl="debug"
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:L:ph" opt; do
+while getopts ":c:d:ef:l:L:t:bph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -73,21 +79,23 @@ while getopts ":c:d:ef:l:L:ph" opt; do
         l)  
             log_lvl=$OPTARG
 
-            # Log level should be info/debug/trace
-            log_lvl_regex="^info|debug|trace?$"
+            log_lvl_regex="^trace|debug|info|warn|error?$"
             validate_str $log_lvl $log_lvl_regex
             ;;
         L)
             alphanum_regex="^[a-zA-Z0-9]+$"
             validate_str $OPTARG $alphanum_regex
             log_dir_rel=system_test_logs/$OPTARG
+            ;;
+        t)
+            n_threads=$OPTARG
 
-            # Ensure log dir does not exist yet
-            ls $log_dir_rel &> /dev/null
-
-            if [[ $? -eq 0 ]]; then
-                exit_with_error "$log_dir_rel already exists"
-            fi
+            # Make sure n_threads is an integer between 2 and 8
+            threads_regex="^[2-8]$"
+            validate_str $n_threads $int_regex
+            ;;
+        b)
+            build=true
             ;;
         p)
             performance=true
@@ -102,32 +110,8 @@ while getopts ":c:d:ef:l:L:ph" opt; do
     esac
 done
 
-# Shift positional parameters indexing by accounting for the optional arguments
-shift $((OPTIND-1))
-
 # Store repository's root directory for later use
 repo_dir=$(cd ..; pwd)
-
-function cleanup () {
-    # Kill the two servers if they have already been started by the script
-    sudo pkill control_server
-    sudo pkill relay_server
-
-    # Kill the currently running system test if it is still running
-    sudo kill $test_pid &> /dev/null
-}
-
-# Run cleanup when script exits
-trap cleanup EXIT 
-
-function build_go() {
-    for binary in test_client control_server relay_server; do
-        binary_dir="${repo_dir}/test_suite/$binary"
-        go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
-    done
-}
-
-build_go
 
 function create_log_dir() {
     if [[ -z $log_dir_rel ]]; then
@@ -142,12 +126,27 @@ function create_log_dir() {
 
 create_log_dir
 
+# ================================ FUNCTIONS FOR SEQUENTIAL SYSTEM TESTS ================================
+function cleanup () {
+    # Kill the two servers if they have already been started by the script
+    sudo pkill control_server
+    sudo pkill relay_server
+
+    # Kill the currently running system test if it is still running
+    sudo kill $test_pid &> /dev/null
+}
+
+function build_go() {
+    for binary in test_client control_server relay_server; do
+        binary_dir="${repo_dir}/test_suite/$binary"
+        go build -o "${binary_dir}/$binary" ${binary_dir}/*.go &> /dev/null
+    done
+}
+
 function setup_networks() {
     cd nat_simulation/
     adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
 }
-
-setup_networks
 
 function extract_server_pub_key() {
     server_type=$1 # control_server or relay_server
@@ -206,27 +205,133 @@ function setup_servers() {
     start_server "relay_server" $relay_ip $relay_port
 }
 
-# Choose ports for the control and relay servers, then start them
-control_port=9999
-relay_port=3340
-echo "Setting up servers"
-setup_servers
+function sequential_setup() {
+    # Run cleanup when script exits
+    trap cleanup EXIT
 
-# Test counters
-n_tests=0
-n_failed=0
+    # Go build binaries unless -b flag was specified
+    if [[ $build == true ]]; then
+        echo "Building binaries..."
+        build_go
+    else
+        echo "Skipped building binaries"
+    fi
+
+    setup_networks
+
+    # Choose ports for the control and relay servers, then start them
+    control_port=9999
+    relay_port=3340
+    echo "Setting up servers"
+    setup_servers
+
+    cd $repo_dir/test_suite
+
+    if [[ -n $packet_loss ]]; then
+        sudo ./set_packet_loss.sh $packet_loss
+    fi
+
+    if [[ -n $delay ]]; then
+        sudo ./set_delay.sh $delay
+    fi
+
+    # Test counters
+    n_tests=0
+    n_failed=0
+}
+
+# Log messages that should not be printed when the tests are run in parallel
+function log_sequential() {
+    msg=$1
+
+    if [[ -z $n_threads ]]; then
+        echo -e $msg
+    fi
+}
+
+# ================================ FUNCTIONS FOR PARALLEL SYSTEM TESTS ================================
+function parallel_setup() {
+    echo """
+Dividing the system tests among $n_threads threads. The output of each thread can be found in the logs."""
+
+    # The current system tests command will be run in parallel docker containers with a few modifications:
+    system_test_opts=$(echo $@ | sed -r -e "s/-f \S+//"   `# Potential -f flag is removed, as each docker container will be assigned a file containing a subset of the current system tests` \
+                                        -e "s/-t [2-8]//") # -t flag is removed, since each docker container will run the tests in parallel`
+
+    # Tests will be assigned to the containers in a round-robin manner, so we keep track of the current thread 
+    current_thread=0
+
+    # Arrays of length n_threads representing number of assigned and completed tests per thread, initialized to 0
+    assigned=()
+    completed=()
+
+    for i in $(seq 1 $n_threads); do
+        # Initialize above arrays to 0
+        assigned+=(0)
+        completed+=(0)
+
+        # Create a directory and file for each thread to store the system test logs and commands
+        mkdir $log_dir/thread$i
+        touch $log_dir/thread$i/tests.txt
+    done
+}
+
+function log_parallel() {
+    thread=$1
+    msg=$2
+
+    let "move_cursor = n_threads - thread"
+
+    # Move cursor up to the line for the current thread
+    echo -ne "\033[${move_cursor}A\tThread $((thread+1)): $msg\r"
+
+    # Move cursor back to original position
+    echo -ne "\033[${move_cursor}B\r"
+
+}
+
+function monitor_thread_progress() {
+    current_thread=0
+
+    while : # while True
+    do
+        for i in $(seq 0 $((n_threads-1))); do
+            if [[ ${completed[$i]} -ne ${assigned[$i]} ]]; then
+                completed[$i]=$(docker logs ${container_ids[$i]} | grep -Ec "result=\S+TS_(PASS|FAIL)") # \S+ matches special characters that give color to test result
+                log_parallel $i $(progress_bar ${completed[$i]} ${assigned[$i]})
+            fi
+        done
+
+        sleep 1s
+    done
+}
+
+# ================================ SYSTEM TESTS LOGIC ================================
+# Check if -t flag was specified
+if [[ -n $n_threads ]]; then
+    parallel_setup
+else
+    sequential_setup
+fi
 
 # Usage: run_system_test [optional arguments of system_test.sh] <first 4 positional parameters of system_test.sh>
 function run_system_test() {
-    let "n_tests++"
-    
-    # Run in background and wait for test to finish to allow for interrupting from the terminal
-    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port "$adm_ips" $log_lvl $log_dir $repo_dir &
-    test_pid=$!
-    wait $test_pid
+    if [[ -n $n_threads ]]; then # Save the system test to the file corresponding to the current thread
+        current_thread_dir="thread$((current_thread+1))"
+        echo "run_system_test $@" >> $log_dir/$current_thread_dir/tests.txt
+        let "assigned[$current_thread]++"
+        let "current_thread = (current_thread+1) % n_threads"
+    else # Run the system test now
+        let "n_tests++"
 
-    if [[ $? -ne 0 ]]; then
-        let "n_failed++"
+        # Run in background and wait for test to finish to allow for interrupting from the terminal
+        ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port "$adm_ips" $log_lvl $log_dir $repo_dir &
+        test_pid=$!
+        wait $test_pid
+
+        if [[ $? -ne 0 ]]; then
+            let "n_failed++"
+        fi
     fi
 }
 
@@ -267,19 +372,9 @@ function connectivity_test_logic() {
     fi
 }
 
-cd $repo_dir/test_suite
-
-if [[ -n $packet_loss ]]; then
-    sudo ./set_packet_loss.sh $packet_loss
-fi
-
-if [[ -n $delay ]]; then
-    sudo ./set_delay.sh $delay
-fi
-
 if [[ $performance == true ]]; then
-    echo -e "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 100,200,300,400,500 -d 3 -b both -r 3 TS_PASS_DIRECT router1-router2 : wg0:wg0
+    log_sequential "\nPerformance tests (without NAT)"
+    run_system_test -k bitrate -v 100,200,300,400,500 -d 3 -b both TS_PASS_DIRECT router1-router2 : wg0:wg0
 elif [[ -n $file ]]; then
     echo -e "\nTests from file: $file"
     
@@ -290,13 +385,13 @@ elif [[ -n $file ]]; then
 else
     rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
 
-    echo """
+    log_sequential """
 Starting connectivity tests between two peers (possibly) behind NATs with various combinations of mapping and filtering behaviour:
     - Endpoint-Independent Mapping/Filtering (EIM/EIF)
     - Address-Dependent Mapping/Filtering (ADM/ADF)
     - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
 
-    echo -e "\nTests with one peer behind a NAT"
+    log_sequential "\nTests with one peer behind a NAT"
     for nat_mapping in {0..2}; do
         for nat_filter in {0..2}; do
             nat=$nat_mapping-$nat_filter
@@ -308,7 +403,7 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
         done
     done
 
-    echo -e "\nTests with both peers behind a NAT"
+    log_sequential "\nTests with both peers behind a NAT"
     for nat1_mapping in {0..2}; do
         for nat1_filter in {0..2}; do
             for nat2_mapping in {0..2}; do
@@ -319,7 +414,7 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
         done
     done
 
-    echo -e "\nTest hairpinning"
+    log_sequential "\nTest hairpinning"
     for nat_mapping in {0..2}; do
         for nat_filter in {0..2}; do
             nat=$nat_mapping-$nat_filter
@@ -333,6 +428,9 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
 fi
 
 function print_summary() {
+    n_failed=$1
+    n_tests=$2
+
     if [[ $n_failed -eq 0 ]]; then
         echo -e "${GREEN}All tests passed!${NC}"
     else
@@ -341,7 +439,71 @@ function print_summary() {
     fi
 }
 
-print_summary
+if [[ -n $n_threads ]]; then
+    # Keep track of docker container IDs
+    container_ids=()
 
-# Create graphs for performance tests, if any were included
-python3 visualize_performance_tests.py $log_dir
+    docker_log_dir="/go/common/test_suite/system_test_logs"
+
+    for i in $(seq 1 $n_threads); do
+        thread="thread$i"
+
+        # Run the thread in a docker container, and store its ID
+        container_id=$(docker run \
+                          --network=host `# Host driver gives faster curl connectivity check` \
+                          --cap-add CAP_SYS_ADMIN --cap-add NET_ADMIN --security-opt apparmor=unconfined --device /dev/net/tun:/dev/net/tun `# Permissions required to create network setup` \
+                          --mount type=bind,src=$log_dir/$thread,dst=$docker_log_dir/$thread `# Bind logs inside docker container to the corresponding thread on the host` \
+                          -dt system_tests -f $docker_log_dir/$thread/tests.txt -L $thread `# Run tests from this thread's file and store the logs in the mounted directory` \
+                                           $system_test_opts) # Copy the remaining options from the current system tests command
+        container_ids+=($container_id)
+
+        # Print progress bar for this thread, unless test is run as GitHub Action
+        if [[ -z $GITHUB_ACTION ]]; then
+            echo -e "\tThread $i: $(progress_bar 0 ${assigned[$((i-1))]})\r"
+        fi
+    done
+
+    # Report on progress of each thread
+    if [[ -z $GITHUB_ACTION ]]; then
+        monitor_thread_progress &
+        progress_pid=$!
+    fi
+
+    exit_codes=( $(docker wait ${container_ids[@]}) ) # Each exit code represents the amount of failed tests in the corresponding container
+
+    if [[ -z $GITHUB_ACTION ]]; then
+        kill $progress_pid # Stop monitoring progress after all containers have finished
+    fi
+
+    # Print summary for each thread individually
+    for i in $(seq 0 $((n_threads-1))); do
+        test_summary=$(print_summary ${exit_codes[$i]} ${assigned[$i]})
+
+        if [[ -z $GITHUB_ACTION ]]; then
+            progress_bar=$(progress_bar ${assigned[$i]} ${assigned[$i]})
+            log_parallel $i "$progress_bar - $test_summary"
+        else
+            echo -e "\tThread $((i+1)): $test_summary"
+        fi
+    done
+
+    # Replace space delimiters by + and pipe into calculator
+    n_failed=$(echo ${exit_codes[@]} | tr " " + | bc)
+    n_tests=$(echo ${assigned[@]} | tr " " + | bc)
+
+    # Log the containers' outputs
+    for i in $(seq 1 $n_threads); do
+        thread="thread$i"
+        id=${container_ids[$((i-1))]}
+        docker logs $id > $log_dir/$thread/cmd_output.txt
+    done
+
+    # Containers are only used one time, now that they have finished running they can be removed
+    docker rm ${container_ids[@]} > /dev/null
+else
+    # Create graphs for performance tests, if any were included
+    python3 visualize_performance_tests.py $log_dir
+fi
+
+print_summary $n_failed $n_tests
+exit $n_failed
