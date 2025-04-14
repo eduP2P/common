@@ -153,7 +153,6 @@ fi
 sleep 0.5s
 
 # Start HTTP servers on own virtual IPs for peer to access, and save their pids to kill them during cleanup
-http_ipv4_out="http_ipv4_output_${id}.txt"
 python3 -m http.server -b $ipv4 80 &> /dev/null &
 http_ipv4_pid=$!
 
