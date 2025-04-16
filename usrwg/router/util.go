@@ -2,6 +2,8 @@ package router
 
 import (
 	"fmt"
+	"github.com/vishvananda/netlink"
+	"go4.org/netipx"
 	"net/netip"
 	"os/exec"
 )
@@ -59,4 +61,10 @@ func cmd(args ...string) *exec.Cmd {
 // used in router_bsd, golangci-lint on linux trips over it
 func prefixToSingle(prefix netip.Prefix) netip.Prefix {
 	return netip.PrefixFrom(prefix.Addr(), prefix.Addr().BitLen())
+}
+
+func nlAddrOfPrefix(p netip.Prefix) *netlink.Addr {
+	return &netlink.Addr{
+		IPNet: netipx.PrefixIPNet(p),
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/netip"
 
+	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/tun"
 )
 
@@ -26,11 +27,15 @@ type linuxRouter struct {
 }
 
 func (r *linuxRouter) Up() error {
-	if out, err := cmd("ip", "link", "set", "dev", r.iface, "up").CombinedOutput(); err != nil {
-		return fmt.Errorf("failed bringing up device: %w\n%s", err, out)
-	}
+	//if out, err := cmd("ip", "link", "set", "dev", r.iface, "up").CombinedOutput(); err != nil {
+	//	return fmt.Errorf("failed bringing up device: %w\n%s", err, out)
+	//}
 
-	return nil
+	link, err := r.link()
+	if err != nil {
+		return fmt.Errorf("bringing interface up, %w", err)
+	}
+	return netlink.LinkSetUp(link)
 }
 
 func (r *linuxRouter) Close() error {
@@ -67,17 +72,41 @@ func (r *linuxRouter) Set(c *Config) (retErr error) {
 }
 
 func (r *linuxRouter) removeAddr(prefix netip.Prefix) error {
-	if out, err := cmd("ip", "addr", "del", prefix.String(), "dev", r.iface).CombinedOutput(); err != nil {
-		return fmt.Errorf("deleting address %q from tunnel interface: %w\n%s", prefix, err, out)
+	link, err := r.link()
+	if err != nil {
+		return fmt.Errorf("deleting address %v, %w", prefix, err)
 	}
+	if err := netlink.AddrDel(link, nlAddrOfPrefix(prefix)); err != nil {
+		return fmt.Errorf("deleting address %v from tunnel interface: %w", prefix, err)
+	}
+
+	//if out, err := cmd("ip", "addr", "del", prefix.String(), "dev", r.iface).CombinedOutput(); err != nil {
+	//	return fmt.Errorf("deleting address %q from tunnel interface: %w\n%s", prefix, err, out)
+	//}
 
 	return nil
 }
 
 func (r *linuxRouter) addAddr(prefix netip.Prefix) error {
-	if out, err := cmd("ip", "addr", "add", prefix.String(), "dev", r.iface).CombinedOutput(); err != nil {
-		return fmt.Errorf("adding address %q to tunnel interface: %w\n%s", prefix, err, out)
+	link, err := r.link()
+	if err != nil {
+		return fmt.Errorf("adding address %v, %w", prefix, err)
+	}
+	if err := netlink.AddrReplace(link, nlAddrOfPrefix(prefix)); err != nil {
+		return fmt.Errorf("adding address %v from tunnel interface: %w", prefix, err)
 	}
 
+	//if out, err := cmd("ip", "addr", "add", prefix.String(), "dev", r.iface).CombinedOutput(); err != nil {
+	//	return fmt.Errorf("adding address %q to tunnel interface: %w\n%s", prefix, err, out)
+	//}
+
 	return nil
+}
+
+func (r *linuxRouter) link() (netlink.Link, error) {
+	link, err := netlink.LinkByName(r.iface)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up link %q: %w", r.iface, err)
+	}
+	return link, nil
 }
