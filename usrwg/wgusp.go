@@ -29,14 +29,25 @@ func NewUsrWGHost() *UserSpaceWireGuardHost {
 type UserSpaceWireGuardHost struct {
 	running *UserSpaceWireGuardController
 	tunFile *os.File
+	tunFD   uintptr
 }
 
 func (u *UserSpaceWireGuardHost) SetTUNFile(f *os.File) {
 	u.tunFile = f
+	if f == nil {
+		u.tunFD = 0
+	} else {
+		u.tunFD = f.Fd()
+	}
 }
 
 func (u *UserSpaceWireGuardHost) SetTUNFD(fd uintptr) {
-	u.tunFile = os.NewFile(fd, "tun")
+	// TODO: this has the side-effect on linux to use the "unmonitored" creation step,
+	//  instead of a monitored creation step, needs to be made explicit
+	u.tunFD = fd
+	if u.tunFile != nil {
+		u.tunFD = 0
+	}
 }
 
 func (u *UserSpaceWireGuardHost) Reset() error {
@@ -127,6 +138,8 @@ const tunMtu = 1280
 func (u *UserSpaceWireGuardHost) createTUN() (tun.Device, error) {
 	if u.tunFile != nil {
 		return createTUNFromFile(u.tunFile, tunMtu)
+	} else if u.tunFD != 0 {
+		return createTUNFromFD(u.tunFD, tunMtu)
 	}
 
 	return createTUN(tunMtu)

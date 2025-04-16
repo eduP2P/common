@@ -13,3 +13,8 @@ func createTUN(mtu int) (tun.Device, error) {
 func createTUNFromFile(file *os.File, mtu int) (tun.Device, error) {
 	return tun.CreateTUNFromFile(file, mtu)
 }
+
+func createTUNFromFD(fd uintptr, _ int) (tun.Device, error) {
+	dev, _, err := tun.CreateUnmonitoredTUNFromFD(fd)
+	return dev, err
+}
