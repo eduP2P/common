@@ -26,8 +26,19 @@ func NewUsrWGHost() *UserSpaceWireGuardHost {
 	return &UserSpaceWireGuardHost{}
 }
 
+func NewUsrWGHostWithCallback(cb func(host *UserSpaceWireGuardHost, addr4,
+	addr6 netip.Prefix),
+) *UserSpaceWireGuardHost {
+	return &UserSpaceWireGuardHost{
+		controllerInitCallback: cb,
+	}
+}
+
 type UserSpaceWireGuardHost struct {
 	running *UserSpaceWireGuardController
+
+	controllerInitCallback func(host *UserSpaceWireGuardHost, addr4, addr6 netip.Prefix)
+
 	tunFile *os.File
 	tunFD   uintptr
 }
@@ -66,6 +77,10 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 		if err := u.Reset(); err != nil {
 			return nil, fmt.Errorf("usrwg: failed to reset running usrwg controller: %v", err)
 		}
+	}
+
+	if u.controllerInitCallback != nil {
+		u.controllerInitCallback(u, addr4, addr6)
 	}
 
 	tunDev, err := u.createTUN()

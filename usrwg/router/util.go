@@ -2,10 +2,11 @@ package router
 
 import (
 	"fmt"
-	"github.com/vishvananda/netlink"
-	"go4.org/netipx"
 	"net/netip"
 	"os/exec"
+
+	"github.com/vishvananda/netlink"
+	"go4.org/netipx"
 )
 
 func prefixesToAdd(newP, currP []netip.Prefix) (add []netip.Prefix) {
