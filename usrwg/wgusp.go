@@ -122,15 +122,19 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 		return nil, fmt.Errorf("failed to bring up wireguard device: %w", err)
 	}
 
-	if err = r.Set(&router.Config{
-		LocalAddrs:      []netip.Addr{addr4.Addr(), addr6.Addr()},
-		RoutingPrefixes: []netip.Prefix{addr4, addr6},
-	}); err != nil {
-		return nil, fmt.Errorf("failed to set routing config: %w", err)
-	}
+	if u.tunFD == 0 {
+		if err = r.Set(&router.Config{
+			LocalAddrs:      []netip.Addr{addr4.Addr(), addr6.Addr()},
+			RoutingPrefixes: []netip.Prefix{addr4, addr6},
+		}); err != nil {
+			return nil, fmt.Errorf("failed to set routing config: %w", err)
+		}
 
-	if err = r.Up(); err != nil {
-		return nil, fmt.Errorf("failed to bring up device through router: %w", err)
+		if err = r.Up(); err != nil {
+			return nil, fmt.Errorf("failed to bring up device through router: %w", err)
+		}
+	} else {
+		slog.Debug("skipping router setup for wireguard device; raw FD given")
 	}
 
 	usrwgc := &UserSpaceWireGuardController{
