@@ -161,7 +161,6 @@ func (oc *OutConn) Inbox() chan<- msgactor.ActorMessage {
 }
 
 func (oc *OutConn) Close() {
-	close(oc.sock.outCh)
 	close(oc.inbox)
 
 	oc.activityTimer.Stop()
