@@ -115,12 +115,16 @@ requirements](#system-test-specific-requirements), the tests may be run
 in parallel using Docker. The user can specify the amount of “threads”
 with the `-t` flag, which determines over how many Docker containers the
 tests will be distributed. The reason for using Docker is that it allows
-the concurrent tests to be executed in isolated networks. Naturally,
-running the tests in parallel allows the tests to run much faster. One
-disadvantage of the parallel tests is that a Docker image must be built
-before running the tests. This takes quite a while the first time the
-image is built, but by making use of Docker’s caching, building the
-image again after revisions to the code is significantly faster.
+the concurrent tests to be executed in isolated networks, which improves
+the clarity of the logs and avoid any interference that could be caused
+by multiple tests running simultaneously in the same network.
+
+Naturally, running the tests in parallel allows the tests to run much
+faster. One disadvantage of the parallel tests is that a Docker image
+must be built before running the tests. This takes quite a while the
+first time the image is built, but by making use of Docker’s caching,
+building the image again after revisions to the code is significantly
+faster.
 
 The parallel system tests are also being used in the CI GitHub workflow
 when new code is pushed to a branch. For pull requests, the sequential
@@ -1453,4 +1457,4 @@ Conservancy](https://commonsconservancy.org/).
 [<img src="https://nlnet.nl/image/partners/commonsconservancy.svg" alt="The Commons Conservancy Logo" width="20%" />](https://commonsconservancy.org/)
 
 The test suite features that have been made possible thanks to this
-funding are described below.
+funding are described in the [test suite’s changelog](CHANGELOG.md).
