@@ -517,7 +517,7 @@ if [[ -n $n_threads ]]; then
 
     # Containers are only used one time, now that they have finished running they can be removed
     docker rm ${container_ids[@]} > /dev/null
-else
+elif [[ -n $performance ]]; then
     # Create graphs for performance tests, if any were included
     python3 visualize_performance_tests.py $log_dir
 fi
