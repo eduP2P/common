@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 
-if [[ $1 = "-h" ]]; then
-    echo """
-Usage: ${0} 
+usage_str="""
+Usage: ${0} <AMOUNT OF IPS>
+
+<AMOUNT OF IPS> specifies the number of IP addresses assigned to each NAT; setting this argument >1 allows NAT IP pooling to be simulated
 
 Simulates a network setup containing two private networks connected via the public network. Each private network contains two peers using eduP2P
 To allow traffic to flow between the public and private networks, the scripts setup_nat_mapping.sh should also be executed
 To allow traffic to flow between peers in the same private network, the scripts setup_nat_filtering_hairpinning.sh should also be executed
 
 This script must be run with root permissions"""
+
+if [[ $1 = "-h" || $# -ne 1 ]]; then
+    echo $usage_str
     exit 1
 fi
+
+# Number of IPs per router to test NAT IP pooling
+n_pooling_ips=$1
 
 # Enable IP forwarding to allow for routing between namespaces
 sysctl -w net.ipv4.ip_forward=1 &> /dev/null
@@ -60,13 +67,14 @@ for ((i=1; i<=n_priv_nets; i++)); do
     priv_subnet="${priv_prefix}.0/24"
     router_priv_ip="${priv_prefix}.254"
     pub_prefix="192.168.${i}"
+    pub_subnet="${pub_prefix}.0/24"
     router_pub_ip="${pub_prefix}.254"
 
-    # Add router's public IP to list created earlier
-    adm_ips+=($router_pub_ip)
+    # Add router's public subnet to list created earlier
+    adm_ips+=($pub_subnet)
 
     # Setup router
-    ip netns exec $router_name ./setup_router.sh $router_name $priv_name $priv_subnet $router_priv_ip $router_pub_ip $switch_ip
+    ip netns exec $router_name ./setup_router.sh $router_name $priv_name $priv_subnet $router_priv_ip $pub_prefix $n_pooling_ips $switch_ip
 
     # Setup private network
     ip netns exec $priv_name ./setup_private.sh $router_name $router_pub_ip $priv_subnet

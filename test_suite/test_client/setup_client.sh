@@ -170,8 +170,8 @@ function try_connect() {
 
 try_connect "http://${peer_ipv4}"
 
-# Peers try to establish a direct connection after initial connection; if expecting a direct connection, give them some time to establish one
-if [[ $test_target == "TS_PASS_DIRECT" ]]; then
+# Peers try to establish a direct connection after initial connection; if expecting a (potential) direct connection, give them some time to establish one
+if [[ $test_target == "TS_PASS" || $test_target == "TS_PASS_DIRECT" ]]; then
     timeout 10s tail -f -n +1 $out | sed -n "/ESTABLISHED direct peer connection/q"
 fi
 

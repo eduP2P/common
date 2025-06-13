@@ -27,15 +27,19 @@ The following options can be used to configure additional parameters during the 
         The log level 'info' should not be used if a system test is run where one of the peers uses userspace WireGuard (the other peer's IP address is not logged in this case)
     -L <log directory>
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
-        If this argument is not provided, the directory name is the current timestamp"""
+        If this argument is not provided, the directory name is the current timestamp
+    -n <number of IPs between 1 and 9>
+        Specifies the number of IP addresses assigned to each NAT. Passing a number >1 allows NAT IP pooling to be simulated during the system tests"""
+
 # Use functions and constants from util.sh
 . ./util.sh
 
-# Default log level
+# Default parameter values
 log_lvl="debug"
+n_pooling_ips=3
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:L:ph" opt; do
+while getopts ":c:d:ef:l:L:n:ph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -88,6 +92,13 @@ while getopts ":c:d:ef:l:L:ph" opt; do
             if [[ $? -eq 0 ]]; then
                 exit_with_error "$log_dir_rel already exists"
             fi
+            ;;
+        n)
+            n_pooling_ips=$OPTARG
+
+            # Make sure n_pooling_ips is an integer between 1 and 9
+            n_pooling_ips_regex="^[1-9]$"
+            validate_str $n_pooling_ips $n_pooling_ips_regex
             ;;
         p)
             performance=true
@@ -144,7 +155,7 @@ create_log_dir
 
 function setup_networks() {
     cd nat_simulation/
-    adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
+    adm_ips=$(sudo ./setup_networks.sh $n_pooling_ips) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
 }
 
 setup_networks
@@ -221,7 +232,7 @@ function run_system_test() {
     let "n_tests++"
     
     # Run in background and wait for test to finish to allow for interrupting from the terminal
-    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port "$adm_ips" $log_lvl $log_dir $repo_dir &
+    ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port $n_pooling_ips "$adm_ips" $log_lvl $log_dir $repo_dir &
     test_pid=$!
     wait $test_pid
 
@@ -247,9 +258,16 @@ function connectivity_test_logic() {
         # After sending one ping, the subsequent incoming pings from the peer's STUN endpoint will be accepted, regardless of the filtering behaviour
         test_target="TS_PASS_DIRECT"
     elif [[ $nat1_mapping -eq 0 && $nat1_filter -eq 1 || $nat2_mapping -eq 0 && $nat2_filter -eq 1 ]]; then
-        # An EIF-ADF NAT will always let the peer's pings through after sending its first ping
-        # This is not a general property of EIM-ADF NATs, but holds in this test suite because each NAT only has one IP address
-        test_target="TS_PASS_DIRECT"
+        # If NAT IP pooling is disabled, the endpoints used by the peers to communicate with each other have the same IP as their STUN endpoints
+        # Therefore, ADF NATs behave the same as EIF NATs in this case
+        if [[ $n_pooling_ips -eq 1 ]]; then
+            test_target="TS_PASS_DIRECT"
+        # If NAT IP pooling is enabled, the endpoints may have different IPs from the STUN endpoints
+        # If this is the case for both peers, the ADF NATs will not let the pings through
+        # The result TS_PASS indicates that it is not certain whether a direct connection can be established, and the test will succeed for both TS_PASS_DIRECT and TS_PASS_RELAY
+        else
+            test_target="TS_PASS"
+        fi
     else
         test_target="TS_PASS_RELAY"
     fi
