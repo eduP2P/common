@@ -16,6 +16,7 @@ import (
 
 	"github.com/edup2p/common/extwg"
 	"github.com/edup2p/common/toversok"
+	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/dial"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/usrwg"
@@ -76,6 +77,8 @@ func main() {
 	level := slog.LevelInfo
 
 	switch logLevel {
+	case "trace":
+		level = types.LevelTrace
 	case "debug":
 		level = slog.LevelDebug
 	case "info":
