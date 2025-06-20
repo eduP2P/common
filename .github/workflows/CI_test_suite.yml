@@ -34,9 +34,9 @@ jobs:
       run: pip install -r python_requirements.txt
       working-directory: test_suite
 
-    - name: Run system tests sequentially
+    - name: Run system tests sequentially with NAT IP pooling
       id: system-test
-      run: ./system_tests.sh -b
+      run: ./system_tests.sh -b -n 2
       working-directory: test_suite
       continue-on-error: true
 
@@ -69,9 +69,9 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Run system tests in parallel
+    - name: Run system tests in parallel with NAT IP pooling
       id: system-test
-      run: GITHUB_ACTION=true ./system_tests.sh -t 4
+      run: GITHUB_ACTION=true ./system_tests.sh -t 4 -n 2
       working-directory: test_suite
       continue-on-error: true
 
