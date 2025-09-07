@@ -6,6 +6,8 @@ Usage: ${0} [OPTIONAL ARGUMENTS]
 This script runs system tests between two eduP2P peers sequentially
 
 The following options determine the type of tests run:
+    -2
+        Run connectivity tests with Double NAT: both peers are separated from the public network with two NATs, instead of the default single NAT
     -e
         Run extended connectivity tests (all combinations of RFC 4787 NAT mapping and filtering behaviour)
     -f <file>
@@ -41,7 +43,7 @@ The following options can be used to configure additional parameters during the 
 log_lvl="debug"
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:L:t:bph" opt; do
+while getopts ":c:d:ef:l:L:t:2bph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -79,7 +81,7 @@ while getopts ":c:d:ef:l:L:t:bph" opt; do
         l)  
             log_lvl=$OPTARG
 
-            log_lvl_regex="^trace|debug|info|warn|error?$"
+            log_lvl_regex="^trace$|^debug$|^info$|^warn$|^error$"
             validate_str $log_lvl $log_lvl_regex
             ;;
         L)
@@ -93,6 +95,9 @@ while getopts ":c:d:ef:l:L:t:bph" opt; do
             # Make sure n_threads is an integer between 2 and 8
             threads_regex="^[2-8]$"
             validate_str $n_threads $int_regex
+            ;;
+        2)
+            double_nat="-2"
             ;;
         b)
             build=true
@@ -145,7 +150,7 @@ function build_go() {
 
 function setup_networks() {
     cd nat_simulation/
-    adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
+    adm_ips=$(sudo ./setup_networks.sh $double_nat) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
 }
 
 function extract_server_pub_key() {
@@ -335,6 +340,27 @@ function run_system_test() {
     fi
 }
 
+function filter_nat_combinations {
+    test_target=$1
+    ns_config=$2
+    nat_config=$3
+    wg_config=$4
+    nat1=$5 # Optional
+    nat2=$6 # Optional
+    nat3=$7 # Optional
+    nat4=$8 # Optional
+
+    rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
+
+    # Only test RFC 3489 NATs unless the extended flag was set
+    if [[ ( ${rfc_3489_nats[*]} =~ $nat1 && ${rfc_3489_nats[*]} =~ $nat2 && ${rfc_3489_nats[*]} =~ $nat3 && ${rfc_3489_nats[*]} =~ $nat4 ) || $extended == true ]]; then
+        # Only test Double NAT configurations where the two NATs are different
+        if [[ -z $double_nat || $nat1 != $nat2 && (-z $nat3 || $nat3 != $nat4 ) ]]; then
+            run_system_test $double_nat $test_target $ns_config $nat_config $wg_config
+        fi
+    fi
+}
+
 function connectivity_test_logic() {
     ns_config=$1
     wg_config=$2
@@ -364,17 +390,45 @@ function connectivity_test_logic() {
         nat1=$nat1_mapping-$nat1_filter
         nat2=$nat2_mapping-$nat2_filter
 
-        # Only test RFC 3489 NATs unless the extended flag was set
-        if [[ ( ${rfc_3489_nats[*]} =~ $nat1 && ${rfc_3489_nats[*]} =~ $nat2 ) || $extended == true ]]; then
-            nat_config=$nat1:$nat2
-            run_system_test $test_target $ns_config $nat_config $wg_config
+        filter_nat_combinations $test_target $ns_config $nat1/$nat2 $wg_config $nat1 $nat2
+    fi
+}
+
+function connectivity_test_logic_double_nat() {
+    ns_config=$1
+    wg_config=$2
+    nat1_mapping=$3
+    nat1_filter=$4
+    nat2_mapping=$5
+    nat2_filter=$6
+    nat3_mapping=$7
+    nat3_filter=$8
+    nat4_mapping=$9
+    nat4_filter=${10}
+
+    nat1=$nat1_mapping-$nat1_filter
+    nat2=$nat2_mapping-$nat2_filter
+    nat3=$nat3_mapping-$nat3_filter
+    nat4=$nat4_mapping-$nat4_filter
+
+    # Two Double NAT with at least one Symmetric NAT results in a relay connection
+    if [[ -n $nat4 && "$nat1 $nat2 $nat3 $nat4" =~ 2-2 ]]; then
+        test_target="TS_PASS_RELAY"
+    else
+        test_target="TS_PASS_DIRECT"
+    fi
+
+    # Skip symmetrical cases
+    if [[ $nat3_mapping -gt $nat1_mapping || $nat3_mapping -eq $nat1_mapping && $nat3_filter -ge $nat1_filter ]]; then 
+        if [[ $nat4_mapping -gt $nat2_mapping || $nat4_mapping -eq $nat2_mapping && $nat4_filter -ge $nat2_filter ]]; then 
+            filter_nat_combinations $test_target $ns_config $nat1:$nat2/$nat3:$nat4 $wg_config $nat1 $nat2 $nat3 $nat4
         fi
     fi
 }
 
 if [[ $performance == true ]]; then
     log_sequential "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 100,200,300,400,500 -d 3 -b both TS_PASS_DIRECT router1-router2 : wg0:wg0
+    run_system_test $double_nat -k bitrate -v 100,200,300,400,500 -d 3 -b both TS_PASS_DIRECT router1/router2 / wg0/wg0
 elif [[ -n $file ]]; then
     echo -e "\nTests from file: $file"
     
@@ -383,8 +437,6 @@ elif [[ -n $file ]]; then
         eval $test_cmd
     done < $file
 else
-    rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
-
     log_sequential """
 Starting connectivity tests between two peers (possibly) behind NATs with various combinations of mapping and filtering behaviour:
     - Endpoint-Independent Mapping/Filtering (EIM/EIF)
@@ -392,13 +444,20 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
     - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
 
     log_sequential "\nTests with one peer behind a NAT"
-    for nat_mapping in {0..2}; do
-        for nat_filter in {0..2}; do
-            nat=$nat_mapping-$nat_filter
+    for nat1_mapping in {0..2}; do
+        for nat1_filter in {0..2}; do
+            nat1=$nat1_mapping-$nat1_filter
 
-            # Only test RFC 3489 NATs unless the extended flag was set
-            if [[ ${rfc_3489_nats[*]} =~ $nat || $extended == true ]]; then
-                run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+            if [[ -z $double_nat ]]; then
+                filter_nat_combinations TS_PASS_DIRECT private1_peer1:router1/router2 $nat1/ wg0/ $nat1
+            else
+                for nat2_mapping in {0..2}; do
+                    for nat2_filter in {0..2}; do
+                        nat2=$nat2_mapping-$nat2_filter
+
+                        filter_nat_combinations TS_PASS_DIRECT private1_peer1:double1:router1/router2 $nat1:$nat2/ wg0/ $nat1 $nat2
+                    done
+                done
             fi
         done
     done
@@ -408,20 +467,39 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
         for nat1_filter in {0..2}; do
             for nat2_mapping in {0..2}; do
                 for nat2_filter in {0..2}; do
-                    connectivity_test_logic private1_peer1-router1:router2-private2_peer1 wg0: $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter
+                    if [[ -z $double_nat ]]; then
+                        connectivity_test_logic private1_peer1:router1/router2:private2_peer1 wg0/ $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter
+                    else
+                        for nat3_mapping in {0..2}; do
+                            for nat3_filter in {0..2}; do
+                                for nat4_mapping in {0..2}; do
+                                    for nat4_filter in {0..2}; do 
+                                        connectivity_test_logic_double_nat private1_peer1:double1:router1/router2:double2:private2_peer1 wg0/ $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter $nat3_mapping $nat3_filter $nat4_mapping $nat4_filter
+                                    done
+                                done
+                            done
+                        done
+                    fi
                 done
             done
         done
     done
 
     log_sequential "\nTest hairpinning"
-    for nat_mapping in {0..2}; do
-        for nat_filter in {0..2}; do
-            nat=$nat_mapping-$nat_filter
+    for nat1_mapping in {0..2}; do
+        for nat1_filter in {0..2}; do
+            nat1=$nat1_mapping-$nat1_filter
 
-            # Only test RFC 3489 NATs unless the extended flag was set
-            if [[ ${rfc_3489_nats[*]} =~ $nat || $extended == true ]]; then
-                run_system_test TS_PASS_DIRECT private1_peer1-router1-private1_peer2 $nat: wg0:
+            if [[ -z $double_nat ]]; then
+                filter_nat_combinations TS_PASS_DIRECT private1_peer1:router1:private1_peer2 $nat1 wg0/ $nat1
+            else
+                for nat2_mapping in {0..2}; do
+                    for nat2_filter in {0..2}; do
+                        nat2=$nat2_mapping-$nat2_filter
+
+                        filter_nat_combinations TS_PASS_DIRECT private1_peer1:double1:router1:private1_peer2 $nat1:$nat2 wg0/ $nat1 $nat2
+                    done
+                done
             fi
         done
     done
