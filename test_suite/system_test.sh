@@ -75,7 +75,6 @@ while getopts ":k:v:d:r:b:2h" opt; do
                 exit_with_error "-k should be specified before -v"
             fi
 
-            real_regex="[0-9]+(.[0-9]+)?"
             validate_str "$performance_test_values" "^$real_regex(,$real_regex)*$"
             ;;
         d)

@@ -50,8 +50,7 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
             packet_loss=$OPTARG
 
             # Make sure packet_loss is a real number
-            real_regex="^[0-9]+[.]?([0-9]+)?$"
-            validate_str "$packet_loss" $real_regex
+            validate_str "$packet_loss" ^$real_regex$
 
             # Make sure packet loss is in the interval [0, 100)
             in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
@@ -64,7 +63,6 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
             delay=$OPTARG
 
             # Make sure delay is an integer
-            int_regex="^[0-9]+$"
             validate_str "$delay" $int_regex
             ;;
         e)
