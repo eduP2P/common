@@ -51,7 +51,7 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
 
             # Make sure packet_loss is a real number
             real_regex="^[0-9]+[.]?([0-9]+)?$"
-            validate_str $packet_loss $real_regex
+            validate_str "$packet_loss" $real_regex
 
             # Make sure packet loss is in the interval [0, 100)
             in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
@@ -65,7 +65,7 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
 
             # Make sure delay is an integer
             int_regex="^[0-9]+$"
-            validate_str $delay $int_regex
+            validate_str "$delay" $int_regex
             ;;
         e)
             extended=true
@@ -82,11 +82,11 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
             log_lvl=$OPTARG
 
             log_lvl_regex="^trace$|^debug$|^info$|^warn$|^error$"
-            validate_str $log_lvl $log_lvl_regex
+            validate_str "$log_lvl" $log_lvl_regex
             ;;
         L)
             alphanum_regex="^[a-zA-Z0-9]+$"
-            validate_str $OPTARG $alphanum_regex
+            validate_str "$OPTARG" $alphanum_regex
             log_dir_rel=system_test_logs/$OPTARG
             ;;
         t)
@@ -94,7 +94,7 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
 
             # Make sure n_threads is an integer between 2 and 8
             threads_regex="^[2-8]$"
-            validate_str $n_threads $int_regex
+            validate_str "$n_threads" $int_regex
             ;;
         2)
             double_nat="-2"

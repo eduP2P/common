@@ -66,7 +66,7 @@ while getopts ":k:v:d:r:b:2h" opt; do
     case $opt in
         k)
             performance_test_var=$OPTARG
-            validate_str $performance_test_var "^bitrate$|^delay$|^packet_loss$"
+            validate_str "$performance_test_var" "^bitrate$|^delay$|^packet_loss$"
             ;;
         v)  
             performance_test_values=$OPTARG
@@ -80,11 +80,11 @@ while getopts ":k:v:d:r:b:2h" opt; do
             ;;
         d)
             performance_test_duration=$OPTARG
-            validate_str $performance_test_duration "^[0-9]+$"
+            validate_str "$performance_test_duration" "^[0-9]+$"
             ;;
         r)
             performance_test_reps=$OPTARG
-            validate_str $performance_test_duration "^[0-9]+$"
+            validate_str "$performance_test_duration" "^[0-9]+$"
 
             if [[ $performance_test_reps -eq 0 ]]; then
                 exit_with_error "value of -r should be at least 1"
@@ -95,7 +95,7 @@ while getopts ":k:v:d:r:b:2h" opt; do
             ;;
         b)
             performance_test_baseline=$OPTARG
-            validate_str $performance_test_baseline "^direct$|^wireguard$|^both$"
+            validate_str "$performance_test_baseline" "^direct$|^wireguard$|^both$"
 
             baseline="-b $performance_test_baseline"
             ;;
@@ -143,7 +143,7 @@ ns_config1_regex="^${peer_ns_regex}/${peer_ns_regex}$"
 ns_config2_regex="^${peer_ns_regex}:${router_ns_regex}/${peer_ns_regex}$"
 ns_config3_regex="^${peer_ns_regex}:${router_ns_regex}:${peer_ns_regex}$"
 ns_config4_regex="^${peer_ns_regex}:${router_ns_regex}/${router_ns_regex}:${peer_ns_regex}$"
-validate_str $ns_config_str "$ns_config1_regex|$ns_config2_regex|$ns_config3_regex|$ns_config4_regex"
+validate_str "$ns_config_str" "$ns_config1_regex|$ns_config2_regex|$ns_config3_regex|$ns_config4_regex"
 
 # Remove empty string elements in BASH_REMATCH, so that it only contains the matches of exactly one configuration
 BASH_REMATCH=(${BASH_REMATCH[@]}) 
@@ -174,10 +174,10 @@ fi
 
 # Ensure the NAT configuration is provided for all routers
 case $n_private in 
-    0) validate_str $nat_config_str "^/$";;
-    1) validate_str $nat_config_str "^$nat_config_regex$|^$nat_config_regex/$"
+    0) validate_str "$nat_config_str" "^/$";;
+    1) validate_str "$nat_config_str" "^$nat_config_regex$|^$nat_config_regex/$"
        BASH_REMATCH=(${BASH_REMATCH[@]}) ;;
-    2) validate_str $nat_config_str "^$nat_config_regex/$nat_config_regex$";;
+    2) validate_str "$nat_config_str" "^$nat_config_regex/$nat_config_regex$";;
 esac
 
 # Store the individual Mapping and Filtering types
@@ -193,7 +193,7 @@ done
 
 # Parse WireGuard interfaces string into individual interfaces
 wg_interface_regex="^([^/]*)/([^/]*)$"
-validate_str $wg_interface_str $wg_interface_regex 
+validate_str "$wg_interface_str" $wg_interface_regex 
 wg_interfaces=(${BASH_REMATCH[1]} ${BASH_REMATCH[2]})
 
 # Remove conntrack entries from potential previous tests
