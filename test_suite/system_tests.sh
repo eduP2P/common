@@ -115,6 +115,8 @@ while getopts ":c:d:ef:l:L:t:2bph" opt; do
     esac
 done
 
+system_test_opts=$@
+
 # Store repository's root directory for later use
 repo_dir=$(cd ..; pwd)
 
@@ -260,7 +262,7 @@ function parallel_setup() {
 Dividing the system tests among $n_threads threads. The output of each thread can be found in the logs."""
 
     # The current system tests command will be run in parallel docker containers with a few modifications:
-    system_test_opts=$(echo $@ | sed -r -e "s/-f \S+//"   `# Potential -f flag is removed, as each docker container will be assigned a file containing a subset of the current system tests` \
+    system_test_opts=$(echo $system_test_opts | sed -r -e "s/-f \S+//"   `# Potential -f flag is removed, as each docker container will be assigned a file containing a subset of the current system tests` \
                                         -e "s/-t [2-8]//") # -t flag is removed, since each docker container will run the tests in parallel`
 
     # Tests will be assigned to the containers in a round-robin manner, so we keep track of the current thread 
@@ -394,6 +396,7 @@ function connectivity_test_logic() {
     fi
 }
 
+# This function currently takes only RFC 3489 NATs into account
 function connectivity_test_logic_double_nat() {
     ns_config=$1
     wg_config=$2
@@ -411,8 +414,9 @@ function connectivity_test_logic_double_nat() {
     nat3=$nat3_mapping-$nat3_filter
     nat4=$nat4_mapping-$nat4_filter
 
-    # Two Double NAT with at least one Symmetric NAT results in a relay connection
-    if [[ -n $nat4 && "$nat1 $nat2 $nat3 $nat4" =~ 2-2 ]]; then
+    # TS_PASS_RELAY only if one peer is behind at least one Symmetric NAT, and the other peer is behind at least one Symmetric/Port Restricted Cone NAT
+    # Since we skip symmetrical cases (see below), we can assume the Symmetric NAT is on peer 2's side
+    if [[ -n $nat4 && ( $nat1_filter -eq 2 || $nat2_filter -eq 2 ) && "$nat3 $nat4" =~ 2-2 ]]; then
         test_target="TS_PASS_RELAY"
     else
         test_target="TS_PASS_DIRECT"
@@ -497,7 +501,15 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
                     for nat2_filter in {0..2}; do
                         nat2=$nat2_mapping-$nat2_filter
 
-                        filter_nat_combinations TS_PASS_DIRECT private1_peer1:double1:router1:private1_peer2 $nat1:$nat2 wg0/ $nat1 $nat2
+                        if [[ $nat1_mapping -ge 1 && $nat1_filter -eq 2 ]]; then
+                            # Hairpinning is  done by nat2, so its mapping/filtering behaviour is irrelevant
+                            # However, if nat1 is A(P)DM-ADPF, UDP hole punching will fail because both peers are behind a too restrictive NAT
+                            test_target=TS_PASS_RELAY
+                        else
+                            test_target=TS_PASS_DIRECT
+                        fi
+
+                        filter_nat_combinations $test_target private1_peer1:double1:router1:private1_peer2 $nat1:$nat2 wg0/ $nat1 $nat2
                     done
                 done
             fi
