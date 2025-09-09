@@ -240,9 +240,13 @@ test_description="Test $test_idx. $nat_setup, target=$test_target, result="
 echo -n "$test_description"
 
 # Add log subdirectory for this system test
-new_dir="${log_dir}/${test_idx}_${nat1_description}_${nat2_description}"
-mkdir $new_dir
-log_dir=$new_dir
+log_dir="${log_dir}/${test_idx}_${nat1_description}"
+
+if [[ $hairpinning != true ]]; then
+    log_dir="${log_dir}_${nat2_description}"
+fi
+
+mkdir $log_dir
 
 function clean_exit() {
     exit_code=$1
