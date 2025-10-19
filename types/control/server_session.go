@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgcontrol"
 	"log/slog"
 	"net/netip"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgcontrol"
 )
 
 type ServerSession struct {
@@ -43,6 +44,8 @@ type ServerSession struct {
 	state ServerSessionState
 
 	server *Server
+
+	Expiry time.Time
 
 	// TODO
 	//  all synced state, known changes, queued changes, etc.
@@ -92,7 +95,6 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 		for ctx.Err() == nil {
 			msg := msgcontrol.LogonDeviceKey{}
 			err := s.conn.Expect(&msg, time.Millisecond*100)
-
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {
 					continue
@@ -103,17 +105,15 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 				errChan <- err
 
 				return
-			} else {
-				msgChan <- msg
-
-				return
 			}
+
+			msgChan <- msg
 		}
 	}()
 	wg.Add(1)
 
 	deviceKeySeen := false
-	authUrlSent := false
+	authURLSent := false
 
 	// TODO build timeout in here somewhere
 
@@ -134,20 +134,19 @@ func (s *ServerSession) doAuthenticate(resumed bool) error {
 			switch msg := authMsg.(type) {
 			case RejectAuth:
 				err := s.conn.Write(msg.LogonReject)
-
 				if err != nil {
-					return fmt.Errorf("error while writing logon reject: %w, %w", err, LogonRejectedError)
+					return fmt.Errorf("error while writing logon reject: %w, %w", err, ErrLogonRejected)
 				}
 
-				return LogonRejectedError
+				return ErrLogonRejected
 			case AcceptAuth:
 				return nil
-			case AuthUrl:
-				if authUrlSent {
+			case AuthURL:
+				if authURLSent {
 					// auth url already sent, this is a business logic error, we should error out
 					return fmt.Errorf("business logic sent auth url twice")
 				}
-				authUrlSent = true
+				authURLSent = true
 
 				err := s.conn.Write(&msgcontrol.LogonAuthenticate{
 					AuthenticateURL: msg.url,
@@ -179,11 +178,11 @@ type RejectAuth struct {
 
 type AcceptAuth struct{}
 
-type AuthUrl struct {
+type AuthURL struct {
 	url string
 }
 
-var LogonRejectedError = errors.New("authentication resulted in logon rejected")
+var ErrLogonRejected = errors.New("authentication resulted in logon rejected")
 
 // Knock asks the session goroutine/connection to "knock" (send ping, await pong) the session,
 // to make sure it is still alive.
@@ -198,7 +197,7 @@ func (s *ServerSession) Knock() (dangling bool) {
 func (s *ServerSession) Greet(otherSess *ServerSession, prop msgcontrol.Properties) {
 	s.Slog().Debug("Greet", "from", otherSess.Peer.Debug())
 
-	s.conn.Write(&msgcontrol.PeerAddition{
+	if err := s.conn.Write(&msgcontrol.PeerAddition{
 		PubKey:     otherSess.Peer,
 		SessKey:    otherSess.Sess,
 		IPv4:       otherSess.IPv4.Addr(),
@@ -206,7 +205,9 @@ func (s *ServerSession) Greet(otherSess *ServerSession, prop msgcontrol.Properti
 		Endpoints:  otherSess.CurrentEndpoints,
 		HomeRelay:  otherSess.HomeRelay,
 		Properties: prop,
-	})
+	}); err != nil {
+		slog.Error("error writing peer addition", "err", err)
+	}
 
 	s.greetedMu.Lock()
 	defer s.greetedMu.Unlock()
@@ -226,10 +227,12 @@ func (s *ServerSession) UpdateEndpoints(peer key.NodePublic, endpoints []netip.A
 
 	s.Slog().Debug("UpdateEndpoints", "from", peer.Debug(), "endpoints", endpoints)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:    peer,
 		Endpoints: endpoints,
-	})
+	}); err != nil {
+		slog.Error("error writing endpoints peer update", "err", err)
+	}
 }
 
 func (s *ServerSession) UpdateSessKey(peer key.NodePublic, sessKey key.SessionPublic) {
@@ -237,10 +240,12 @@ func (s *ServerSession) UpdateSessKey(peer key.NodePublic, sessKey key.SessionPu
 
 	s.Slog().Debug("UpdateSessKey", "from", peer.Debug(), "sess-key", sessKey)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:  peer,
 		SessKey: &sessKey,
-	})
+	}); err != nil {
+		slog.Error("error writing sess key peer update", "err", err)
+	}
 }
 
 func (s *ServerSession) UpdateHomeRelay(peer key.NodePublic, homeRelay int64) {
@@ -248,28 +253,34 @@ func (s *ServerSession) UpdateHomeRelay(peer key.NodePublic, homeRelay int64) {
 
 	s.Slog().Debug("UpdateHomeRelay", "from", peer.Debug(), "home-relay", homeRelay)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:    peer,
 		HomeRelay: &homeRelay,
-	})
+	}); err != nil {
+		slog.Error("error writing home relay peer update", "err", err)
+	}
 }
 
 func (s *ServerSession) UpdateProperties(peer key.NodePublic, prop msgcontrol.Properties) {
 	s.Slog().Debug("UpdateProperties", "from", peer.Debug(), "prop", prop)
 
-	s.conn.Write(&msgcontrol.PeerUpdate{
+	if err := s.conn.Write(&msgcontrol.PeerUpdate{
 		PubKey:     peer,
 		Properties: &prop,
-	})
+	}); err != nil {
+		slog.Error("error writing properties peer update", "err", err)
+	}
 }
 
 // Bye to another session, send PeerRemove
 func (s *ServerSession) Bye(peer key.NodePublic) {
 	s.Slog().Debug("Bye", "from", peer.Debug())
 
-	s.conn.Write(&msgcontrol.PeerRemove{
+	if err := s.conn.Write(&msgcontrol.PeerRemove{
 		PubKey: peer,
-	})
+	}); err != nil {
+		slog.Error("error writing peer remove message", "err", err)
+	}
 }
 
 // SendRelays sends all relay information to the client. This is not ran on Resume.
@@ -279,7 +290,7 @@ func (s *ServerSession) SendRelays() error {
 	return s.conn.Write(&msgcontrol.RelayUpdate{Relays: s.server.relays})
 }
 
-func (s *ServerSession) Resume(cc *Conn, sessKey key.SessionPublic) {
+func (s *ServerSession) Resume(_ *Conn, _ key.SessionPublic) {
 	// TODO: check sessKey == s.key, else send sesskeyupdate
 
 	// TODO we send nothing to the client except queued messages, which are backed up.
@@ -294,9 +305,10 @@ func (s *ServerSession) AuthenticateAccept() (err error) {
 	s.Slog().Debug("AuthenticateAccept")
 
 	if err = s.conn.Write(&msgcontrol.LogonAccept{
-		IP4:       s.IPv4,
-		IP6:       s.IPv6,
-		SessionID: s.ID,
+		IP4:        s.IPv4,
+		IP6:        s.IPv6,
+		AuthExpiry: s.Expiry,
+		SessionID:  s.ID,
 	}); err != nil {
 		err = fmt.Errorf("error when sending accept: %w", err)
 		return
@@ -306,10 +318,9 @@ func (s *ServerSession) AuthenticateAccept() (err error) {
 }
 
 func (s *ServerSession) AuthAndStart() error {
-	s.IPv4, s.IPv6 = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
+	s.IPv4, s.IPv6, s.Expiry = s.server.callbacks.OnSessionFinalize(SessID(s.ID), ClientID(s.Peer))
 
 	err := s.AuthenticateAccept()
-
 	if err != nil {
 		return fmt.Errorf("error while writing logon accept: %w", err)
 	}
@@ -327,12 +338,22 @@ func (s *ServerSession) Run() {
 	go func() {
 		<-s.Ctx.Done()
 
+		if errors.Is(s.Ctx.Err(), ErrNeedsDisconnect) {
+			if err := s.conn.Write(&msgcontrol.Disconnect{
+				Reason: "control requested disconnect",
+			}); err != nil {
+				slog.Error("error writing disconnect message", "err", err)
+			}
+		}
+
 		s.Slog().Info("session exiting", "err", context.Cause(s.Ctx), "peer", s.Peer.Debug())
 
 		s.server.RemoveSession(s)
 
 		if s.conn != nil {
-			s.conn.mc.Close()
+			if err := s.conn.mc.Close(); err != nil {
+				slog.Error("failed to close metaconn", "err", err)
+			}
 		}
 	}()
 
@@ -374,21 +395,22 @@ func (s *ServerSession) Run() {
 
 		return nil
 	})
-
 	if err != nil {
 		err = fmt.Errorf("could not send greets: %w", err)
 		return
 	}
 
-	//s.server.ForVisible(s, func(session *ServerSession) {
-	//	// TODO this currently blocks and holds the lock, we should make Greet async as well
-	//
-	//	// TODO there is no bubbling of errors, ignore? log?
-	//
-	//	session.Greet(s)
-	//
-	//	s.Greet(session)
-	//})
+	if s.Expiry != (time.Time{}) {
+		go func() {
+			select {
+			case <-s.Ctx.Done():
+			// FIXME on suspend/delay/wallclock change, this won't work properly,
+			//  find a time-until api that deals with wall-clock differences
+			case <-time.After(time.Until(s.Expiry)):
+				s.Ccc(ErrNeedsDisconnect)
+			}
+		}()
+	}
 
 	s.Slog().Info("established session")
 
@@ -396,7 +418,6 @@ func (s *ServerSession) Run() {
 		var m msgcontrol.ControlMessage
 
 		m, err = s.conn.Read(0)
-
 		if err != nil {
 			// TODO this currently removes the session on connection break; no resuming
 
@@ -427,35 +448,15 @@ func (s *ServerSession) Run() {
 				session.UpdateHomeRelay(s.Peer, msg.HomeRelay)
 			})
 		case *msgcontrol.Pong:
+			s.Slog().Debug("received pong")
 			// TODO
+		case *msgcontrol.LogonDeviceKey:
+			s.Slog().Debug("received after-logon logon device key, ignoring...")
 		default:
 			err = fmt.Errorf("received unknown type of message: %#v", msg)
 			return
 		}
 	}
-
-	time.Sleep(30 * time.Second)
-
-	// TODO make other peers aware
-
-	// for now, send a reject
-	//if err = s.conn.Write(&msgcontrol.LogonReject{
-	//	Reason:        "dev: reject unambiguously",
-	//	RetryStrategy: 0,
-	//}); err != nil {
-	//	err = fmt.Errorf("error when sending reject: %w", err)
-	//	return
-	//}
-
-	return
-
-	// TODO after Accept, we send the client peer and relay definitions,
-	//  but we need to wait for the client to send their home relay and endpoints,
-	//  before we'd (ideally) send a complete peer info to other clients.
-	//  We will wait 10 seconds for this, before timing out and sending incomplete information.
-
-	// TODO
-	panic("implement me")
 }
 
 func (s *ServerSession) Slog() *slog.Logger {

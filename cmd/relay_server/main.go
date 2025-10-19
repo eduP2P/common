@@ -6,10 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/relay"
-	"github.com/edup2p/common/types/relay/relayhttp"
-	stunserver "github.com/edup2p/common/types/stun"
 	"io"
 	"log"
 	"log/slog"
@@ -22,6 +18,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
+	"github.com/edup2p/common/types/relay/relayhttp"
+	stunserver "github.com/edup2p/common/types/stun"
 )
 
 var (
@@ -44,9 +45,6 @@ const ToverSokRelayDefaultHTML = `
 
 func main() {
 	flag.Parse()
-
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
 
 	if *dev {
 		*addr = "127.0.0.1:3340"
@@ -71,12 +69,15 @@ func main() {
 		log.Fatalf("could not parse stun-combined addrport: %v", err)
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	stunServer := stunserver.NewServer(ctx)
-	go stunServer.ListenAndServe(ap)
-
-	// TODO add STUN here
-
-	// TODO continue here
+	go func() {
+		if err := stunServer.ListenAndServe(ap); err != nil {
+			slog.Error("stun server listen error", "err", err)
+		}
+	}()
 
 	cfg := loadConfig()
 
@@ -88,27 +89,29 @@ func main() {
 
 	mux.Handle("/relay", relayhttp.ServerHandler(server))
 
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 
-		io.WriteString(w, ToverSokRelayDefaultHTML)
+		if _, err := io.WriteString(w, ToverSokRelayDefaultHTML); err != nil {
+			slog.Error("failed to write default HTML response", "err", err)
+		}
 	}))
 
-	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
-		io.WriteString(w, "User-agent: *\nDisallow: /\n")
+		if _, err := io.WriteString(w, "User-agent: *\nDisallow: /\n"); err != nil {
+			slog.Error("failed to write robots.txt", "err", err)
+		}
 	}))
 	mux.Handle("/generate_204", http.HandlerFunc(serverCaptivePortalBuster))
 
 	httpsrv := &http.Server{
 		Addr:    *addr,
 		Handler: mux,
-		// TODO
-		//ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -116,16 +119,18 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		httpsrv.Shutdown(ctx)
+		if err := httpsrv.Shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown server", "err", err)
+		}
 	}()
 
-	// TODO setup TLS with autocert
+	// TODO setup TLS with autocert: https://github.com/eduP2P/relay-server/issues/2
 
 	slog.Info("relay: serving", "addr", *addr)
 	err = httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("relay: error %s", err)
+		log.Fatalf("relay: error %s", err) //nolint:gocritic
 	}
 }
 
@@ -183,6 +188,7 @@ func loadConfig() Config {
 		return writeNewConfig()
 	case err != nil:
 		log.Fatal(err)
+		//goland:noinspection GoUnreachableCode
 		panic("unreachable")
 	default:
 		var cfg Config
@@ -194,7 +200,7 @@ func loadConfig() Config {
 }
 
 func writeNewConfig() Config {
-	if err := os.MkdirAll(filepath.Dir(*configPath), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(*configPath), 0o777); err != nil {
 		log.Fatal(err)
 	}
 	cfg := newConfig()
@@ -202,7 +208,7 @@ func writeNewConfig() Config {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile(*configPath, b, 0600); err != nil {
+	if err := os.WriteFile(*configPath, b, 0o600); err != nil {
 		log.Fatal(err)
 	}
 	return cfg

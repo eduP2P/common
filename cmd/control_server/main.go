@@ -6,10 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/edup2p/common/types/control"
-	"github.com/edup2p/common/types/control/controlhttp"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/relay"
 	"io"
 	"log"
 	"log/slog"
@@ -23,13 +19,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/edup2p/common/types/control"
+	"github.com/edup2p/common/types/control/controlhttp"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
 )
 
 var (
-	//dev        = flag.Bool("dev", false, "run in localhost development mode (overrides -a)")
 	addr       = flag.String("a", ":443", "server HTTP/HTTPS listen address, in form \":port\", \"ip:port\", or for IPv6 \"[ip]:port\". If the IP is omitted, it defaults to all interfaces. Serves HTTPS if the port is 443 and/or -certmode is manual, otherwise HTTP.")
 	configPath = flag.String("c", "", "config file path")
-	//stunPort   = flag.Int("stun-port", stunserver.DefaultPort, "The UDP port on which to serve STUN. The listener is bound to the same IP (if any) as specified in the -a flag.")
 
 	publicFacingBaseString = flag.String("u", "", "public facing base URL (required)")
 	publicFacingBase       *url.URL
@@ -44,7 +43,7 @@ var (
 func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: programLevel,
-		//AddSource: true,
+		// AddSource: true,
 	})
 	slog.SetDefault(slog.New(h))
 	programLevel.Set(-8)
@@ -92,9 +91,11 @@ func main() {
 
 	mux.Handle("/", handleStaticHTML(ToverSokControlDefaultHTML))
 
-	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
-		io.WriteString(w, "User-agent: *\nDisallow: /\n")
+		if _, err := io.WriteString(w, "User-agent: *\nDisallow: /\n"); err != nil {
+			slog.Error("could not write robots.txt", "err", err)
+		}
 	}))
 	mux.Handle("/generate_204", http.HandlerFunc(serverCaptivePortalBuster))
 
@@ -117,7 +118,7 @@ func main() {
 		Addr:    *addr,
 		Handler: mux,
 		// TODO
-		//ErrorLog: slog.NewLogLogger(),
+		// ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -125,7 +126,9 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		httpsrv.Shutdown(ctx)
+		if err := httpsrv.Shutdown(ctx); err != nil {
+			slog.Error("could not shutdown control server", "err", err)
+		}
 	}()
 
 	// TODO setup TLS with autocert?
@@ -134,7 +137,7 @@ func main() {
 	err = httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("control: error %s", err)
+		log.Fatalf("control: error %s", err) //nolint:gocritic
 	}
 }
 
@@ -149,7 +152,7 @@ type ControlServer struct {
 
 func (cs *ControlServer) HandleAuthRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Redirect(w, r, "/auth/land", 302)
+		http.Redirect(w, r, "/auth/land", http.StatusFound)
 		return
 	}
 
@@ -165,16 +168,15 @@ func (cs *ControlServer) HandleAuthRequest(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
-		http.Redirect(w, r, "/auth/success", 302)
+		http.Redirect(w, r, "/auth/success", http.StatusFound)
 	} else {
 		// Fail
-		http.Redirect(w, r, "/auth/fail", 302)
+		http.Redirect(w, r, "/auth/fail", http.StatusFound)
 	}
-
 }
 
 func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID) {
-	println("OnSessionCreate")
+	slog.Info("OnSessionCreate", "id", id, "cid", cid)
 
 	if cs.isKnown(key.NodePublic(cid)) {
 		go func() {
@@ -186,31 +188,30 @@ func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID
 		return
 	}
 
-	url, _ := url.Parse(string("/auth/land?session=" + id))
-	if err := cs.server.SendAuthURL(id, publicFacingBase.ResolveReference(url).String()); err != nil {
+	redirectURL, _ := url.Parse(string("/auth/land?session=" + id))
+	if err := cs.server.SendAuthURL(id, publicFacingBase.ResolveReference(redirectURL).String()); err != nil {
 		slog.Error("error sending auth URL", "id", id, "err", err)
 	}
 }
 
-func (cs *ControlServer) OnSessionResume(id control.SessID, id2 control.ClientID) {
-	println("OnSessionResume")
-	return // noop
+func (cs *ControlServer) OnSessionResume(sess control.SessID, cid control.ClientID) {
+	slog.Info("OnSessionResume", "sess", sess, "cid", cid)
 }
 
-func (cs *ControlServer) OnDeviceKey(id control.SessID, key string) {
-	println("OnDeviceKey")
-	return // noop
+func (cs *ControlServer) OnDeviceKey(sess control.SessID, deviceKey string) {
+	slog.Info("OnDeviceKey", "sess", sess, "deviceKey", deviceKey)
 }
 
-func (cs *ControlServer) OnSessionFinalize(id control.SessID, id2 control.ClientID) (netip.Prefix, netip.Prefix) {
-	println("OnSessionFinalize")
+func (cs *ControlServer) OnSessionFinalize(sess control.SessID, cid control.ClientID) (netip.Prefix, netip.Prefix, time.Time) {
+	slog.Info("OnSessionFinalize", "sess", sess, "cid", cid)
 
-	return cs.getIPs(key.NodePublic(id2))
+	ip4, ip6 := cs.getIPs(key.NodePublic(cid))
+
+	return ip4, ip6, time.Now().Add(time.Hour * 24 * 7)
 }
 
-func (cs *ControlServer) OnSessionDestroy(id control.SessID, id2 control.ClientID) {
-	println("OnSessionDestroy")
-	return // noop
+func (cs *ControlServer) OnSessionDestroy(sess control.SessID, cid control.ClientID) {
+	slog.Info("OnSessionDestroy", "sess", sess, "cid", cid)
 }
 
 func LoadServer(ctx context.Context) *ControlServer {
@@ -248,7 +249,9 @@ func (cs *ControlServer) loadExistingNodes() {
 				continue
 			}
 
-			if err := cs.server.UpsertVisibilityPair(client, client2, control.VisibilityPair{}); err != nil {
+			if err := cs.server.UpsertVisibilityPair(client, client2, control.VisibilityPair{
+				MDNS: true,
+			}); err != nil {
 				panic(err)
 			}
 		}
@@ -261,7 +264,9 @@ func (cs *ControlServer) addNewNode(node key.NodePublic) {
 			continue
 		}
 
-		if err := cs.server.UpsertVisibilityPair(control.ClientID(node), control.ClientID(node2), control.VisibilityPair{}); err != nil {
+		if err := cs.server.UpsertVisibilityPair(control.ClientID(node), control.ClientID(node2), control.VisibilityPair{
+			MDNS: true,
+		}); err != nil {
 			panic(err)
 		}
 	}
@@ -371,14 +376,16 @@ func handleStaticHTML(doc string) http.HandlerFunc {
 	}
 }
 
-func sendStaticHTML(doc string, w http.ResponseWriter, r *http.Request) {
+func sendStaticHTML(doc string, w http.ResponseWriter, _ *http.Request) {
 	browserHeaders(w)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 
-	io.WriteString(w, doc)
+	if _, err := io.WriteString(w, doc); err != nil {
+		slog.Error("failed to write static HTML page", "error", err)
+	}
 }
 
 const ToverSokControlDefaultHTML = `
@@ -488,6 +495,7 @@ func loadConfig() Config {
 		return writeNewConfig()
 	case err != nil:
 		log.Fatal(err)
+		//goland:noinspection GoUnreachableCode
 		panic("unreachable")
 	default:
 		var cfg Config
@@ -507,14 +515,14 @@ func writeNewConfig() Config {
 }
 
 func writeConfig(cfg Config, path string) {
-	if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		log.Fatal(err)
 	}
 	b, err := json.MarshalIndent(cfg, "", "\t")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile(path, b, 0600); err != nil {
+	if err := os.WriteFile(path, b, 0o600); err != nil {
 		log.Fatal(err)
 	}
 }

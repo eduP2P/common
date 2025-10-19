@@ -1,10 +1,13 @@
 package ifaces
 
 import (
+	"context"
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
-	"net/netip"
 )
 
 // ControlCallbacks are the possible updates that the control server wishes to inform the client about.
@@ -13,7 +16,7 @@ type ControlCallbacks interface {
 	AddPeer(
 		peer key.NodePublic,
 		homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic,
-		ip4 netip.Addr, ip6 netip.Addr,
+		ip4, ip6 netip.Addr,
 		prop msgcontrol.Properties,
 	) error
 
@@ -43,6 +46,9 @@ type ControlInterface interface {
 	//
 	// As it is a netip.Prefix, it also includes the expected ipv6 range that all peers will be on.
 	IPv6() netip.Prefix
+	// Expiry of the current control session, defaults to zero-value if there is no expiry,
+	// or session is not connected.
+	Expiry() time.Time
 
 	// UpdateEndpoints informs the server of any changes in STUN-resolved endpoints. This is a set-replace operation.
 	UpdateEndpoints([]netip.AddrPort) error
@@ -53,6 +59,8 @@ type ControlInterface interface {
 // ControlSession is an interface representing an active control session.
 type ControlSession interface {
 	ControlInterface
+
+	Context() context.Context
 
 	// InstallCallbacks installs the current session's callbacks to another interface.
 	//

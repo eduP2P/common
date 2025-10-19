@@ -1,15 +1,15 @@
 package router
 
 import (
-	"log"
+	"fmt"
 	"net/netip"
 	"os/exec"
 )
 
-func prefixesToAdd(new, curr []netip.Prefix) (add []netip.Prefix) {
-	for _, cur := range new {
+func prefixesToAdd(newP, currP []netip.Prefix) (add []netip.Prefix) {
+	for _, cur := range newP {
 		found := false
-		for _, v := range curr {
+		for _, v := range currP {
 			found = v == cur
 			if found {
 				break
@@ -22,10 +22,10 @@ func prefixesToAdd(new, curr []netip.Prefix) (add []netip.Prefix) {
 	return
 }
 
-func prefixesToRemove(new, curr []netip.Prefix) (remove []netip.Prefix) {
-	for _, cur := range curr {
+func prefixesToRemove(newP, currP []netip.Prefix) (remove []netip.Prefix) {
+	for _, cur := range currP {
 		found := false
-		for _, v := range new {
+		for _, v := range newP {
 			found = v == cur
 			if found {
 				break
@@ -38,6 +38,8 @@ func prefixesToRemove(new, curr []netip.Prefix) (remove []netip.Prefix) {
 	return
 }
 
+// nolint:unused
+// used in router_bsd, golangci-lint on linux trips over it
 func inet(p netip.Prefix) string {
 	if p.Addr().Is6() {
 		return "inet6"
@@ -47,11 +49,14 @@ func inet(p netip.Prefix) string {
 
 func cmd(args ...string) *exec.Cmd {
 	if len(args) == 0 {
-		log.Fatalf("exec.Cmd(%#v) invalid; need argv[0]", args)
+		// We control this input, and without argv[0] we can't do anything anyways.
+		panic(fmt.Errorf("exec.Cmd(%#v) invalid; need at least 1 argument", args))
 	}
 	return exec.Command(args[0], args[1:]...)
 }
 
+// nolint:unused
+// used in router_bsd, golangci-lint on linux trips over it
 func prefixToSingle(prefix netip.Prefix) netip.Prefix {
 	return netip.PrefixFrom(prefix.Addr(), prefix.Addr().BitLen())
 }

@@ -2,8 +2,9 @@ package actors
 
 import (
 	"context"
-	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
+
+	"github.com/edup2p/common/types/msgactor"
 )
 
 type ActorCommon struct {
@@ -16,7 +17,7 @@ type ActorCommon struct {
 func MakeCommon(pCtx context.Context, chLen int) *ActorCommon {
 	ctx, ctxCan := context.WithCancel(pCtx)
 
-	var inbox chan msgactor.ActorMessage = nil
+	var inbox chan msgactor.ActorMessage
 
 	if chLen >= 0 {
 		inbox = make(chan msgactor.ActorMessage, chLen)
@@ -36,6 +37,10 @@ func (ac *ActorCommon) Inbox() chan<- msgactor.ActorMessage {
 
 func (ac *ActorCommon) Cancel() {
 	ac.ctxCan()
+}
+
+func (ac *ActorCommon) Ctx() context.Context {
+	return ac.ctx
 }
 
 func (ac *ActorCommon) logUnknownMessage(am msgactor.ActorMessage) {

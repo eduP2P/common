@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/control"
 	"github.com/edup2p/common/types/dial"
@@ -26,6 +27,6 @@ func Dial(ctx context.Context, opts dial.Opts, getPriv func() *key.NodePrivate, 
 	opts.SetDefaults()
 
 	return dial.HTTP(ctx, opts, makeControlURL(opts), control.UpgradeProtocol, func(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, opts dial.Opts) (*control.Client, error) {
-		return control.EstablishClient(ctx, mc, brw, opts.EstablishTimeout, getPriv, getSess, controlKey, session, logon)
+		return control.EstablishClient(parentCtx, mc, brw, opts.EstablishTimeout, getPriv, getSess, controlKey, session, logon)
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"time"
@@ -13,7 +14,6 @@ import (
 // WithTLS does a "full" dial, including TLS wrapping and CN checking
 func WithTLS(ctx context.Context, opts Opts) (net.Conn, error) {
 	netConn, err := TCP(ctx, opts)
-
 	if err != nil {
 		return nil, fmt.Errorf("tcp dial failed: %w", err)
 	}
@@ -34,6 +34,7 @@ func TLS(conn net.Conn, opts Opts) *tls.Conn {
 	case opts.Domain != "":
 		cfg.ServerName = opts.Domain
 	default:
+		// We assume this is sane, else some upstream provider of the opt isn't proper with what it gives
 		panic("TLS defined, but no domain provided")
 	}
 
@@ -45,7 +46,7 @@ func TCP(ctx context.Context, opts Opts) (net.Conn, error) {
 
 	var err error
 
-	if opts.Addrs == nil || len(opts.Addrs) == 0 {
+	if len(opts.Addrs) == 0 {
 		opts.Addrs, err = net.DefaultResolver.LookupNetIP(ctx, "ip", opts.Domain)
 		if err != nil {
 			return nil, fmt.Errorf("failed to lookup %s: %w", opts.Domain, err)
@@ -73,13 +74,15 @@ func TCP(ctx context.Context, opts Opts) (net.Conn, error) {
 	for _, addr := range opts.Addrs {
 		ap := netip.AddrPortFrom(addr, opts.Port)
 		go func() {
-			c, e := dialOneTCP(dialCtx, ap)
+			conn, err := dialOneTCP(dialCtx, ap)
 
 			select {
-			case results <- dialResult{c: c, e: e}:
+			case results <- dialResult{c: conn, e: err}:
 			case <-returned:
-				if c != nil {
-					c.Close()
+				if conn != nil {
+					if err := conn.Close(); err != nil {
+						slog.Error("failed to close tcp connection while multi-dialing", "err", err)
+					}
 				}
 			}
 		}()
@@ -117,6 +120,7 @@ func dialOneTCP(ctx context.Context, ap netip.AddrPort) (net.Conn, error) {
 
 	var d net.Dialer
 	d.LocalAddr = nil
+	d.KeepAlive = time.Second * 10
 
 	return d.DialContext(ctx, "tcp", ap.String())
 }

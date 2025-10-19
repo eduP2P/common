@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type ChannelConn struct {
 	// Packets written by the frontend
 	outgoing chan []byte
 
+	doClose sync.Once
+
 	currentReadDeadline time.Time
 }
 
@@ -24,9 +27,8 @@ const ChannelConnBufferSize = 16
 
 func makeChannelConn() *ChannelConn {
 	return &ChannelConn{
-		incoming:            make(chan []byte, ChannelConnBufferSize),
-		outgoing:            make(chan []byte, ChannelConnBufferSize),
-		currentReadDeadline: time.Time{},
+		incoming: make(chan []byte, ChannelConnBufferSize),
+		outgoing: make(chan []byte, ChannelConnBufferSize),
 	}
 }
 
@@ -64,15 +66,15 @@ func (cc *ChannelConn) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (cc *ChannelConn) WriteToUDPAddrPort(b []byte, addr netip.AddrPort) (int, error) {
+func (cc *ChannelConn) WriteToUDPAddrPort(_ []byte, _ netip.AddrPort) (int, error) {
 	return 0, net.ErrWriteToConnected
 }
 
 func (cc *ChannelConn) Close() error {
-	// TODO boolean to check if is already closed?
-
-	close(cc.outgoing)
-	close(cc.incoming)
+	cc.doClose.Do(func() {
+		close(cc.outgoing)
+		close(cc.incoming)
+	})
 
 	return nil
 }
@@ -92,7 +94,7 @@ func (cc *ChannelConn) tryGetOut() (pkt []byte) {
 // Reads a packet from the outgoing channel, and waits.
 //
 // Returns nil on timeout.
-func (cc *ChannelConn) getOut(d time.Duration) (pkt []byte) {
+func (cc *ChannelConn) getOut(d time.Duration) (pkt []byte) { // nolint:unused
 	select {
 	case pkt = <-cc.outgoing:
 	case <-time.After(d):
@@ -105,7 +107,6 @@ func (cc *ChannelConn) getOut(d time.Duration) (pkt []byte) {
 //
 // Will return false on timeout.
 func (cc *ChannelConn) putIn(pkt []byte, d time.Duration) (ok bool) {
-
 	select {
 	case cc.incoming <- pkt:
 		ok = true

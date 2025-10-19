@@ -27,10 +27,10 @@ func TestOutConn(t *testing.T) {
 
 	wgConn := &MockUDPConn{
 		writeCh: make(chan []byte),
-		setReadDeadline: func(t time.Time) error {
+		setReadDeadline: func(time.Time) error {
 			return nil
 		},
-		readFromUDPAddrPort: func(b []byte) (n int, addr netip.AddrPort, err error) {
+		readFromUDPAddrPort: func([]byte) (n int, addr netip.AddrPort, err error) {
 			return 0, dummyAddrPort, nil
 		},
 	}

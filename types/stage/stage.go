@@ -2,9 +2,10 @@
 package stage
 
 import (
-	"github.com/edup2p/common/types/key"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types/key"
 )
 
 type SentPing struct {
@@ -20,4 +21,6 @@ type PeerInfo struct {
 	Endpoints           []netip.AddrPort
 	RendezvousEndpoints []netip.AddrPort
 	Session             key.SessionPublic
+	IPv4, IPv6          netip.Addr
+	MDNS                bool
 }

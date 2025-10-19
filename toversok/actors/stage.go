@@ -3,14 +3,6 @@ package actors
 import (
 	"context"
 	"errors"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/ifaces"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgactor"
-	"github.com/edup2p/common/types/msgcontrol"
-	"github.com/edup2p/common/types/relay"
-	"github.com/edup2p/common/types/stage"
-	"golang.org/x/exp/maps"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -18,26 +10,27 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgactor"
+	"github.com/edup2p/common/types/msgcontrol"
+	"github.com/edup2p/common/types/relay"
+	"github.com/edup2p/common/types/relay/relayhttp"
+	"github.com/edup2p/common/types/stage"
+	"golang.org/x/exp/maps"
 )
 
 type OutConnActor interface {
 	ifaces.Actor
-
-	Ctx() context.Context
 }
 
 type InConnActor interface {
 	ifaces.Actor
 
-	Ctx() context.Context
-
 	ForwardPacket(pkt []byte)
 }
-
-//udp, err := net.ListenUDP("udp", net.UDPAddrFromAddrPort(netip.AddrPortFrom(netip.IPv4Unspecified(), localPort)))
-//if err != nil {
-//	panic(fmt.Sprintf("could not create listenUDP: %s", err))
-//}
 
 func MakeStage(
 	pCtx context.Context,
@@ -48,11 +41,20 @@ func MakeStage(
 	bindExt func() types.UDPConn,
 	bindLocal func(peer key.NodePublic) types.UDPConn,
 	controlSession ifaces.ControlInterface,
+
+	dialRelayFunc relayhttp.RelayDialFunc,
+
+	wgIf *net.Interface,
 ) ifaces.Stage {
-	ctx := context.WithoutCancel(pCtx)
+	if dialRelayFunc == nil {
+		dialRelayFunc = relayhttp.Dial
+	}
+
+	ctx, cancel := context.WithCancel(pCtx)
 
 	s := &Stage{
-		Ctx: ctx,
+		Ctx:    ctx,
+		cancel: cancel,
 
 		connMutex: sync.RWMutex{},
 		inConn:    make(map[key.NodePublic]InConnActor),
@@ -69,6 +71,10 @@ func MakeStage(
 		ext:       bindExt(),
 		bindLocal: bindLocal,
 		control:   controlSession,
+
+		wgIf: wgIf,
+
+		dialRelayFunc: dialRelayFunc,
 	}
 
 	s.DMan = s.makeDM(s.ext)
@@ -80,14 +86,37 @@ func MakeStage(
 	s.TMan = s.makeTM()
 	s.SMan = s.makeSM(sessPriv)
 	s.EMan = s.makeEM()
+	s.MMan = s.makeMM()
+
+	s.installAfterFunc()
 
 	return s
+}
+
+func (s *Stage) installAfterFunc() {
+	context.AfterFunc(s.Ctx, s.Close)
+
+	// TODO: self-heal. Currently these just cancel the stage, which then propagates back upwards, but we should figure
+	//  out if its possible to heal components.
+
+	context.AfterFunc(s.DMan.Ctx(), s.cancel)
+	context.AfterFunc(s.DRouter.Ctx(), s.cancel)
+
+	context.AfterFunc(s.RMan.Ctx(), s.cancel)
+	context.AfterFunc(s.RRouter.Ctx(), s.cancel)
+
+	context.AfterFunc(s.TMan.Ctx(), s.cancel)
+	context.AfterFunc(s.SMan.Ctx(), s.cancel)
+	context.AfterFunc(s.EMan.Ctx(), s.cancel)
+	context.AfterFunc(s.MMan.Ctx(), s.cancel)
 }
 
 // Stage for the Actors
 type Stage struct {
 	// The parent context of the stage that all actors must parent
 	Ctx context.Context
+
+	cancel context.CancelFunc
 
 	// The DirectManager
 	DMan ifaces.DirectManagerActor
@@ -105,13 +134,17 @@ type Stage struct {
 	SMan ifaces.SessionManagerActor
 	// The EndpointManager
 	EMan ifaces.EndpointManagerActor
+	// The MDNSManager
+	MMan ifaces.MDNSManagerActor
 
 	connMutex sync.RWMutex
 	inConn    map[key.NodePublic]InConnActor
 	outConn   map[key.NodePublic]OutConnActor
 
-	getNodePriv    func() *key.NodePrivate
-	getSessPriv    func() *key.SessionPrivate
+	getNodePriv func() *key.NodePrivate
+	getSessPriv func() *key.SessionPrivate
+
+	endpointMutex  sync.RWMutex
 	localEndpoints []netip.AddrPort
 	stunEndpoints  []netip.AddrPort
 
@@ -122,15 +155,20 @@ type Stage struct {
 
 	control ifaces.ControlInterface
 
+	wgIf *net.Interface
+
 	//// A repeatable function to an outside context to acquire a new UDPconn,
 	//// once a peer conn has died for whatever reason.
-	//reviveOutConn func(peer key.NodePublic) *net.UDPConn
+	// TODO rework this?
+	// reviveOutConn func(peer key.NodePublic) *net.UDPConn
 	//
-	//makeOutConn func(udp UDPConn, peer key.NodePublic, s *Stage) OutConnActor
-	//makeInConn  func(udp UDPConn, peer key.NodePublic, s *Stage) InConnActor
+	// makeOutConn func(udp UDPConn, peer key.NodePublic, s *Stage) OutConnActor
+	// makeInConn  func(udp UDPConn, peer key.NodePublic, s *Stage) InConnActor
 
 	ext       types.UDPConn
 	bindLocal func(peer key.NodePublic) types.UDPConn
+
+	dialRelayFunc relayhttp.RelayDialFunc
 }
 
 // Start kicks off goroutines for the stage and returns
@@ -144,6 +182,7 @@ func (s *Stage) Start() {
 	go s.TMan.Run()
 	go s.SMan.Run()
 	go s.EMan.Run()
+	go s.MMan.Run()
 
 	go s.DMan.Run()
 	go s.DRouter.Run()
@@ -152,6 +191,12 @@ func (s *Stage) Start() {
 	go s.RRouter.Run()
 
 	s.started = true
+}
+
+func (s *Stage) Close() {
+	if err := s.ext.Close(); err != nil {
+		slog.Error("error closing ext for stage", "err", err)
+	}
 }
 
 // Watchdog will be run to constantly check for faults on the stage and repair them.
@@ -222,7 +267,7 @@ func (s *Stage) reapableConnsLocked() []key.NodePublic {
 
 			if !ok {
 				// outconn is gone for some reason, this is fine for now
-				// TODO log this?
+				slog.Warn("missing outconn pair to inconn, this is fine, but odd", "peer", peer.Debug())
 			} else {
 				out.Cancel()
 			}
@@ -256,7 +301,7 @@ func (s *Stage) reapableConnsLocked() []key.NodePublic {
 	return peers
 }
 
-func (s *Stage) syncableConnsLocked() (added []key.NodePublic, deleted []key.NodePublic) {
+func (s *Stage) syncableConnsLocked() (added, deleted []key.NodePublic) {
 	piPeers := maps.Keys(s.peerInfo)
 	connPeers := types.SetUnion(maps.Keys(s.inConn), maps.Keys(s.outConn))
 
@@ -343,19 +388,12 @@ func (s *Stage) InConnFor(peer key.NodePublic) InConnActor {
 	return s.inConn[peer]
 }
 
-//// AddConn creates an InConn and OutConn for a specified connection.
-//// Starting each Actor'S goroutines as well. It also starts a SockRecv given the
-//// udp connection.
-//func (s *Stage) AddConn(udp *net.UDPConn, peer key.NodePublic, info *PeerInfo) {
-//	s.UpdateSessionKey(peer, session)
-//	s.addConn(udp, peer, homeRelay)
-//}
-
 // addConnLocked assumes Stage.connMutex and Stage.peerInfoMutex is held by caller.
 func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 	pi := s.peerInfo[peer]
 
 	if pi == nil {
+		// We run this with the assumption that peerinfo has been given to us
 		panic("expecting to have peer information at this point")
 	}
 
@@ -370,15 +408,15 @@ func (s *Stage) addConnLocked(peer key.NodePublic, udp types.UDPConn) {
 }
 
 func (s *Stage) GetEndpoints() []netip.AddrPort {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.endpointMutex.RLock()
+	defer s.endpointMutex.RUnlock()
 
 	return slices.Concat(s.localEndpoints, s.stunEndpoints)
 }
 
 func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
-	s.connMutex.Lock()
-	defer s.connMutex.Unlock()
+	s.endpointMutex.Lock()
+	defer s.endpointMutex.Unlock()
 
 	sortEndpointSlice(endpoints)
 
@@ -393,8 +431,8 @@ func (s *Stage) setSTUNEndpoints(endpoints []netip.AddrPort) {
 }
 
 func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
-	s.connMutex.RLock()
-	defer s.connMutex.RUnlock()
+	s.endpointMutex.Lock()
+	defer s.endpointMutex.Unlock()
 
 	localPort := s.getLocalPort()
 
@@ -406,6 +444,7 @@ func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
 
 	var endpoints []netip.AddrPort
 
+	// Filter own endpoint, and also append localport
 	for _, addr := range addrs {
 		if s.control.IPv4().Contains(addr) || s.control.IPv6().Contains(addr) {
 			continue
@@ -426,6 +465,15 @@ func (s *Stage) setLocalEndpoints(addrs []netip.Addr) {
 	s.localEndpoints = endpoints
 
 	s.notifyEndpointChanged()
+}
+
+func (s *Stage) getLocalEndpoints() []netip.Addr {
+	s.endpointMutex.RLock()
+	defer s.endpointMutex.RUnlock()
+
+	return types.Map(s.localEndpoints, func(t netip.AddrPort) netip.Addr {
+		return t.Addr()
+	})
 }
 
 func (s *Stage) getLocalPort() uint16 {
@@ -461,7 +509,7 @@ func (s *Stage) notifyEndpointChanged() {
 	}
 }
 
-func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, _ netip.Addr, _ netip.Addr, prop msgcontrol.Properties) error {
+func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4, ip6 netip.Addr, prop msgcontrol.Properties) error {
 	s.peerInfoMutex.Lock()
 
 	defer func() {
@@ -480,6 +528,9 @@ func (s *Stage) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.
 		Endpoints:           types.NormaliseAddrPortSlice(endpoints),
 		RendezvousEndpoints: make([]netip.AddrPort, 0),
 		Session:             session,
+		IPv4:                ip4,
+		IPv6:                ip6,
+		MDNS:                prop.MDNS,
 	}
 
 	return nil
@@ -497,6 +548,9 @@ func (s *Stage) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []ne
 		}
 		if session != nil {
 			info.Session = *session
+		}
+		if prop != nil {
+			info.MDNS = prop.MDNS
 		}
 	})
 }
@@ -547,6 +601,19 @@ func (s *Stage) GetPeerInfo(peer key.NodePublic) *stage.PeerInfo {
 	return s.peerInfo[peer]
 }
 
+func (s *Stage) GetPeersWhere(f func(key.NodePublic, *stage.PeerInfo) bool) []key.NodePublic {
+	s.peerInfoMutex.RLock()
+	defer s.peerInfoMutex.RUnlock()
+
+	var peers []key.NodePublic
+	for peer, info := range s.peerInfo {
+		if f(peer, info) {
+			peers = append(peers, peer)
+		}
+	}
+	return peers
+}
+
 func (s *Stage) RemovePeer(peer key.NodePublic) error {
 	s.peerInfoMutex.Lock()
 	delete(s.peerInfo, peer)
@@ -571,40 +638,6 @@ func (s *Stage) ControlSTUN() []netip.AddrPort {
 	return []netip.AddrPort{}
 }
 
-//func (s *Stage) RemoveConn(peer key.NodePublic) {
-//	s.connMutex.Lock()
-//	defer s.connMutex.Unlock()
-//
-//	in, inok := s.inConn[peer]
-//	out, outok := s.inConn[peer]
-//
-//	if !inok && !outok {
-//		// both already removed, we're done here
-//		return
-//	}
-//
-//	if inok != outok {
-//		// only one of them removed?
-//		// we could recover this, but this is a bug, panic.
-//		panic(fmt.Sprintf("InConn or OutConn presence on stage was disbalanced: in=%t, out=%t", inok, outok))
-//	}
-//
-//	// Now we know both exist
-//
-//	delete(s.inConn, peer)
-//	delete(s.outConn, peer)
-//
-//	in.Cancel()
-//	out.Cancel()
-//
-//	// OutConn cancel:
-//	//   this closes the outch in SockRecv,
-//	//   sends "outconn goodbye" to traffic manager,
-//	//
-//	// InConn cancel:
-//	//   sends "outconn goodbye" to traffic manager.
-//
-//	// When TM has received both goodbyes:
-//	//   removes from internal activity tracking,
-//	//   and removes mapping from direct router.
-//}
+func (s *Stage) Context() context.Context {
+	return s.Ctx
+}

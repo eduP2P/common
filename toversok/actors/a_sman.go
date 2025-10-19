@@ -2,10 +2,12 @@ package actors
 
 import (
 	"fmt"
+	"runtime/debug"
+	"slices"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
-	msg2 "github.com/edup2p/common/types/msgsess"
-	"slices"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 // SessionManager receives frames from routers and decrypts them,
@@ -23,11 +25,11 @@ type SessionManager struct {
 var DebugSManTakeNodeAsSession = false
 
 func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
-	sm := &SessionManager{
+	sm := assureClose(&SessionManager{
 		ActorCommon: MakeCommon(s.Ctx, SessManInboxChLen),
 		s:           s,
 		session:     priv,
-	}
+	})
 
 	L(sm).Debug("sman with session key", "sess", priv().Public().Debug())
 
@@ -35,23 +37,22 @@ func (s *Stage) makeSM(priv func() *key.SessionPrivate) *SessionManager {
 }
 
 func (sm *SessionManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(sm).Error("panicked", "panic", v)
-			sm.Cancel()
-			bail(sm.ctx, v)
-		}
-	}()
-
 	if !sm.running.CheckOrMark() {
 		L(sm).Warn("tried to run agent, while already running")
 		return
 	}
 
+	defer sm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(sm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(sm.ctx, v)
+		}
+	}()
+
 	for {
 		select {
 		case <-sm.ctx.Done():
-			sm.Close()
 			return
 		case inMsg := <-sm.inbox:
 			sm.Handle(inMsg)
@@ -102,12 +103,13 @@ func (sm *SessionManager) Handle(msg msgactor.ActorMessage) {
 	}
 }
 
-func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, error) {
-	if string(frameWithMagic[:len(msg2.Magic)]) != msg2.Magic {
+func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msgsess.ClearMessage, error) {
+	if string(frameWithMagic[:len(msgsess.Magic)]) != msgsess.Magic {
+		// We check these messages further up, so while this is a safety check, it shouldn't be triggered
 		panic("Somehow received non-session message in unpack")
 	}
 
-	b := frameWithMagic[len(msg2.Magic):]
+	b := frameWithMagic[len(msgsess.Magic):]
 
 	sessionKey := key.MakeSessionPublic([key.Len]byte(b[:key.Len]))
 
@@ -119,24 +121,23 @@ func (sm *SessionManager) Unpack(frameWithMagic []byte) (*msg2.ClearMessage, err
 		return nil, fmt.Errorf("could not decrypt session message")
 	}
 
-	sMsg, err := msg2.ParseSessionMessage(clearBytes)
-
+	sMsg, err := msgsess.ParseSessionMessage(clearBytes)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse session message: %s", err)
 	}
 
-	return &msg2.ClearMessage{
+	return &msgsess.ClearMessage{
 		Session: sessionKey,
 		Message: sMsg,
 	}, nil
 }
 
-func (sm *SessionManager) Pack(sMsg msg2.SessionMessage, toSession key.SessionPublic) []byte {
-	clearBytes := sMsg.MarshalSessionMessage()
+func (sm *SessionManager) Pack(sMsg msgsess.SessionMessage, toSession key.SessionPublic) []byte {
+	clearBytes := sMsg.Marshal()
 
 	cipherBytes := sm.session().Shared(toSession).Seal(clearBytes)
 
-	return slices.Concat(msg2.MagicBytes, sm.session().Public().ToByteSlice(), cipherBytes)
+	return slices.Concat(msgsess.MagicBytes, sm.session().Public().ToByteSlice(), cipherBytes)
 }
 
 func (sm *SessionManager) Session() key.SessionPublic {

@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/edup2p/common/types"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
+
+	"github.com/edup2p/common/types"
 )
 
 type ProtocolServer interface {
@@ -41,18 +44,38 @@ func HTTPHandler(s ProtocolServer, proto string) http.Handler {
 			return
 		}
 
-		defer netConn.Close()
+		if tcpConn, ok := netConn.(*net.TCPConn); ok {
+			if err := tcpConn.SetKeepAlive(true); err != nil {
+				s.Logger().Warn("set keep alive failed", "error", err, "peer", r.RemoteAddr)
+			}
+
+			if err := tcpConn.SetKeepAlivePeriod(11 * time.Second); err != nil {
+				s.Logger().Warn("set keep alive period failed", "error", err, "peer", r.RemoteAddr)
+			}
+		} else {
+			s.Logger().Warn("could not get *net.TCPConn, to set keepalive", "peer", r.RemoteAddr)
+		}
+
+		defer func() {
+			if err := netConn.Close(); err != nil {
+				slog.Error("error when closing netconn", "err", err)
+			}
+		}()
 
 		// TODO re-add publickey frontloading?
 		//  pubKey := s.PublicKey()
 		//  "Relay-Public-Key: %s\r\n\r\n",pubKey.HexString()
 
-		fmt.Fprintf(brw, "HTTP/1.1 101 Switching Protocols\r\n"+
+		if _, err := fmt.Fprintf(brw, "HTTP/1.1 101 Switching Protocols\r\n"+
 			"Upgrade: %s\r\n"+
 			"Connection: Upgrade\r\n\r\n",
-			up)
+			up); err != nil {
+			slog.Error("error when writing 101 response", "err", err)
+		}
 
-		brw.Flush()
+		if err := brw.Flush(); err != nil {
+			slog.Error("error when flushing 101 response", "err", err)
+		}
 
 		remoteIPPort, _ := netip.ParseAddrPort(netConn.RemoteAddr().String())
 

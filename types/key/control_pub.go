@@ -4,8 +4,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"go4.org/mem"
 	"strings"
+
+	"go4.org/mem"
 )
 
 type ControlPublic NakedKey

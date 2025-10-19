@@ -2,6 +2,7 @@ package key
 
 import (
 	"crypto/subtle"
+
 	"github.com/edup2p/common/types"
 	"go4.org/mem"
 	"golang.org/x/crypto/curve25519"

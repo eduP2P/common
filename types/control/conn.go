@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/msgcontrol"
 	"io"
 	"log/slog"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/msgcontrol"
 )
 
 type Conn struct {
@@ -37,7 +38,6 @@ func NewConn(ctx context.Context, mc types.MetaConn, brw *bufio.ReadWriter) *Con
 }
 
 func (c *Conn) UnmarshalInto(data []byte, to msgcontrol.ControlMessage) error {
-
 	if err := json.Unmarshal(data, to); err != nil {
 		return fmt.Errorf("failed to unmarshal data: %w", err)
 	}
@@ -50,7 +50,6 @@ func (c *Conn) Expect(to msgcontrol.ControlMessage, ttfbTimeout time.Duration) e
 	defer c.readMutex.Unlock()
 
 	msgTyp, data, err := c.readRawMessageLocked(ttfbTimeout)
-
 	if err != nil {
 		return fmt.Errorf("failed reading message: %w", err)
 	}
@@ -95,8 +94,6 @@ func (c *Conn) Read(ttfbTimeout time.Duration) (msgcontrol.ControlMessage, error
 		to = new(msgcontrol.LogonAccept)
 	case msgcontrol.LogonRejectType:
 		to = new(msgcontrol.LogonReject)
-	case msgcontrol.LogoutType:
-		to = new(msgcontrol.Logout)
 	case msgcontrol.PingType:
 		to = new(msgcontrol.Ping)
 	case msgcontrol.PongType:
@@ -114,8 +111,13 @@ func (c *Conn) Read(ttfbTimeout time.Duration) (msgcontrol.ControlMessage, error
 		to = new(msgcontrol.PeerRemove)
 	case msgcontrol.RelayUpdateType:
 		to = new(msgcontrol.RelayUpdate)
+	case msgcontrol.LogoutType:
+		to = new(msgcontrol.Logout)
+	case msgcontrol.DisconnectType:
+		to = new(msgcontrol.Disconnect)
+
 	default:
-		panic(fmt.Sprintf("Unknown type %v", typ))
+		return nil, fmt.Errorf("unknown type %v", typ)
 	}
 
 	if err = c.UnmarshalInto(data, to); err != nil {
@@ -180,10 +182,6 @@ func (c *Conn) readMessageHeaderLocked(ttfbTimeout time.Duration) (typ msgcontro
 func (c *Conn) Write(obj msgcontrol.ControlMessage) error {
 	c.writeMutex.Lock()
 	defer c.writeMutex.Unlock()
-
-	//// FIXME: bson is extremely fucky and will write empty values if it cannot decode something, so be careful with that
-	////  or replace this with a registry thingie.
-	//data, err := bson.Marshal(obj)
 
 	data, err := json.Marshal(obj)
 	if err != nil {

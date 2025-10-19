@@ -1,12 +1,14 @@
 package ifaces
 
 import (
+	"context"
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
-	"net/netip"
-	"time"
 )
 
 type Actor interface {
@@ -14,10 +16,12 @@ type Actor interface {
 
 	Inbox() chan<- msgactor.ActorMessage
 
+	Ctx() context.Context
+
 	// Cancel this actor's context.
 	Cancel()
 
-	// Close is called by the actor's Run loop when cancelled.
+	// Close is called by AfterFunc to clean up
 	Close()
 }
 
@@ -76,6 +80,7 @@ type TrafficManagerActor interface {
 	SendMsgToDirect(ap netip.AddrPort, sess key.SessionPublic, m msgsess.SessionMessage)
 	SendMsgToRelay(relay int64, node key.NodePublic, sess key.SessionPublic, m msgsess.SessionMessage)
 	SendPingDirect(ap netip.AddrPort, peer key.NodePublic, session key.SessionPublic)
+	SendPingDirectWithID(ap netip.AddrPort, peer key.NodePublic, session key.SessionPublic, txid msgsess.TxID)
 
 	OutConnUseAddrPort(peer key.NodePublic, ap netip.AddrPort)
 	OutConnTrackHome(peer key.NodePublic)
@@ -101,5 +106,11 @@ type SessionManagerActor interface {
 // ===
 
 type EndpointManagerActor interface {
+	Actor
+}
+
+// ===
+
+type MDNSManagerActor interface {
 	Actor
 }

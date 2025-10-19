@@ -1,17 +1,20 @@
 package actors
 
 import (
-	"github.com/edup2p/common/toversok/actors/peer_state"
+	"context"
+	"maps"
+	"net/netip"
+	"runtime/debug"
+	"time"
+
+	"github.com/edup2p/common/toversok/actors/peerstate"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
-	maps2 "golang.org/x/exp/maps"
-	"maps"
-	"net/netip"
-	"time"
+	xmaps "golang.org/x/exp/maps"
 )
 
 type TrafficManager struct {
@@ -21,7 +24,7 @@ type TrafficManager struct {
 	ticker *time.Ticker     // 250ms
 	poke   chan interface{} // len 1
 
-	peerState map[key.NodePublic]peer_state.PeerState
+	peerState map[key.NodePublic]peerstate.PeerState
 
 	pings     map[msgsess.TxID]*stage.SentPing
 	activeOut map[key.NodePublic]bool
@@ -32,41 +35,39 @@ type TrafficManager struct {
 }
 
 func (s *Stage) makeTM() *TrafficManager {
-	return &TrafficManager{
+	return assureClose(&TrafficManager{
 		ActorCommon: MakeCommon(s.Ctx, TrafficManInboxChLen),
 		s:           s,
 
 		ticker:    time.NewTicker(TManTickerInterval),
 		poke:      make(chan interface{}, 1),
-		peerState: make(map[key.NodePublic]peer_state.PeerState),
+		peerState: make(map[key.NodePublic]peerstate.PeerState),
 
 		pings:     make(map[msgsess.TxID]*stage.SentPing),
 		activeOut: make(map[key.NodePublic]bool),
 		activeIn:  make(map[key.NodePublic]bool),
 		sessMap:   make(map[key.SessionPublic]key.NodePublic),
-	}
+	})
 }
 
 func (tm *TrafficManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(tm).Error("panicked", "error", v)
-			tm.Cancel()
-			tm.Close()
-			bail(tm.ctx, v)
-		}
-	}()
-
 	if !tm.running.CheckOrMark() {
 		L(tm).Warn("tried to run agent, while already running")
 		return
 	}
 
+	defer tm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(tm).Error("panicked", "error", v, "stack", string(debug.Stack()))
+			bail(tm.ctx, v)
+		}
+	}()
+
 	for {
 		select {
 
 		case <-tm.ctx.Done():
-			tm.Close()
 			return
 		case <-tm.ticker.C:
 			// Run periodic before inbox, as inbox can get backed up, and ping + path management would get delayed.
@@ -109,13 +110,25 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 	case *msgactor.TManSessionMessageFromDirect:
 		n := tm.NodeForSess(m.Msg.Session)
 
-		if n != nil {
-			tm.forState(*n, func(s peer_state.PeerState) peer_state.PeerState {
-				return s.OnDirect(types.NormaliseAddrPort(m.AddrPort), m.Msg)
-			})
-		} else {
+		if n == nil {
 			L(tm).Warn("got message from direct for unknown session", "session", m.Msg.Session.Debug())
+			return
 		}
+
+		node := *n
+
+		if ok, ip6 := tm.isMDNS(m.Msg); ok {
+			if !tm.mdnsAllowed(node) {
+				L(tm).Warn("got direct MDNS packet from peer where it is not allowed", "peer", node.Debug())
+				return
+			}
+			tm.sendMDNS(node, m.Msg, ip6)
+			return
+		}
+
+		tm.forState(node, func(s peerstate.PeerState) peerstate.PeerState {
+			return s.OnDirect(types.NormaliseAddrPort(m.AddrPort), m.Msg)
+		})
 	case *msgactor.TManSessionMessageFromRelay:
 		if !tm.ValidKeys(m.Peer, m.Msg.Session) {
 			L(tm).Warn("got message from relay for peer with incorrect session",
@@ -123,7 +136,16 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 			return
 		}
 
-		tm.forState(m.Peer, func(s peer_state.PeerState) peer_state.PeerState {
+		if ok, ip6 := tm.isMDNS(m.Msg); ok {
+			if !tm.mdnsAllowed(m.Peer) {
+				L(tm).Warn("got relay MDNS packet from peer where it is not allowed", "peer", m.Peer.Debug())
+				return
+			}
+			tm.sendMDNS(m.Peer, m.Msg, ip6)
+			return
+		}
+
+		tm.forState(m.Peer, func(s peerstate.PeerState) peerstate.PeerState {
 			return s.OnRelay(m.Relay, m.Peer, m.Msg)
 		})
 	case *msgactor.SyncPeerInfo:
@@ -144,16 +166,94 @@ func (tm *TrafficManager) Handle(m msgactor.ActorMessage) {
 				return key == m.Peer
 			})
 		}
+	case *msgactor.TManSpreadMDNSPacket:
+		tm.spreadMDNS(m.Pkt, m.IP6)
 	default:
 		tm.logUnknownMessage(m)
 	}
 }
 
+func (tm *TrafficManager) isMDNS(msg *msgsess.ClearMessage) (isMDNS bool, ip6 bool) {
+	sbd, ok := msg.Message.(*msgsess.SideBandData)
+
+	if ok {
+		return sbd.Type == msgsess.MDNSv4Type || sbd.Type == msgsess.MDNSv6Type, sbd.Type == msgsess.MDNSv6Type
+	}
+
+	return false, false
+}
+
+func (tm *TrafficManager) mdnsAllowed(node key.NodePublic) bool {
+	pi := tm.s.GetPeerInfo(node)
+
+	if pi == nil {
+		return false
+	}
+
+	return pi.MDNS
+}
+
+func (tm *TrafficManager) sendMDNS(peer key.NodePublic, msg *msgsess.ClearMessage, ip6 bool) {
+	sbd := msg.Message.(*msgsess.SideBandData)
+
+	go SendMessage(tm.s.MMan.Inbox(), &msgactor.MManReceivedPacket{
+		From: peer,
+		Data: sbd.Data,
+		IP6:  ip6,
+	})
+}
+
+func (tm *TrafficManager) spreadMDNS(pkt []byte, ip6 bool) {
+	peers := tm.s.GetPeersWhere(func(_ key.NodePublic, info *stage.PeerInfo) bool {
+		return info.MDNS
+	})
+
+	peersDebug := types.Map(peers, func(t key.NodePublic) string {
+		return t.Debug()
+	})
+	L(tm).Log(context.Background(), types.LevelTrace, "sending mdns packet to peers", "peers", peersDebug)
+
+	var t msgsess.SideBandDataType
+	if ip6 {
+		t = msgsess.MDNSv6Type
+	} else {
+		t = msgsess.MDNSv4Type
+	}
+
+	for _, peer := range peers {
+		tm.opportunisticSendTo(peer, &msgsess.SideBandData{
+			Type: t,
+			Data: pkt,
+		})
+	}
+}
+
+func (tm *TrafficManager) opportunisticSendTo(to key.NodePublic, msg msgsess.SessionMessage) {
+	pi := tm.s.GetPeerInfo(to)
+
+	if pi == nil {
+		L(tm).Warn("trying to send an opportunistic session message to a node without peerinfo", "to", to.Debug())
+		return
+	}
+
+	tm.forState(to, func(s peerstate.PeerState) peerstate.PeerState {
+		L(tm).Log(context.Background(), types.LevelTrace, "sending opportunistic session message to peer", "peer", to.Debug())
+
+		if e, ok := s.(*peerstate.Established); ok {
+			tm.SendMsgToDirect(e.GetEndpoint(), pi.Session, msg)
+		} else {
+			tm.SendMsgToRelay(pi.HomeRelay, to, pi.Session, msg)
+		}
+
+		return nil
+	})
+}
+
 func (tm *TrafficManager) DoStateTick() {
 	// We explicitly range over a slice of the keys we already got,
 	// since golang likes to complain when we mutate while we iterate.
-	for _, peer := range maps2.Keys(tm.peerState) {
-		tm.forState(peer, func(s peer_state.PeerState) peer_state.PeerState {
+	for _, peer := range xmaps.Keys(tm.peerState) {
+		tm.forState(peer, func(s peerstate.PeerState) peerstate.PeerState {
 			return s.OnTick()
 		})
 	}
@@ -192,6 +292,7 @@ func (tm *TrafficManager) Poke() {
 	}
 }
 
+//nolint:unused
 func (tm *TrafficManager) isConnActive(peer key.NodePublic) bool {
 	return tm.activeOut[peer] || tm.activeIn[peer]
 }
@@ -222,7 +323,7 @@ func (tm *TrafficManager) ensurePeerState(peer key.NodePublic) {
 	s, ok := tm.peerState[peer]
 
 	if !ok {
-		tm.peerState[peer] = peer_state.MakeWaiting(tm, peer)
+		tm.peerState[peer] = peerstate.MakeWaiting(tm, peer)
 		tm.Poke()
 		return
 	}
@@ -230,7 +331,7 @@ func (tm *TrafficManager) ensurePeerState(peer key.NodePublic) {
 	if s == nil {
 		// !! this should never happen, but we recover regardless
 		L(tm).Warn("found nil state for peer, restarting state with Waiting", "peer", peer.Debug())
-		tm.peerState[peer] = peer_state.MakeWaiting(tm, peer)
+		tm.peerState[peer] = peerstate.MakeWaiting(tm, peer)
 		tm.Poke()
 	}
 }
@@ -239,42 +340,37 @@ func (tm *TrafficManager) Close() {
 	tm.ticker.Stop()
 }
 
+const PingReapTimeout = 10 * time.Minute
+
 func (tm *TrafficManager) doPingManagement() {
-	// TODO
-	//  - expire old pings
+	var oldPings []msgsess.TxID
+
+	for txid, ping := range tm.pings {
+		if ping.At.Add(PingReapTimeout).Before(time.Now()) {
+			oldPings = append(oldPings, txid)
+		}
+	}
+
+	for _, txid := range oldPings {
+		delete(tm.pings, txid)
+	}
 }
 
-type StateForState func(state peer_state.PeerState) peer_state.PeerState
+type StateForState func(state peerstate.PeerState) peerstate.PeerState
 
 func (tm *TrafficManager) forState(peer key.NodePublic, fn StateForState) {
 	// A state for a state, perfectly balanced, as all things should be.
 	// - Thanos, while writing this code.
 
-	state, ok := tm.peerState[peer]
+	tm.ensurePeerState(peer)
 
-	if !ok {
-		return
-	}
-
-	if state == nil {
-		L(tm).Error("found nil state when running update for peer, recovering...", "peer", peer.Debug())
-		tm.ensurePeerState(peer)
-		state = tm.peerState[peer]
-	}
-
-	newState := fn(state)
+	newState := fn(tm.peerState[peer])
 
 	if newState != nil {
 		// state transitions have happened, store the new state
 		tm.peerState[peer] = newState
 	}
 }
-
-// TODO see if these correspond in peer_state package
-//const EstablishmentTimeout = time.Second * 10
-//const EstablishmentRetry = time.Second * 40
-//
-//const EstablishedPingTimeout = time.Second * 5
 
 func (tm *TrafficManager) DManClearAKA(peer key.NodePublic) {
 	SendMessage(tm.s.DRouter.Inbox(), &msgactor.DRouterPeerClearKnownAs{
@@ -337,8 +433,10 @@ func (tm *TrafficManager) ValidKeys(peer key.NodePublic, session key.SessionPubl
 }
 
 func (tm *TrafficManager) SendPingDirect(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic) {
-	txid := msgsess.NewTxID()
+	tm.SendPingDirectWithID(endpoint, peer, session, msgsess.NewTxID())
+}
 
+func (tm *TrafficManager) SendPingDirectWithID(endpoint netip.AddrPort, peer key.NodePublic, session key.SessionPublic, txid msgsess.TxID) {
 	nep := types.NormaliseAddrPort(endpoint)
 
 	tm.SendMsgToDirect(nep, session, &msgsess.Ping{

@@ -4,38 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/ifaces"
-	"github.com/edup2p/common/types/key"
 	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
 	"time"
-)
 
-//type EngineOptions struct {
-//	//Ctx context.Context
-//	//Ccc context.CancelCauseFunc
-//	//
-//	//PrivKey key.NakedKey
-//	//
-//	//Control    dial.Opts
-//	//ControlKey key.ControlPublic
-//	//
-//	//// Do not contact control
-//	//OverrideControl bool
-//	//OverrideIPv4    netip.Prefix
-//	//OverrideIPv6    netip.Prefix
-//
-//	WG WireGuardHost
-//	FW FirewallHost
-//	Co ControlHost
-//
-//	ExtBindPort uint16
-//
-//	PrivateKey key.NodePrivate
-//}
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/control"
+	"github.com/edup2p/common/types/key"
+)
 
 // Engine is the main and most high-level object for any client implementation.
 //
@@ -44,6 +22,9 @@ import (
 type Engine struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
+
+	runningCtx    context.Context
+	runningCancel context.CancelFunc
 
 	sess *Session
 
@@ -56,9 +37,10 @@ type Engine struct {
 
 	nodePriv key.NodePrivate
 
-	state         stateObserver
-	doAutoRestart bool
-	dirty         bool
+	state stateObserver
+	dirty bool
+
+	deviceKey *string
 }
 
 // Start will fire up the Engine.
@@ -69,8 +51,13 @@ type Engine struct {
 // - Reason for any other startup error.
 //
 // After the engine has successfully started once, it will automatically restart on any failure.
-func (e *Engine) Start() error {
-	return e.start(true)
+func (e *Engine) Start() (context.Context, error) {
+	err := e.start(true)
+	if err != nil {
+		return nil, err
+	}
+
+	return e.runningCtx, nil
 }
 
 func (e *Engine) start(allowLogon bool) error {
@@ -83,23 +70,19 @@ func (e *Engine) start(allowLogon bool) error {
 		return errors.New("cannot start; already running")
 	}
 
+	if e.runningCtx != nil {
+		e.runningCancel()
+	}
+
 	if e.sess != nil && e.sess.ctx.Err() == nil {
 		// Session is still running, even though that shouldn't be the case, as we checked for NoSession above
 		e.sess.ccc(errors.New("engine state desynced, shutting down"))
 	}
 
-	if e.dirty {
-		if err := e.wg.Reset(); err != nil {
-			e.slog().Error("dirty start: could not reset wireguard", "err", err)
-			e.state.set(NoSession)
-			return err
-		}
+	e.runningCtx, e.runningCancel = context.WithCancel(e.ctx)
 
-		if err := e.fw.Reset(); err != nil {
-			e.slog().Error("dirty start: could not reset firewall", "err", err)
-			e.state.set(NoSession)
-			return err
-		}
+	if err := e.maybeClean(); err != nil {
+		return fmt.Errorf("engine state cleaning failed: %w", err)
 	}
 
 	e.dirty = true
@@ -115,6 +98,34 @@ func (e *Engine) Context() context.Context {
 	return e.ctx
 }
 
+func (e *Engine) RunningContext() context.Context {
+	if e.runningCtx != nil && e.runningCtx.Err() != nil {
+		return nil
+	}
+
+	return e.runningCtx
+}
+
+func (e *Engine) maybeClean() error {
+	slog.Debug("maybeClean called", "dirty", e.dirty)
+
+	if e.dirty {
+		if err := e.wg.Reset(); err != nil {
+			e.slog().Error("clean: could not reset wireguard", "err", err)
+			e.state.set(NoSession)
+			return err
+		}
+
+		if err := e.fw.Reset(); err != nil {
+			e.slog().Error("clean: could not reset firewall", "err", err)
+			e.state.set(NoSession)
+			return err
+		}
+	}
+
+	return nil
+}
+
 // StalledEngineRestartInterval represents how many seconds to wait before restarting an engine,
 // after it has stalled/failed.
 const StalledEngineRestartInterval = time.Second * 2
@@ -122,8 +133,19 @@ const StalledEngineRestartInterval = time.Second * 2
 func (e *Engine) autoRestart() {
 	if e.WillRestart() {
 		if err := e.start(false); err != nil {
+			if errors.Is(err, control.ErrNeedsLogon) {
+				// Bail, we can't do anything here
+				e.runningCancel()
+			}
+
 			slog.Info("autoRestart: will retry in 10 seconds")
 			time.AfterFunc(StalledEngineRestartInterval, e.autoRestart)
+		}
+	} else {
+		slog.Debug("will not auto-restart")
+
+		if err := e.maybeClean(); err != nil {
+			slog.Error("engine state cleaning failed", "err", err)
 		}
 	}
 }
@@ -135,11 +157,7 @@ func (e *Engine) Stop() {
 		return
 	}
 
-	e.doAutoRestart = false
-
-	if e.sess.ctx.Err() != nil {
-		e.sess.ccc(errors.New("shutting down"))
-	}
+	e.runningCancel()
 
 	var stillDirty bool
 
@@ -166,24 +184,31 @@ func (e *Engine) installSession(allowLogon bool) error {
 	var logon types.LogonCallback
 
 	if allowLogon {
-		logon = func(url string, _ chan<- string) error {
-			// TODO register/use device key channel
+		logon = func(url string, devKeyCh chan<- string) error {
+			e.state.alter(func(o *stateObserver) {
+				o.loginURL = url
+				o.loginDeviceKeyCh = devKeyCh
+			})
 
-			e.state.currentLoginUrl = url
 			e.state.change(CreatingSession, NeedsLogin)
 			return nil
 		}
 	}
 
 	var err error
-	e.sess, err = SetupSession(e.ctx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv, logon)
+	e.sess, err = SetupSession(e.runningCtx, e.wg, e.fw, e.co, e.getExtConn, e.getNodePriv, logon)
 	if err != nil {
 		return fmt.Errorf("failed to setup session: %w", err)
 	}
 
+	e.state.alter(func(o *stateObserver) {
+		o.expiry = e.sess.cs.Expiry()
+	})
+
 	if !(e.state.change(CreatingSession, Established) || e.state.change(NeedsLogin, Established)) {
-		e.ccc(errors.New("incorrect state transition"))
-		panic("incorrect state transition to established")
+		err = errors.New("incorrect state transition")
+		e.ccc(err)
+		return err
 	}
 
 	context.AfterFunc(e.sess.ctx, func() {
@@ -198,7 +223,7 @@ func (e *Engine) installSession(allowLogon bool) error {
 
 // WillRestart says whether the engine strives to be in a running state.
 func (e *Engine) WillRestart() bool {
-	return e.doAutoRestart
+	return e.runningCtx != nil && e.runningCtx.Err() != nil
 }
 
 func (e *Engine) slog() *slog.Logger {
@@ -210,10 +235,13 @@ func newStateObserver() stateObserver {
 }
 
 type stateObserver struct {
-	mu              sync.Mutex
-	state           EngineState
-	currentLoginUrl string
-	callbacks       []func(state EngineState)
+	mu        sync.Mutex
+	state     EngineState
+	callbacks []func(state EngineState)
+
+	loginURL         string
+	loginDeviceKeyCh chan<- string
+	expiry           time.Time
 }
 
 func (s *stateObserver) CurrentState() EngineState {
@@ -227,22 +255,28 @@ func (s *stateObserver) RegisterStateChangeListener(f func(state EngineState)) {
 	s.callbacks = append(s.callbacks, f)
 }
 
-var WrongStateErr = errors.New("wrong state")
+var ErrWrongState = errors.New("wrong state")
 
-func (s *stateObserver) GetNeedsLoginState() (url string, err error) {
+func (s *stateObserver) GetNeedsLoginState() (url string, devKeyCh chan<- string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.state == NeedsLogin {
-		return s.currentLoginUrl, nil
-	} else {
-		return "", WrongStateErr
+	if s.state != NeedsLogin {
+		return "", nil, ErrWrongState
 	}
+
+	return s.loginURL, s.loginDeviceKeyCh, nil
 }
 
-func (s *stateObserver) GetEstablishedState() {
-	//TODO implement me
-	panic("implement me")
+func (s *stateObserver) GetEstablishedState() (time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.state != Established {
+		return time.Time{}, ErrWrongState
+	}
+
+	return s.expiry, nil
 }
 
 func (s *stateObserver) change(oldState, newState EngineState) bool {
@@ -273,6 +307,13 @@ func (s *stateObserver) set(newState EngineState) {
 	s.asyncFireCallbacks(newState)
 }
 
+func (s *stateObserver) alter(f func(observer *stateObserver)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	f(s)
+}
+
 func (s *stateObserver) asyncFireCallbacks(state EngineState) {
 	for _, cb := range s.callbacks {
 		go cb(state)
@@ -298,17 +339,18 @@ func NewEngine(
 		parentCtx = context.Background()
 	}
 
-	ctx, ccc := context.WithCancelCause(parentCtx)
-
-	if wg == nil {
+	switch {
+	case wg == nil:
 		return nil, errors.New("cannot initialise toversok engine with nil WireGuardHost")
-	} else if fw == nil {
+	case fw == nil:
 		return nil, errors.New("cannot initialise toversok engine with nil FirewallHost")
-	} else if co == nil {
+	case co == nil:
 		return nil, errors.New("cannot initialise toversok engine with nil ControlHost")
-	} else if privateKey.IsZero() {
+	case privateKey.IsZero():
 		return nil, errors.New("cannot initialise toversok engine with zero privateKey")
 	}
+
+	ctx, ccc := context.WithCancelCause(parentCtx)
 
 	e := &Engine{
 		ctx:  ctx,
@@ -328,12 +370,32 @@ func NewEngine(
 
 	e.Observer().RegisterStateChangeListener(func(state EngineState) {
 		if state == NeedsLogin {
-			url, err := e.Observer().GetNeedsLoginState()
+			url, devKeyCh, err := e.Observer().GetNeedsLoginState()
 			if err == nil {
 				e.slog().Info("control wants logon", "url", url)
 			} else {
 				e.slog().Error("could not get login state when prompted for it", "err", err)
 			}
+
+			if e.deviceKey != nil {
+				devKeyCh <- *e.deviceKey
+			}
+		} else if state == Established {
+			expiry, err := e.Observer().GetEstablishedState()
+			if err != nil {
+				// We are literally in the established state, we can get the GetEstablishedState
+				// There is one tiny window where it has flopped back, and so just ignore that if that is the case
+				return
+			}
+			if expiry != (time.Time{}) {
+				slog.Info("established session with expiry", "expiry", expiry, "in", time.Until(expiry))
+			}
+		}
+	})
+
+	context.AfterFunc(e.ctx, func() {
+		if err := e.maybeClean(); err != nil {
+			slog.Error("after-ctx: engine state cleaning failed", "err", err)
 		}
 	})
 
@@ -347,8 +409,8 @@ func (e *Engine) getNodePriv() *key.NodePrivate {
 func (e *Engine) getExtConn() types.UDPConn {
 	if e.extBind == nil || e.extBind.Closed {
 		conn, err := e.bindExt()
-
 		if err != nil {
+			// We expect the bindext to work, else we more or less just can't do anything
 			panic(fmt.Sprintf("could not bind ext: %s", err))
 		}
 
@@ -373,118 +435,10 @@ func (e *Engine) Observer() Observer {
 	return &e.state
 }
 
+// SupplyDeviceKey gives the device key that'll be used when logging on.
+// This must be called BEFORE Start.
 func (e *Engine) SupplyDeviceKey(key string) error {
-	// TODO
-	panic("not implemented")
-}
+	e.deviceKey = &key
 
-//
-//const WGKeepAlive = time.Second * 20
-//
-//func (e *Engine) Handle(ev Event) error {
-//	switch ev := ev.(type) {
-//	case PeerAddition:
-//		return e.AddPeer(ev.Key, ev.HomeRelayId, ev.Endpoints, ev.SessionKey, ev.VIPs.IPv4, ev.VIPs.IPv6)
-//	case PeerUpdate:
-//		// FIXME the reason for the panic below is because this function is essentially deprecated, and it still uses
-//		//  gonull, which is a pain
-//		panic("cannot handle PeerUpdate via handle")
-//
-//		//if ev.Endpoints.Present {
-//		//	if err := e.stage.SetEndpoints(ev.Key, ev.Endpoints.Val); err != nil {
-//		//		return fmt.Errorf("failed to update endpoints: %w", err)
-//		//	}
-//		//}
-//		//
-//		//if ev.SessionKey.Present {
-//		//	if err := e.stage.UpdateSessionKey(ev.Key, ev.SessionKey.Val); err != nil {
-//		//		return fmt.Errorf("failed to update session key: %w", err)
-//		//	}
-//		//}
-//		//
-//		//if ev.HomeRelayId.Present {
-//		//	if err := e.stage.UpdateHomeRelay(ev.Key, ev.HomeRelayId.Val); err != nil {
-//		//		return fmt.Errorf("failed to update home relay: %w", err)
-//		//	}
-//		//}
-//	case PeerRemoval:
-//		return e.RemovePeer(ev.Key)
-//	case RelayUpdate:
-//		return e.UpdateRelays(ev.Set)
-//	default:
-//		// TODO warn-log about unknown type instead of panic
-//		panic("Unknown type!")
-//	}
-//
-//	return nil
-//}
-//
-//func (e *Engine) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr) error {
-//	m := e.bindLocal()
-//	e.localMapping[peer] = m
-//
-//	if err := e.wg.UpdatePeer(peer, PeerCfg{
-//		Set: true,
-//		VIPs: &VirtualIPs{
-//			IPv4: ip4,
-//			IPv6: ip6,
-//		},
-//		KeepAliveInterval: nil,
-//		LocalEndpointPort: &m.port,
-//	}); err != nil {
-//		return fmt.Errorf("failed to update wireguard: %w", err)
-//	}
-//
-//	if err := e.stage.AddPeer(peer, homeRelay, endpoints, session, ip4, ip6); err != nil {
-//		return fmt.Errorf("failed to update stage: %w", err)
-//	}
-//	return nil
-//}
-//
-//func (e *Engine) UpdatePeer(peer key.NodePublic, homeRelay *int64, endpoints []netip.AddrPort, session *key.SessionPublic) error {
-//	return e.stage.UpdatePeer(peer, homeRelay, endpoints, session)
-//}
-//
-//func (e *Engine) RemovePeer(peer key.NodePublic) error {
-//	if err := e.stage.RemovePeer(peer); err != nil {
-//		return err
-//	}
-//
-//	if err := e.wg.RemovePeer(peer); err != nil {
-//		return fmt.Errorf("failed to remove peer from wireguard: %w", err)
-//	}
-//
-//	return nil
-//}
-//
-//func (e *Engine) UpdateRelays(relay []relay.Information) error {
-//	return e.stage.UpdateRelays(relay)
-//}
-
-type FakeControl struct {
-	controlKey key.ControlPublic
-	ipv4       netip.Prefix
-	ipv6       netip.Prefix
-}
-
-func (f *FakeControl) ControlKey() key.ControlPublic {
-	return f.controlKey
-}
-
-func (f *FakeControl) IPv4() netip.Prefix {
-	return f.ipv4
-}
-
-func (f *FakeControl) IPv6() netip.Prefix {
-	return f.ipv6
-}
-
-func (f *FakeControl) InstallCallbacks(callbacks ifaces.ControlCallbacks) error {
-	// NOP
-	return nil
-}
-
-func (f *FakeControl) UpdateEndpoints(ports []netip.AddrPort) error {
-	// NOP
 	return nil
 }

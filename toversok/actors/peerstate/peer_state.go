@@ -5,4 +5,4 @@
 // pongs haven't been received for 5 seconds (with pings at 2 second intervals).
 //
 // See [peer_state.mermaid] for a primary reference of this state machine.
-package peer_state
+package peerstate

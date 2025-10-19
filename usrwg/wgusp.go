@@ -2,15 +2,20 @@ package usrwg
 
 import (
 	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
+	"slices"
+	"syscall"
+
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/usrwg/router"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
 	"golang.zx2c4.com/wireguard/device"
-	"log/slog"
-	"net/netip"
-	"runtime"
-	"strings"
+	"golang.zx2c4.com/wireguard/tun"
 )
 
 func init() {
@@ -33,8 +38,7 @@ func (u *UserSpaceWireGuardHost) Reset() error {
 	return nil
 }
 
-const WGGOIPCDevSetup = `private_key=%s
-`
+const WGGOIPCDevSetup = "private_key=%s\n"
 
 func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefix) (toversok.WireGuardController, error) {
 	if u.running != nil {
@@ -46,13 +50,11 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	// TODO set this to 1392 per https://docs.eduvpn.org/server/v3/wireguard.html
 	//  and make adjustable by environment variable
 	tunDev, err := createTUN(1280)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
 
 	r, err := router.NewRouter(tunDev)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create router: %w", err)
 	}
@@ -78,7 +80,9 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 
 	nKey := key.UnveilPrivate(privateKey)
 
-	wgDev.IpcSet(fmt.Sprintf(WGGOIPCDevSetup, nKey.HexString()))
+	if err := wgDev.IpcSet(fmt.Sprintf(WGGOIPCDevSetup, nKey.HexString())); err != nil {
+		return nil, fmt.Errorf("failed to set private key on wireguard device: %w", err)
+	}
 
 	if err := wgDev.Up(); err != nil {
 		return nil, fmt.Errorf("failed to bring up wireguard device: %w", err)
@@ -98,6 +102,7 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	usrwgc := &UserSpaceWireGuardController{
 		wgDev:  wgDev,
 		bind:   bind,
+		tunDev: tunDev,
 		router: r,
 	}
 
@@ -106,49 +111,54 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	return usrwgc, nil
 }
 
-func (u *UserSpaceWireGuardHost) tempPrintInstructions(addr4, addr6 netip.Prefix, name string) {
-
-	const sep = "; "
-
-	switch runtime.GOOS {
-	case "darwin":
-		const (
-			ifconfig4 = "sudo ifconfig %s inet %s/32 %s"
-			ifconfig6 = "sudo ifconfig %s inet6 %s %s prefixlen 128"
-
-			route4 = "sudo route add -inet %s -iface %s"
-			route6 = "sudo route add -inet6 %s -iface %s"
-		)
-
-		slog.Warn("Please run these lines in a separate terminal:")
-		slog.Warn(
-			strings.Join([]string{
-				fmt.Sprintf(ifconfig4, name, addr4.Addr().String(), addr4.Addr().String()),
-				fmt.Sprintf(ifconfig6, name, addr6.Addr().String(), addr6.Addr().String()),
-				fmt.Sprintf(route4, addr4.String(), name),
-				fmt.Sprintf(route6, addr6.String(), name),
-			}, sep),
-		)
-	case "linux":
-		const (
-			ip = "sudo ip address add %s dev %s"
-		)
-
-		slog.Warn("Please run these lines in a separate terminal:")
-		slog.Warn(
-			strings.Join([]string{
-				fmt.Sprintf(ip, addr4.String(), name),
-				fmt.Sprintf(ip, addr6.String(), name),
-			}, sep),
-		)
-	}
-
-}
-
 type UserSpaceWireGuardController struct {
 	wgDev  *device.Device
 	bind   *ToverSokBind
+	tunDev tun.Device
 	router router.Router
+}
+
+func (u *UserSpaceWireGuardController) Available() bool {
+	return true
+}
+
+func (u *UserSpaceWireGuardController) InjectPacket(from, to netip.AddrPort, pkt []byte) error {
+	buf := gopacket.NewSerializeBuffer()
+	opts := gopacket.SerializeOptions{
+		FixLengths:       true,
+		ComputeChecksums: true,
+	}
+	ipv4 := &layers.IPv4{
+		Version:  0x4,
+		TTL:      255,
+		Protocol: syscall.IPPROTO_UDP,
+		DstIP:    to.Addr().AsSlice(),
+		SrcIP:    from.Addr().AsSlice(),
+	}
+	udp := &layers.UDP{
+		DstPort: layers.UDPPort(to.Port()),
+		SrcPort: layers.UDPPort(from.Port()),
+	}
+	if err := udp.SetNetworkLayerForChecksum(ipv4); err != nil {
+		return fmt.Errorf("failed to set udp checksum: %w", err)
+	}
+
+	err := gopacket.SerializeLayers(buf, opts,
+		ipv4,
+		udp,
+		gopacket.Payload(pkt),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to serialize packet: %w", err)
+	}
+
+	packetData := slices.Concat(make([]byte, 16), buf.Bytes())
+
+	if _, err = u.tunDev.Write([][]byte{packetData}, 16); err != nil {
+		return fmt.Errorf("failed to inject packet: %w", err)
+	}
+
+	return nil
 }
 
 const WGGOIPCAddPeer = `public_key=%s
@@ -165,7 +175,6 @@ func (u *UserSpaceWireGuardController) UpdatePeer(publicKey key.NodePublic, cfg 
 			publicKey.HexString(), cfg.VIPs.IPv4.String(), cfg.VIPs.IPv6.String(), publicKey.Marshal(),
 		),
 	)
-
 	if err != nil {
 		err = fmt.Errorf("failed to do IPC set: %w", err)
 	}
@@ -181,9 +190,8 @@ func (u *UserSpaceWireGuardController) RemovePeer(publicKey key.NodePublic) erro
 	return nil
 }
 
-func (u *UserSpaceWireGuardController) GetStats(publicKey key.NodePublic) (*toversok.WGStats, error) {
-	//TODO implement me
-	//panic("implement me")
+func (u *UserSpaceWireGuardController) GetStats(_ key.NodePublic) (*toversok.WGStats, error) {
+	// TODO implement me
 
 	return nil, nil
 }
@@ -192,11 +200,26 @@ func (u *UserSpaceWireGuardController) ConnFor(node key.NodePublic) types.UDPCon
 	return u.bind.GetConn(node)
 }
 
-func (u *UserSpaceWireGuardController) Close() {
-	u.wgDev.Close()
-	// TODO return or log error
-	u.bind.Close()
-	u.router.Close()
+func (u *UserSpaceWireGuardController) GetInterface() *net.Interface {
+	name, err := u.tunDev.Name()
+	if err != nil {
+		slog.Warn("failed to get tun device name", "err", err)
+		return nil
+	}
+	i, err := net.InterfaceByName(name)
+	if err != nil {
+		slog.Warn("failed to get interface", "name", name, "err", err)
+		return nil
+	}
+	return i
 }
 
-//const _ toversok.WireGuardHost = UserspaceWireguardHost{}
+func (u *UserSpaceWireGuardController) Close() {
+	if err := u.bind.Cancel(); err != nil {
+		slog.Error("Failed to close wireguard bind", "err", err)
+	}
+	if err := u.router.Close(); err != nil {
+		slog.Error("Failed to close router", "err", err)
+	}
+	u.wgDev.Close()
+}

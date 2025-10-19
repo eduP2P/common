@@ -2,6 +2,7 @@ package control
 
 import (
 	"errors"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 )
@@ -21,11 +22,11 @@ func (s *Server) whenSessAuthenticating(id SessID, f func(*ServerSession) error)
 	sess, ok := s.sessByID[sid]
 
 	if !ok {
-		return SessionDoesNotExistError
+		return ErrSessionDoesNotExist
 	}
 
 	if sess.state != Authenticate {
-		return SessionIsNotAuthenticating
+		return ErrSessionIsNotAuthenticating
 	}
 
 	return f(sess)
@@ -33,7 +34,7 @@ func (s *Server) whenSessAuthenticating(id SessID, f func(*ServerSession) error)
 
 func (s *Server) SendAuthURL(id SessID, url string) error {
 	return s.whenSessAuthenticating(id, func(sess *ServerSession) error {
-		sess.authChan <- AuthUrl{url: url}
+		sess.authChan <- AuthURL{url: url}
 
 		return nil
 	})
@@ -68,7 +69,7 @@ func (s *Server) GetClientID(id SessID) (ClientID, error) {
 	sess, ok := s.sessByID[sid]
 
 	if !ok {
-		return nilClientID, SessionDoesNotExistError
+		return nilClientID, ErrSessionDoesNotExist
 	}
 
 	return ClientID(sess.Peer), nil
@@ -85,11 +86,9 @@ func (s *Server) GetConnectedClients() (map[SessID]ClientID, error) {
 	}
 
 	return retMap, nil
-
-	// todo what do we use the error field for here?
 }
 
-func (s *Server) UpsertVisibilityPair(id ClientID, id2 ClientID, pair VisibilityPair) error {
+func (s *Server) UpsertVisibilityPair(id, id2 ClientID, pair VisibilityPair) error {
 	s.sessLock.RLock()
 	defer s.sessLock.RUnlock()
 
@@ -170,7 +169,7 @@ func (s *Server) UpsertMultiVisibilityPair(id ClientID, m map[ClientID]Visibilit
 	return nil
 }
 
-func (s *Server) RemoveVisibilityPair(from ClientID, to ClientID) error {
+func (s *Server) RemoveVisibilityPair(from, to ClientID) error {
 	s.sessLock.RLock()
 	defer s.sessLock.RUnlock()
 
@@ -218,6 +217,37 @@ func (s *Server) GetVisibilityPairs(id ClientID) (map[ClientID]VisibilityPair, e
 	return pairs, nil
 }
 
+func (s *Server) DisconnectSession(id SessID) error {
+	s.sessLock.RLock()
+	defer s.sessLock.RUnlock()
+
+	sess, ok := s.sessByID[string(id)]
+
+	if !ok {
+		return ErrSessionDoesNotExist
+	}
+
+	sess.Ccc(ErrNeedsDisconnect)
+
+	return nil
+}
+
+func (s *Server) DisconnectClient(id ClientID) error {
+	s.sessLock.RLock()
+	defer s.sessLock.RUnlock()
+
+	sess, ok := s.sessByNode[key.NodePublic(id)]
+
+	if !ok {
+		return ErrClientNotConnected
+	}
+
+	sess.Ccc(ErrNeedsDisconnect)
+
+	return nil
+}
+
+//nolint:unused
 func (s *Server) atomicDoVisibilityPairs(id key.NodePublic, f func(map[ClientID]VisibilityPair) error) error {
 	s.sessLock.RLock()
 	defer s.sessLock.RUnlock()

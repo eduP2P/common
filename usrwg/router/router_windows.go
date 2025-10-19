@@ -6,26 +6,26 @@ package router
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/windows/svc"
+	"log"
 	"log/slog"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/dblohm7/wingoes/com"
 	"github.com/edup2p/common/usrwg/router/winnet"
-	ole "github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole"
 	"go4.org/netipx"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc"
 	"golang.zx2c4.com/wireguard/tun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
-	"log"
-	"net/netip"
-	"slices"
-	"sort"
-	"time"
 )
 
 func init() {
@@ -42,7 +42,8 @@ func init() {
 func isWindowsService() bool {
 	v, err := svc.IsWindowsService()
 	if err != nil {
-		log.Fatalf("svc.IsWindowsService failed: %v", err)
+		// Expect that we can at least poke the local windows service, else we're in trouble.
+		panic(fmt.Errorf("svc.IsWindowsService failed: %w", err))
 	}
 	return v
 }
@@ -55,7 +56,6 @@ func NewRouter(device tun.Device) (Router, error) {
 	luid := winipcfg.LUID(nativeTun.LUID())
 
 	guid, err := luid.GUID()
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tun GUID: %w", err)
 	}
@@ -133,10 +133,10 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 		for i := 0; i < tries; i++ {
 			found, err := setPrivateNetwork(r.luid)
 			if err != nil {
-				//networkCategoryWarning.Set(fmt.Errorf("set-network-category: %w", err))
+				// networkCategoryWarning.Set(fmt.Errorf("set-network-category: %w", err))
 				log.Printf("setPrivateNetwork(try=%d): %v", i, err)
 			} else {
-				//networkCategoryWarning.Set(nil)
+				// networkCategoryWarning.Set(nil)
 				if found {
 					if i > 0 {
 						log.Printf("setPrivateNetwork(try=%d): success", i)
@@ -329,7 +329,7 @@ func (r *windowsRouter) Set(cfg *Config) (retErr error) {
 				ipif6.UseAutomaticMetric = false
 				ipif6.Metric = 0
 			}
-			//if mtu > 0 {
+			// if mtu > 0 {
 			ipif6.NLMTU = uint32(r.mtu)
 			//}
 			ipif6.DadTransmits = 0
@@ -571,6 +571,7 @@ func deltaNets(a, b []netip.Prefix) (add, del []netip.Prefix) {
 			add = append(add, b[j])
 			j++
 		default:
+			// Literally unexpected, since we control the return of the function
 			panic("unexpected compare result")
 		}
 	}
@@ -705,6 +706,7 @@ func deltaRouteData(a, b []*routeData) (add, del []*routeData) {
 			add = append(add, b[j])
 			j++
 		default:
+			// Literally unexpected, since we control the return of the function
 			panic("unexpected compare result")
 		}
 	}
@@ -878,7 +880,7 @@ func (ft *firewallTweaker) doAsyncSet() {
 
 		ft.mu.Lock()
 		ft.lastLocal = val
-		ft.known = (err == nil)
+		ft.known = err == nil
 	}
 }
 

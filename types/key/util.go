@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"go4.org/mem"
-	"golang.org/x/crypto/nacl/box"
 	"io"
 	"slices"
+
+	"go4.org/mem"
+	"golang.org/x/crypto/nacl/box"
 )
 
 // rand fills b with cryptographically strong random bytes. Panics if

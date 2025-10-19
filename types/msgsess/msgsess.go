@@ -6,10 +6,12 @@ package msgsess
 import "github.com/edup2p/common/types/key"
 
 type SessionMessage interface {
-	MarshalSessionMessage() []byte
+	Marshal() []byte
 
 	// todo maybe convert to slog.Group?
 	Debug() string
+
+	Parse([]byte) error
 }
 
 // ClearMessage represents a full session wire message in decrypted view

@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net/netip"
+	"sync"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/control"
 	"github.com/edup2p/common/types/control/controlhttp"
@@ -12,10 +17,6 @@ import (
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"golang.org/x/exp/maps"
-	"log/slog"
-	"net/netip"
-	"sync"
-	"time"
 )
 
 type DefaultControlHost struct {
@@ -49,6 +50,7 @@ type ResumableControlSession struct {
 	// Airlifted out of Client, expected to stay the same as long as the session does
 	ipv4       netip.Prefix
 	ipv6       netip.Prefix
+	expiry     time.Time
 	controlKey key.ControlPublic
 
 	session string
@@ -66,21 +68,23 @@ type ResumableControlSession struct {
 	// In to local
 	msgInQueue []msgcontrol.ControlMessage
 
-	callbacks ifaces.ControlCallbacks
+	callbackLock sync.RWMutex
+	callbacks    ifaces.ControlCallbacks
 }
 
 func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.ControlPublic, getPriv func() *key.NodePrivate, getSess func() *key.SessionPrivate, logon types.LogonCallback) (*ResumableControlSession, error) {
-	// TODO authCallback func(url string)
-
 	rcsCtx, rcsCcc := context.WithCancelCause(ctx)
 
-	clientCtx := context.WithoutCancel(rcsCtx)
-	c, err := controlhttp.Dial(clientCtx, opts, getPriv, getSess, controlKey, nil, logon)
+	c, err := controlhttp.Dial(rcsCtx, opts, getPriv, getSess, controlKey, nil, logon)
 	if err != nil {
+		rcsCcc(err)
 		return nil, fmt.Errorf("could not create control session: %w", err)
 	}
 
-	slog.Debug("created initial control connection")
+	slog.Debug(
+		"created initial control connection",
+		"ipv4", c.IPv4.String(), "ipv6", c.IPv6.String(), "expiry", c.Expiry,
+	)
 
 	rcs := &ResumableControlSession{
 		ctx: rcsCtx,
@@ -88,6 +92,7 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 
 		ipv4:       c.IPv4,
 		ipv6:       c.IPv6,
+		expiry:     c.Expiry,
 		controlKey: c.ControlKey,
 
 		session: *c.SessionID,
@@ -106,7 +111,6 @@ func CreateControlSession(ctx context.Context, opts dial.Opts, controlKey key.Co
 }
 
 func (rcs *ResumableControlSession) Run() {
-
 	go func() {
 		<-rcs.ctx.Done()
 
@@ -129,7 +133,6 @@ func (rcs *ResumableControlSession) Run() {
 			}
 
 			err := rcs.FlushOut()
-
 			if err != nil {
 				slog.Warn("control connection errored while flushing out", "err", err)
 
@@ -140,7 +143,6 @@ func (rcs *ResumableControlSession) Run() {
 
 			if types.IsContextDone(rcs.ctx) {
 				slog.Info("control session ended, closing client")
-				rcs.client.Close()
 				return
 			}
 
@@ -175,7 +177,7 @@ func (rcs *ResumableControlSession) Run() {
 
 		absenceStart := time.Now()
 
-		var session = &rcs.session
+		session := &rcs.session
 		var err error
 		var client *control.Client
 
@@ -186,14 +188,12 @@ func (rcs *ResumableControlSession) Run() {
 				return
 			}
 
-			clientCtx := context.WithoutCancel(rcs.ctx)
-
 			client, err = controlhttp.Dial(
-				clientCtx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session, nil,
+				rcs.ctx, rcs.clientOpts, rcs.getPriv, rcs.getSess, rcs.controlKey, session, nil,
 			)
 
-			var r = msgcontrol.NoRetryStrategy
-			var retry = &r
+			r := msgcontrol.NoRetryStrategy
+			retry := &r
 
 			if err != nil {
 				if errors.As(err, retry) {
@@ -211,13 +211,34 @@ func (rcs *ResumableControlSession) Run() {
 					return
 				}
 
-				if errors.Is(err, control.NeedsLogonError) {
+				if errors.Is(err, control.ErrNeedsLogon) {
 					// TODO dead/retry logic, signal that session is dead and needs manual logon
 					panic("not implemented")
 				}
 
 				// retry/resume
 				continue
+			}
+
+			if rcs.ipv4 != client.IPv4 {
+				slog.Error("control-given IPv4 prefix is different than cached IPv4, bailing...", "cached", rcs.ipv4, "given", client.IPv4)
+				rcs.ccc(fmt.Errorf("IPv4 changed from %s to %s", rcs.ipv4, client.IPv4))
+
+				return
+			}
+
+			if rcs.ipv6 != client.IPv6 {
+				slog.Error("control-given IPv6 prefix is different than cached IPv6, bailing...", "cached", rcs.ipv6, "given", client.IPv6)
+				rcs.ccc(fmt.Errorf("IPv6 changed from %s to %s", rcs.ipv6, client.IPv6))
+
+				return
+			}
+
+			if rcs.expiry != client.Expiry {
+				slog.Error("control-given expiry is different than cached expiry, bailing...", "cached", rcs.expiry, "given", client.Expiry)
+				rcs.ccc(fmt.Errorf("expiry changed from %s to %s", rcs.expiry, client.Expiry))
+
+				return
 			}
 
 			slog.Debug("resumed control connection")
@@ -233,13 +254,15 @@ func (rcs *ResumableControlSession) Run() {
 	}
 }
 
+var ErrDisconnected = errors.New("control requested disconnect")
+
 func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error {
 	slog.Debug("Handle", "msg", msg)
 
 	switch m := msg.(type) {
 	case *msgcontrol.PeerAddition:
 		rcs.knownPeers[m.PubKey] = true
-		return rcs.callbacks.AddPeer(
+		return rcs.ExpectCallbacks().AddPeer(
 			m.PubKey,
 			m.HomeRelay,
 			m.Endpoints,
@@ -254,7 +277,7 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 			endpoints = m.Endpoints
 		}
 
-		return rcs.callbacks.UpdatePeer(
+		return rcs.ExpectCallbacks().UpdatePeer(
 			m.PubKey,
 			m.HomeRelay,
 			endpoints,
@@ -263,16 +286,21 @@ func (rcs *ResumableControlSession) Handle(msg msgcontrol.ControlMessage) error 
 		)
 	case *msgcontrol.PeerRemove:
 		delete(rcs.knownPeers, m.PubKey)
-		return rcs.callbacks.RemovePeer(m.PubKey)
+		return rcs.ExpectCallbacks().RemovePeer(m.PubKey)
 	case *msgcontrol.RelayUpdate:
-		return rcs.callbacks.UpdateRelays(m.Relays)
+		return rcs.ExpectCallbacks().UpdateRelays(m.Relays)
+	case *msgcontrol.Disconnect:
+		rcs.client.Cancel(fmt.Errorf("received disconnect: %w, %w", ErrDisconnected, m.RetryStrategy))
+		return nil
 	default:
 		return fmt.Errorf("got unexpected message from control: %v", msg)
 	}
-
 }
 
 func (rcs *ResumableControlSession) CallbacksReady() bool {
+	rcs.callbackLock.RLock()
+	defer rcs.callbackLock.RUnlock()
+
 	return rcs.callbacks != nil
 }
 
@@ -334,7 +362,30 @@ func (rcs *ResumableControlSession) IPv6() netip.Prefix {
 	return rcs.ipv6
 }
 
+func (rcs *ResumableControlSession) Expiry() time.Time {
+	return rcs.expiry
+}
+
+func (rcs *ResumableControlSession) ExpectCallbacks() ifaces.ControlCallbacks {
+	rcs.callbackLock.RLock()
+	defer rcs.callbackLock.RUnlock()
+
+	if rcs.callbacks == nil {
+		// Part of the function contract; if it doesnt exist, it'll blow up
+		panic("expected callbacks to be ready at this stage")
+	}
+
+	return rcs.callbacks
+}
+
+func (rcs *ResumableControlSession) Context() context.Context {
+	return rcs.ctx
+}
+
 func (rcs *ResumableControlSession) InstallCallbacks(callbacks ifaces.ControlCallbacks) {
+	rcs.callbackLock.Lock()
+	defer rcs.callbackLock.Unlock()
+
 	rcs.callbacks = callbacks
 }
 
@@ -347,7 +398,7 @@ func (rcs *ResumableControlSession) send(msg msgcontrol.ControlMessage) error {
 			return nil
 		}
 
-		if !errors.Is(err, control.ClosedErr) {
+		if !errors.Is(err, control.ErrClosed) {
 			return err
 		}
 	}

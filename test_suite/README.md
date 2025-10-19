@@ -63,6 +63,10 @@ sudo and xargs packages):
 
     xargs -a system_test_requirements.txt sudo apt-get install
 
+Optionally, the system tests can be run in parallel. In this mode the
+system tests are distributed over Docker containers, so it requires
+installing [Docker Engine](https://docs.docker.com/engine/install/).
+
 ### Performance test-specific requirements
 
 The performance tests are run as a part of the system tests, and require
@@ -106,6 +110,28 @@ physical setup for two reasons:
     network congestion than a physical network.
 
 The simulated network setup is described in detail in the next section.
+As mentioned in the [system test
+requirements](#system-test-specific-requirements), the tests may be run
+in parallel using Docker. The user can specify the amount of “threads”
+with the `-t` flag, which determines over how many Docker containers the
+tests will be distributed. The reason for using Docker is that it allows
+the concurrent tests to be executed in isolated networks. Naturally,
+running the tests in parallel allows the tests to run much faster. One
+disadvantage of the parallel tests is that a Docker image must be built
+before running the tests. This takes quite a while the first time the
+image is built, but by making use of Docker’s caching, building the
+image again after revisions to the code is significantly faster.
+
+The parallel system tests are also being used in the CI GitHub workflow
+when new code is pushed to a branch. For pull requests, the sequential
+version of the tests is still used because we cannot simply clone the
+branch head inside the Docker image in this case. Currently, running the
+system tests in parallel in CI does not the system test job to run
+faster. The reason for this is that loading and storing the Docker image
+from the GitHub Actions cache takes too long for the speed-up in
+actually running the tests to matter. This problem could potentially be
+solved by deploying a self-hosted runner with persistent memory to
+perform the CI workflow.
 
 ### Network Simulation Setup
 
@@ -455,12 +481,10 @@ configuring the following parameters:
       [\[8\]](#ref-man_netem)).
 
 - **Performance test baseline**: with this optional parameter, a
-  ‘baseline’ is added to the performance test results, created by
-  repeating the performance tests for:
-
-  1.  two peers that use WireGuard;
-  2.  two peers that use their physical IP addresses in the simulated
-      network setup.
+  ‘baseline’ is added to the performance test results. This baseline is
+  created by repeating the performance tests for two peers that use
+  WireGuard, and/or two peers that use their physical IP addresses in
+  the simulated network setup.
 
   With this baseline, it is easier to investigate whether any
   performance deficiencies in eduP2P are truly the result of a problem
@@ -474,6 +498,12 @@ configuring the following parameters:
   amount of values assigned to the independent variable. If the baseline
   parameter is used, the duration is additionally multiplied by 3.
 
+- **Performance test repetition**: the result of the performance tests
+  may be affected by external factors such as other processes running on
+  the same machine. To mitigate these undesirable external influences,
+  this parameter allows the performance tests to be repeated multiple
+  times in order to improve the reliability of their results.
+
 To run performance tests manually, [system_tests.sh](system_tests.sh)
 can be used with the `-f` option to specify a file containing system
 tests, which may use the above parameters to also execute a performance
@@ -486,7 +516,7 @@ The following command runs tests from a file named
 
 Suppose `performance_test.txt` contains the following line:
 
-    run_system_test -k bitrate -v 100,200 -d 5 TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 100,200 -d 5 -b wireguard -r 3 TS_PASS_DIRECT router1-router2 : :
 
 Then, running the system tests with the `-f performance_test.txt` option
 will execute a performance test with the following parameters:
@@ -494,6 +524,9 @@ will execute a performance test with the following parameters:
 - the independent variable to be tested is bitrate;
 - the values it should take are 100 and 200 Mbps;
 - the duration of the test for each value is 5 seconds.
+- the performance test is executed for two peers using WireGuard,
+  besides the standard execution for two peers using eduP2P.
+- the performance test is executed 3 times.
 
 The other parameters in `performance_test.txt` are not relevant to the
 performance test itself, but are necessary to run the system test in the
@@ -511,9 +544,11 @@ during the test. Using the Python script
 [visualize_performance_tests.py](visualize_performance_tests.py), these
 performance metrics are extracted from the json files, and graphs are
 automatically created that plot the independent variable on the X axis
-against each performance metric on the Y axis. Some of these graphs are
-shown in the [performance test results
-section](#performance-test-results)
+against each performance metric on the Y axis. Furthermore, if `-r` has
+a value greater than one, another graph is created to show the variance
+of the measurements across the different repetitions of the test. Some
+of these graphs are shown in the [performance test results
+section](#performance-test-results).
 
 ## Integration Tests
 
@@ -1151,7 +1186,7 @@ reproducibility.
 
 Command used:
 
-    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b TS_PASS_DIRECT router1-router2 : wg0:wg0
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1-router2 : wg0:wg0
 
 With this command, we compare the performance of eduP2P, WireGuard and a
 direct connection between two peers in the test suite’s network setup.
@@ -1162,8 +1197,8 @@ limit, as seen in the graph below:
 ![](./images/performance_tests/ext_wg_x_bitrate_y_bitrate.png)
 
 With the direct connection, the maximum bitrate that can be reached on
-my machine is approximately 3600 Mbps, whereas eduP2P and WireGuard both
-end at a bitrate of approximately 2800 Mbps.
+my machine is approximately 3400 Mbps, whereas eduP2P and WireGuard both
+end at a bitrate of approximately 2700 Mbps.
 
 As the measured bitrate increases, it becomes clear that there are large
 differences between the packet loss the three connections suffer, as
@@ -1172,21 +1207,16 @@ seen in the following graph:
 ![](./images/performance_tests/ext_wg_x_bitrate_y_packet_loss.png)
 
 The direct connection does not suffer any packet loss, whereas
-WireGuard’s packet loss slowly climbs up to approximately 3%, and the
-packet loss of eduP2P quickly increases to end at over 50%.
+WireGuard’s packet reaches a maximum of approximately 5%, and the packet
+loss of eduP2P quickly increases to end at over 70%.
 
+The root cause of eduP2P’s packet loss has yet to be determined.
 Although the final amount of packet loss in eduP2P seems very alarming,
 it must be noted that the maximum bitrate used in this performance test
 is very high, and when eduP2P would be used in the real world it is
 unlikely that the network bandwidth limits would allow for such a high
 bitrate. However, the packet loss of eduP2P is also quite sizeable even
 for lower bitrates, which would be a problem in the real world.
-
-The reason that eduP2P suffers so much packet loss probably has to do
-with the fact that it uses Go channels internally to pass packets
-between its isolated components. For such high bitrates, these channels
-may become full, and consequently packets sent to these channels are
-dropped.
 
 It must also be noted that although the direct connection and WireGuard
 do not suffer much packet loss on my machine, this is not the case on
@@ -1209,7 +1239,7 @@ differ on other machines.
 
 Command used:
 
-    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1-router2 : :
 
 This command repeats the performance test of the previous section, with
 the only difference being that now both peers use userspace WireGuard
@@ -1230,7 +1260,7 @@ further, however:
 
 Command used:
 
-    run_system_test -k delay -v 0,1,2,3 -d 3 -b TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k delay -v 0,1,2,3 -d 3 -b both -r 3 TS_PASS_DIRECT router1-router2 : :
 
 ![](./images/performance_tests/x_ow_delay_y_http_latency.png)
 
@@ -1251,6 +1281,36 @@ internally. Taking this explanation for the higher HTTP latency of
 eduP2P into account, we can conclude that increasing the one-way delay
 does not increase eduP2P’s HTTP latency more than the HTTP latency of
 WireGuard or the direct connection.
+
+### Consistency of results
+
+The results of the performance tests may be affected by external
+factors, such as other processes running on the same machine. Therefore,
+the performance test results may be inconsistent: two runs of the same
+performance tests may have different results.
+
+To improve the reliability of the performance tests, the `-r` option has
+been introduced to repeat the tests and aggregate their results. The
+performance tests also generate a graph illustrating the variance over
+multiple repetitions. Below, this graph is shown for the performance
+test described in [bitrate performance test with external
+WireGuard](./README.md#results-with-varying-bitrate-and-peers-using-external-wireguard).
+
+![](./images/performance_tests/performance_test_variance.png)
+
+This graph shows that there is quite a lot of variance between certain
+measurements. For example, for the eduP2P bitrate measurement (top-left)
+and WireGuard packet loss measurement (bottom-center), the absolute
+difference between the minimum and maximum measurements grows quite
+large as the target bitrate increases.
+
+Some of the measurements also contain outliers, such as the WireGuard
+jitter measurement (center) with large spikes in the third and fifth
+repetition.
+
+As seen from the black lines in the graphs, calculating the average over
+the repetitions improves the reliability of the results where the
+variance is large or outliers are present.
 
 ## Integration Test Results
 
@@ -1394,18 +1454,3 @@ Conservancy](https://commonsconservancy.org/).
 
 The test suite features that have been made possible thanks to this
 funding are described below.
-
-### Simulating network delay (finished 04-03-2025)
-
-This feature makes it possible to add artificial network delay in the
-system and performance tests.
-
-The feature can be used with the system tests by calling
-`system_tests.sh` with the option `-d <delay in ms>`.
-
-In the performance tests, this artificial delay can be configured as the
-independent test variable. More details are given in the [performance
-test documentation](./README.md#performance-tests). Furthermore, the
-effect of the artificial delay on the eduP2P network performance is
-reported in the [performance test
-results](./README.md#results-with-varying-one-way-delay).

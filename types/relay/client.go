@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgsess"
 	"io"
 	"log/slog"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 const (
@@ -28,8 +29,21 @@ var (
 	errKeepAliveNonZeroLen = errors.New("keepalive frame has non-zero length")
 )
 
-// Client is a Relay client that lives as long as its conn does
-type Client struct {
+type Client interface {
+	Run()
+	RelayKey() key.NodePublic
+
+	Send() chan<- SendPacket
+	Recv() <-chan RecvPacket
+	Done() <-chan struct{}
+	Err() error
+
+	Close()
+	Cancel(error)
+}
+
+// HTTPClient is a Relay client that lives as long as its conn does
+type HTTPClient struct {
 	ctx context.Context
 	ccc context.CancelCauseFunc
 
@@ -51,19 +65,19 @@ type Client struct {
 	closed bool
 }
 
-func (c *Client) Send() chan<- SendPacket {
+func (c *HTTPClient) Send() chan<- SendPacket {
 	return c.sendCh
 }
 
-func (c *Client) Recv() <-chan RecvPacket {
+func (c *HTTPClient) Recv() <-chan RecvPacket {
 	return c.recvCh
 }
 
-func (c *Client) Done() <-chan struct{} {
+func (c *HTTPClient) Done() <-chan struct{} {
 	return c.ctx.Done()
 }
 
-func (c *Client) Err() error {
+func (c *HTTPClient) Err() error {
 	return c.ctx.Err()
 }
 
@@ -81,14 +95,14 @@ type RecvPacket struct {
 	Data []byte
 }
 
-// EstablishClient creates a new relay.Client on a given MetaConn with associated bufio.ReadWriter.
+// EstablishClient creates a new relay.HTTPClient on a given MetaConn with associated bufio.ReadWriter.
 //
-// It logs in and authenticates the server before returning a Client object.
+// It logs in and authenticates the server before returning a HTTPClient object.
 // If any error occurs, or no client can be established before timeout, it returns.
-func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate) (*Client, error) {
+func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.ReadWriter, timeout time.Duration, getPriv func() *key.NodePrivate) (*HTTPClient, error) {
 	ctx, ccc := context.WithCancelCause(parentCtx)
 
-	c := &Client{
+	c := &HTTPClient{
 		ctx: ctx,
 		ccc: ccc,
 
@@ -139,36 +153,33 @@ func EstablishClient(parentCtx context.Context, mc types.MetaConn, brw *bufio.Re
 		return nil, fmt.Errorf("could not reset deadline: %w", err)
 	}
 
-	go func() {
-		<-c.ctx.Done()
-		c.Close()
-	}()
+	context.AfterFunc(c.ctx, c.Close)
 
 	return c, nil
 }
 
-func (c *Client) privateKey() *key.NodePrivate {
+func (c *HTTPClient) privateKey() *key.NodePrivate {
 	return c.getPriv()
 }
 
-func (c *Client) publicKey() key.NodePublic {
+func (c *HTTPClient) publicKey() key.NodePublic {
 	return c.privateKey().Public()
 }
 
 // RelayKey returns the key of the relay we're connected to.
-func (c *Client) RelayKey() key.NodePublic {
+func (c *HTTPClient) RelayKey() key.NodePublic {
 	return c.relayServerKey
 }
 
 // recvVersion assumes the caller has ownership, or lock
-func (c *Client) recvVersion() (ProtocolVersion, error) {
+func (c *HTTPClient) recvVersion() (ProtocolVersion, error) {
 	b, err := c.reader.ReadByte()
 
 	return ProtocolVersion(b), err
 }
 
 // recvServerKey assumes the caller has ownership, or lock
-func (c *Client) recvServerKey() error {
+func (c *HTTPClient) recvServerKey() error {
 	frTyp, frLen, err := readFrameHeader(c.reader)
 	if err != nil {
 		return err
@@ -187,7 +198,6 @@ func (c *Client) recvServerKey() error {
 	var buf [32]byte
 
 	_, err = io.ReadFull(c.reader, buf[:])
-
 	if err != nil {
 		return err
 	}
@@ -198,7 +208,7 @@ func (c *Client) recvServerKey() error {
 }
 
 // sendClientInfo assumes the caller has ownership, or lock
-func (c *Client) sendClientInfo() error {
+func (c *HTTPClient) sendClientInfo() error {
 	m, err := json.Marshal(ClientInfo{SendKeepalive: true})
 	if err != nil {
 		return err
@@ -222,7 +232,7 @@ func (c *Client) sendClientInfo() error {
 }
 
 // recvServerInfo assumes the caller has ownership, or lock
-func (c *Client) recvServerInfo() (*ServerInfo, error) {
+func (c *HTTPClient) recvServerInfo() (*ServerInfo, error) {
 	frTyp, frLen, err := readFrameHeader(c.reader)
 	if err != nil {
 		return nil, err
@@ -238,7 +248,7 @@ func (c *Client) recvServerInfo() (*ServerInfo, error) {
 		return nil, errPacketTooLarge
 	}
 
-	var msgbox = make([]byte, frLen)
+	msgbox := make([]byte, frLen)
 
 	if _, err = io.ReadFull(c.reader, msgbox); err != nil {
 		return nil, err
@@ -259,30 +269,37 @@ func (c *Client) recvServerInfo() (*ServerInfo, error) {
 	return info, nil
 }
 
-func (c *Client) Cancel(err error) {
+func (c *HTTPClient) Cancel(err error) {
 	c.ccc(err)
 	if err := c.mc.SetDeadline(time.Now().Add(10 * time.Millisecond)); err != nil {
 		slog.Error("could not set deadline in Cancel", "err", err)
 	}
 }
 
-func (c *Client) Close() {
-	if c.closed || context.Cause(c.ctx) != nil {
+func (c *HTTPClient) Close() {
+	if c.closed {
 		return
 	}
 
-	c.mc.Close()
+	if err := c.mc.Close(); err != nil {
+		slog.Error("error when closing metaconn", "err", err)
+	}
 	close(c.sendCh)
 	close(c.recvCh)
 
 	c.closed = true
 }
 
-func (c *Client) Closed() bool {
+func (c *HTTPClient) Closed() bool {
 	return c.closed
 }
 
-func (c *Client) RunReceive() {
+func (c *HTTPClient) Run() {
+	go c.RunReceive()
+	go c.RunSend()
+}
+
+func (c *HTTPClient) RunReceive() {
 	if !c.recvMutex.TryLock() {
 		slog.Error("could not lock recvMutex, is RunReceive already running?")
 		return
@@ -291,7 +308,7 @@ func (c *Client) RunReceive() {
 
 	defer func() {
 		if v := recover(); v != nil {
-			c.ccc(fmt.Errorf("reader panicked: %s", v))
+			c.Cancel(fmt.Errorf("reader panicked: %s", v))
 		}
 	}()
 
@@ -304,11 +321,8 @@ func (c *Client) RunReceive() {
 	for {
 		frTyp, frLen, err = readFrameHeader(c.reader)
 
-		select {
-		case <-c.ctx.Done():
+		if c.ctx.Err() != nil {
 			return
-		default:
-			// fallthrough
 		}
 
 		if err != nil {
@@ -357,7 +371,7 @@ func (c *Client) RunReceive() {
 	}
 }
 
-func (c *Client) RunSend() {
+func (c *HTTPClient) RunSend() {
 	if !c.sendMutex.TryLock() {
 		slog.Error("could not lock sendMutex, is RunSend already running?")
 		return

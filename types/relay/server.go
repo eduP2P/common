@@ -6,14 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/msgsess"
 	"io"
 	"log/slog"
 	"net/netip"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 type Server struct {
@@ -61,7 +62,6 @@ func (s *Server) sendServerKey(writer *bufio.Writer) (err error) {
 	pKey := s.PublicKey()
 
 	_, err = writer.Write(pKey[:])
-
 	if err != nil {
 		return
 	}
@@ -212,7 +212,6 @@ func (s *Server) getClient(peer key.NodePublic) *ServerClient {
 }
 
 func (s *Server) registerClient(client *ServerClient) {
-
 	// Check if there's a client active on this key already.
 	if sc := s.getClient(client.nodeKey); sc != nil {
 		// Just cancel the old connected client.

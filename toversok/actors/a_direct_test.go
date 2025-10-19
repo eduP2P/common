@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"slices"
 	"testing"
 	"time"
 
@@ -22,13 +23,13 @@ func TestDirectManager(t *testing.T) {
 
 	mockUDPConn := &MockUDPConn{
 		writeCh: make(chan []byte),
-		setReadDeadline: func(t time.Time) error {
+		setReadDeadline: func(time.Time) error {
 			return nil
 		},
-		readFromUDPAddrPort: func(b []byte) (n int, addr netip.AddrPort, err error) {
+		readFromUDPAddrPort: func([]byte) (n int, addr netip.AddrPort, err error) {
 			return 0, dummyAddrPort, nil
 		},
-		writeToUDPAddrPort: func(b []byte, addr netip.AddrPort) (int, error) {
+		writeToUDPAddrPort: func([]byte, netip.AddrPort) (int, error) {
 			return 0, nil
 		},
 	}
@@ -111,7 +112,7 @@ func TestDirectRouter(t *testing.T) {
 	assert.Equal(t, msgEM, &msgactor.EManSTUNResponse{Endpoint: frameEndpoint.SrcAddrPort, Packet: frameEndpoint.Pkt}, "EndpointManager did not receive the expected message")
 
 	// Message that should be sent to SessionManager
-	sessionPkt := append(msgsess.MagicBytes, zeroBytes(56)...)
+	sessionPkt := slices.Concat(msgsess.MagicBytes, zeroBytes(56))
 
 	frameSession := ifaces.DirectedPeerFrame{
 		SrcAddrPort: dummyAddrPort,
@@ -125,11 +126,11 @@ func TestDirectRouter(t *testing.T) {
 	// For each peer: register peer in DirectRouter and Stage, and then send a message to their inConn
 	for i, b := range []byte{1, 2} {
 		ic := ics[i]
-		key := ic.peer
+		peer := ic.peer
 		endpoint := peerEndpoints[i]
 
-		dr.setAKA(endpoint, key)
-		s.inConn[key] = ic
+		dr.setAKA(endpoint, peer)
+		s.inConn[peer] = ic
 
 		frame := ifaces.DirectedPeerFrame{
 			SrcAddrPort: endpoint,

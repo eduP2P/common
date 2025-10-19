@@ -6,10 +6,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"golang.org/x/exp/maps"
 	"log/slog"
 	"net/netip"
 	"strings"
+
+	"golang.org/x/exp/maps"
 )
 
 // Incomparable is a zero-width incomparable type. If added as the
@@ -72,12 +73,12 @@ func SliceOrEmpty[T any](v []T) []T {
 }
 
 func SliceOrNil[T any](v []T) []T {
-	if (v != nil && len(v) > 0) || (v == nil) {
+	if len(v) > 0 {
 		return v
-	} else {
-		// len(v) == 0
-		return nil
 	}
+
+	// len(v) == 0
+	return nil
 }
 
 // IsContextDone does a quick check on a context to see if its dead.
@@ -90,6 +91,7 @@ func RandStringBytesMaskImprSrc(n int) string {
 	b := make([]byte, (n+1)/2) // can be simplified to n/2 if n is always even
 
 	if _, err := rand.Read(b); err != nil {
+		// We expect the randomizer to be available here
 		panic(err)
 	}
 
@@ -135,3 +137,7 @@ func Map[T, U any](ts []T, f func(T) U) []U {
 }
 
 type LogonCallback func(url string, deviceKey chan<- string) error
+
+type CCCKEY int
+
+const CCC CCCKEY = 112

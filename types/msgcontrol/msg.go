@@ -1,10 +1,12 @@
 package msgcontrol
 
 import (
-	"github.com/edup2p/common/types/key"
-	"github.com/edup2p/common/types/relay"
+	"fmt"
 	"net/netip"
 	"time"
+
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/relay"
 )
 
 type ControlMessageType byte
@@ -17,7 +19,6 @@ const (
 	LogonDeviceKeyType
 	LogonAcceptType
 	LogonRejectType
-	LogoutType
 	PingType
 	PongType
 )
@@ -29,6 +30,8 @@ const (
 	PeerUpdateType
 	PeerRemoveType
 	RelayUpdateType
+	LogoutType
+	DisconnectType
 )
 
 // === handshake phase
@@ -72,6 +75,8 @@ type LogonAccept struct {
 	IP4 netip.Prefix
 	IP6 netip.Prefix
 
+	AuthExpiry time.Time
+
 	SessionID string
 }
 
@@ -96,7 +101,7 @@ func (r RetryStrategyType) Error() string {
 	case RecreateSession:
 		return "retry by recreating session"
 	default:
-		panic("unknown retry strategy type")
+		return fmt.Sprintf("!!!unknown retry strategy type %d!!!", r)
 	}
 }
 
@@ -107,8 +112,6 @@ type LogonReject struct {
 
 	RetryAfter time.Duration `json:",omitempty"`
 }
-
-type Logout struct{}
 
 type Ping struct {
 	// random data encrypted with shared key (control priv x client pub)
@@ -124,6 +127,18 @@ type Pong struct {
 }
 
 // === during session
+
+// -> control
+type Logout struct{}
+
+// -> client
+type Disconnect struct {
+	Reason string
+
+	RetryStrategy RetryStrategyType `json:",omitempty"`
+
+	RetryAfter time.Duration `json:",omitempty"`
+}
 
 // -> control
 type EndpointUpdate struct {

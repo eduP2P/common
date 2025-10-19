@@ -25,10 +25,8 @@ import (
 )
 
 var (
-	//dev        = flag.Bool("dev", false, "run in localhost development mode (overrides -a)")
 	addr       = flag.String("a", ":443", "server HTTP/HTTPS listen address, in form \":port\", \"ip:port\", or for IPv6 \"[ip]:port\". If the IP is omitted, it defaults to all interfaces. Serves HTTPS if the port is 443 and/or -certmode is manual, otherwise HTTP.")
 	configPath = flag.String("c", "", "config file path")
-	//stunPort   = flag.Int("stun-port", stunserver.DefaultPort, "The UDP port on which to serve STUN. The listener is bound to the same IP (if any) as specified in the -a flag.")
 
 	programLevel = new(slog.LevelVar) // Info by default
 )
@@ -36,7 +34,6 @@ var (
 func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: programLevel,
-		//AddSource: true,
 	})
 	slog.SetDefault(slog.New(h))
 	programLevel.Set(-8)
@@ -54,21 +51,19 @@ func main() {
 
 	mux.Handle("/control", controlhttp.ServerHandler(cserver.server))
 
-	// TODO below is dup from relayserver main.go; dedup in a common library?
-
 	mux.Handle("/", handleStaticHTML(ToverSokControlDefaultHTML))
 
-	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/robots.txt", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		browserHeaders(w)
-		io.WriteString(w, "User-agent: *\nDisallow: /\n")
+		if _, err := io.WriteString(w, "User-agent: *\nDisallow: /\n"); err != nil {
+			slog.Error("could not write robots.txt", "err", err)
+		}
 	}))
 	mux.Handle("/generate_204", http.HandlerFunc(serverCaptivePortalBuster))
 
 	httpsrv := &http.Server{
 		Addr:    *addr,
 		Handler: mux,
-		// TODO
-		//ErrorLog: slog.NewLogLogger(),
 
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
@@ -76,16 +71,16 @@ func main() {
 
 	go func() {
 		<-ctx.Done()
-		httpsrv.Shutdown(ctx)
+		if err := httpsrv.Shutdown(ctx); err != nil {
+			slog.Error("control: failed to shutdown control server", "error", err)
+		}
 	}()
-
-	// TODO setup TLS with autocert?
 
 	slog.Info("control: serving", "addr", *addr)
 	err := httpsrv.ListenAndServe()
 
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("control: error %s", err)
+		log.Fatalf("control: error %s", err) //nolint:gocritic
 	}
 }
 
@@ -99,7 +94,7 @@ type ControlServer struct {
 }
 
 func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID) {
-	println("OnSessionCreate")
+	slog.Info("OnSessionCreate", "id", id, "cid", cid)
 
 	go func() {
 		if err := cs.server.AcceptAuthentication(id); err != nil {
@@ -108,25 +103,24 @@ func (cs *ControlServer) OnSessionCreate(id control.SessID, cid control.ClientID
 	}()
 }
 
-func (cs *ControlServer) OnSessionResume(id control.SessID, id2 control.ClientID) {
-	println("OnSessionResume")
-	return // noop
+func (cs *ControlServer) OnSessionResume(sess control.SessID, cid control.ClientID) {
+	slog.Info("OnSessionResume", "sess", sess, "cid", cid)
 }
 
-func (cs *ControlServer) OnDeviceKey(id control.SessID, key string) {
-	println("OnDeviceKey")
-	return // noop
+func (cs *ControlServer) OnDeviceKey(sess control.SessID, deviceKey string) {
+	slog.Info("OnDeviceKey", "sess", sess, "deviceKey", deviceKey)
 }
 
-func (cs *ControlServer) OnSessionFinalize(id control.SessID, id2 control.ClientID) (netip.Prefix, netip.Prefix) {
-	println("OnSessionFinalize")
+func (cs *ControlServer) OnSessionFinalize(sess control.SessID, cid control.ClientID) (netip.Prefix, netip.Prefix, time.Time) {
+	slog.Info("OnSessionFinalize", "sess", sess, "cid", cid)
 
-	return cs.getIPs(key.NodePublic(id2))
+	ip4, ip6 := cs.getIPs(key.NodePublic(cid))
+
+	return ip4, ip6, time.Time{}
 }
 
-func (cs *ControlServer) OnSessionDestroy(id control.SessID, id2 control.ClientID) {
-	println("OnSessionDestroy")
-	return // noop
+func (cs *ControlServer) OnSessionDestroy(sess control.SessID, cid control.ClientID) {
+	slog.Info("OnSessionDestroy", "sess", sess, "cid", cid)
 }
 
 func LoadServer(ctx context.Context) *ControlServer {
@@ -183,7 +177,7 @@ func (cs *ControlServer) addNewNode(node key.NodePublic) {
 	}
 }
 
-func (cs *ControlServer) isKnown(node key.NodePublic) bool {
+func (cs *ControlServer) isKnown(node key.NodePublic) bool { //nolint:unused
 	cs.cfgMu.Lock()
 	defer cs.cfgMu.Unlock()
 
@@ -234,7 +228,6 @@ func findNewIP(ipp netip.Prefix, used func(netip.Addr) bool) (netip.Prefix, neti
 				// we exceeded the boundary, try a back-sweep
 				backwards = true
 			} else {
-				// TODO find better way to deal with this
 				panic("address space exhausted")
 			}
 		}
@@ -287,14 +280,16 @@ func handleStaticHTML(doc string) http.HandlerFunc {
 	}
 }
 
-func sendStaticHTML(doc string, w http.ResponseWriter, r *http.Request) {
+func sendStaticHTML(doc string, w http.ResponseWriter, _ *http.Request) {
 	browserHeaders(w)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 
-	io.WriteString(w, doc)
+	if _, err := io.WriteString(w, doc); err != nil {
+		slog.Error("failed to write static HTML page", "error", err)
+	}
 }
 
 const ToverSokControlDefaultHTML = `
@@ -347,6 +342,7 @@ func loadConfig() Config {
 		return writeNewConfig()
 	case err != nil:
 		log.Fatal(err)
+		//goland:noinspection GoUnreachableCode
 		panic("unreachable")
 	default:
 		var cfg Config
@@ -366,14 +362,14 @@ func writeNewConfig() Config {
 }
 
 func writeConfig(cfg Config, path string) {
-	if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		log.Fatal(err)
 	}
 	b, err := json.MarshalIndent(cfg, "", "\t")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := os.WriteFile(path, b, 0600); err != nil {
+	if err := os.WriteFile(path, b, 0o600); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -382,7 +378,6 @@ func newConfig() Config {
 	return Config{
 		ControlKey: key.NewControlPrivate(),
 
-		//// TODO REPLACE WITH CONFIGURABLE VALUES
 		IP4: netip.MustParsePrefix("10.42.0.0/16"),
 		IP6: netip.MustParsePrefix("fd42:dead:beef::/64"),
 

@@ -1,11 +1,12 @@
 package msgactor
 
 import (
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/relay"
-	"net/netip"
-	"time"
 )
 
 // Messages
@@ -42,6 +43,11 @@ type TManSessionMessageFromDirect struct {
 	AddrPort netip.AddrPort
 
 	Msg *msgsess.ClearMessage
+}
+
+type TManSpreadMDNSPacket struct {
+	Pkt []byte
+	IP6 bool
 }
 
 // ======================================================================================================
@@ -104,6 +110,17 @@ type DManSetMTU struct {
 
 type RManRelayLatencyResults struct {
 	RelayLatency map[int64]time.Duration
+}
+
+// ======================================================================================================
+// MDNSManager msgs
+
+type MManReceivedPacket struct {
+	From key.NodePublic
+
+	Data []byte
+
+	IP6 bool
 }
 
 // ======================================================================================================

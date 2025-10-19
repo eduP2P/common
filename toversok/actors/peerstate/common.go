@@ -1,15 +1,17 @@
-package peer_state
+package peerstate
 
 import (
 	"context"
+	"errors"
+	"log/slog"
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/stage"
-	"log/slog"
-	"net/netip"
-	"time"
 )
 
 const (
@@ -30,7 +32,7 @@ func (sc *StateCommon) Peer() key.NodePublic {
 	return sc.peer
 }
 
-func (sc *StateCommon) pingDirectValid(ap netip.AddrPort, sess key.SessionPublic, ping *msgsess.Ping) bool {
+func (sc *StateCommon) pingDirectValid(_ netip.AddrPort, sess key.SessionPublic, ping *msgsess.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
@@ -41,7 +43,8 @@ func (sc *StateCommon) replyWithPongDirect(ap netip.AddrPort, sess key.SessionPu
 	})
 }
 
-func (sc *StateCommon) pingRelayValid(relay int64, node key.NodePublic, sess key.SessionPublic, ping *msgsess.Ping) bool {
+//nolint:unused
+func (sc *StateCommon) pingRelayValid(_ int64, _ key.NodePublic, sess key.SessionPublic, ping *msgsess.Ping) bool {
 	return sc.tm.ValidKeys(ping.NodeKey, sess)
 }
 
@@ -51,63 +54,114 @@ func (sc *StateCommon) replyWithPongRelay(relay int64, node key.NodePublic, sess
 	})
 }
 
-// TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
+func (sc *StateCommon) pongDirectValid(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) error {
 	sent, ok := sc.tm.Pings()[pong.TxID]
 	if !ok {
-		// TODO log: Got pong for unknown ping
-		return
+		slog.Warn(
+			"got pong for unknown ping",
+			"from-ap", ap,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
+		return errors.New("pong txid does not correspond to any sent ping")
 	}
 
 	if sent.ToRelay {
-		// TODO log: got direct pong to relay ping
-		return
+		slog.Warn(
+			"got direct pong to relay ping",
+			"from-ap", ap,
+			"txid", pong.TxID,
+			"ping-to", sent.To.Debug(),
+			"to-relay", sent.RelayID,
+			"sess", sess,
+		)
+		return errors.New("direct pong is reply to relay ping")
 	}
 
 	if !sc.tm.ValidKeys(sc.peer, sess) {
 		// ?? Somehow the pong is for a valid ping to a node that no longer has this session key?
 		// Might happen between restarts, log and ignore.
-		// TODO log
-		return
+		slog.Warn(
+			"received valid pong for unexpected remote session",
+			"from-ap", ap,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
+		return errors.New("got pong from invalid session")
 	}
 
 	// TODO more checks? (permissive, but log)
 
+	return nil
+}
+
+func (sc *StateCommon) clearPongDirect(_ netip.AddrPort, _ key.SessionPublic, pong *msgsess.Pong) {
 	delete(sc.tm.Pings(), pong.TxID)
 }
 
 // TODO add bool here and checks by callers
-func (sc *StateCommon) ackPongRelay(relay int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
-
+func (sc *StateCommon) ackPongRelay(relayID int64, node key.NodePublic, sess key.SessionPublic, pong *msgsess.Pong) {
 	// Relay pongs should come in response to relay pings, note if it is different.
 	sent, ok := sc.tm.Pings()[pong.TxID]
 
 	if !ok {
-		// TODO log: Got pong for unknown ping
+		slog.Warn(
+			"got pong for unknown ping",
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
 	}
 
 	if !sent.ToRelay {
-		// TODO log: got relay reply to direct ping
+		slog.Warn(
+			"got relay pong to direct ping",
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"ping-to", sent.To.Debug(),
+			"to-relay", sent.RelayID,
+			"sess", sess,
+		)
 		return
 	}
 
-	if !sc.tm.ValidKeys(node, sess) {
-		// TODO log
+	if node != sent.To {
+		slog.Warn(
+			"received pong to ping (with same TXID) from a different peer than we sent it to, possible collision",
+			"to-peer", sent.To.Debug(),
+			"from-peer", node.Debug(),
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
 	}
 
 	if !sc.tm.ValidKeys(sent.To, sess) {
 		// ?? Somehow the pong is for a valid ping to a node that no longer has this session key?
 		// Might happen between restarts, log and ignore.
-		// TODO log
+		slog.Warn(
+			"received valid pong for unexpected remote session",
+			"from-relay", relayID,
+			"txid", pong.TxID,
+			"sess", sess,
+		)
 		return
+	}
+
+	if sent.RelayID != relayID {
+		slog.Debug(
+			"received relay pong to relay ping from other relay, ignoring...",
+			"to-relay", sent.RelayID,
+			"from-relay", relayID,
+			"txid", pong.TxID,
+		)
 	}
 
 	// TODO more checks? (permissive, but log)
 
 	delete(sc.tm.Pings(), pong.TxID)
-
 }
 
 func (sc *StateCommon) getPeerInfo() *stage.PeerInfo {
@@ -122,12 +176,24 @@ type EstablishingCommon struct {
 
 	lastPing  time.Time
 	pingCount uint
+
+	tracker *PingTracker
 }
 
 func mkEstComm(sc *StateCommon, attempts int) *EstablishingCommon {
-	ec := &EstablishingCommon{StateCommon: sc, attempt: attempts + 1}
+	ec := &EstablishingCommon{
+		StateCommon: sc,
+		attempt:     attempts + 1,
+		tracker:     NewPingTracker(),
+	}
 	ec.resetDeadline()
 	return ec
+}
+
+func (ec *EstablishingCommon) ackPongDirect(ap netip.AddrPort, sess key.SessionPublic, pong *msgsess.Pong) {
+	ec.tracker.GotPong(ap)
+
+	ec.clearPongDirect(ap, sess, pong)
 }
 
 func (ec *EstablishingCommon) resetDeadline() {

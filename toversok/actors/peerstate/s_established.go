@@ -1,19 +1,22 @@
-package peer_state
+package peerstate
 
 import (
 	"context"
-	"github.com/edup2p/common/types"
-	"github.com/edup2p/common/types/key"
-	msg2 "github.com/edup2p/common/types/msgsess"
 	"net/netip"
 	"slices"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"github.com/edup2p/common/types/msgsess"
 )
 
 const EstablishedPingInterval = time.Second * 2
 
 type Established struct {
 	*StateCommon
+
+	tracker *PingTracker
 
 	lastPingRecv time.Time
 	lastPongRecv time.Time
@@ -24,11 +27,6 @@ type Established struct {
 	inactive      bool
 	inactiveSince time.Time
 
-	// TODO: this can flap,
-	//   and basically picks the first best endpoint that the other client responds with,
-	//   which may be non-ideal.
-	//   Tailscale has logic to pick and switch between different endpoints, and sort them.
-	//   We could possibly build this into the state logic.
 	currentOutEndpoint netip.AddrPort
 
 	knownInEndpoints map[netip.AddrPort]bool
@@ -51,13 +49,11 @@ func (e *Established) OnTick() PeerState {
 		if !e.inactive {
 			e.inactive = true
 			e.inactiveSince = time.Now()
-		} else {
-			if time.Now().After(e.inactiveSince.Add(ConnectionInactivityTimeout)) {
-				return LogTransition(e, &Teardown{
-					StateCommon: e.StateCommon,
-					inactive:    true,
-				})
-			}
+		} else if time.Now().After(e.inactiveSince.Add(ConnectionInactivityTimeout)) {
+			return LogTransition(e, &Teardown{
+				StateCommon: e.StateCommon,
+				inactive:    true,
+			})
 		}
 	}
 
@@ -79,12 +75,14 @@ func (e *Established) OnTick() PeerState {
 	return nil
 }
 
-func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) PeerState {
-	if s := cascadeDirect(e, ap, clear); s != nil {
+func (e *Established) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
+	if s := cascadeDirect(e, ap, clearMsg); s != nil {
 		return s
 	}
 
-	LogDirectMessage(e, ap, clear)
+	ap = types.NormaliseAddrPort(ap)
+
+	LogDirectMessage(e, ap, clearMsg)
 
 	// TODO check if endpoint is same as current used one
 	//  - switch? trusting it blindly is open to replay attacks
@@ -95,58 +93,84 @@ func (e *Established) OnDirect(ap netip.AddrPort, clear *msg2.ClearMessage) Peer
 		return nil
 	}
 
-	switch m := clear.Message.(type) {
-	case *msg2.Ping:
-		if !e.pingDirectValid(ap, clear.Session, m) {
+	switch m := clearMsg.Message.(type) {
+	case *msgsess.Ping:
+		if !e.pingDirectValid(ap, clearMsg.Session, m) {
 			L(e).Warn("dropping invalid ping", "ap", ap.String())
 			return nil
 		}
 
 		e.lastPingRecv = time.Now()
-		e.replyWithPongDirect(ap, clear.Session, m)
+		e.replyWithPongDirect(ap, clearMsg.Session, m)
+
+		if ap != e.currentOutEndpoint && !e.tracker.Has(ap) {
+			// We're not sending pings to this, yet we may want to, to prevent asymmetric glare
+			pi := e.getPeerInfo()
+			if pi == nil {
+				// Peer info unavailable
+				return nil
+			}
+
+			L(e).Log(context.Background(), types.LevelTrace, "sending ping to ping to prevent assymetric glare", "ap", ap.String(), "current", e.currentOutEndpoint.String())
+
+			// Send ping with ID, so that it eventually blackholes
+			e.tm.SendPingDirectWithID(ap, e.peer, pi.Session, m.TxID)
+		}
+
 		return nil
 
-	case *msg2.Pong:
-		e.lastPongRecv = time.Now()
-		e.ackPongDirect(ap, clear.Session, m)
+	case *msgsess.Pong:
+		if err := e.pongDirectValid(ap, clearMsg.Session, m); err != nil {
+			L(e).Warn("dropping invalid pong", "ap", ap.String(), "err", err)
+		} else {
+			e.lastPongRecv = time.Now()
+			e.tracker.GotPong(ap)
+			e.clearPongDirect(ap, clearMsg.Session, m)
+
+			e.checkChangedPreferredEndpoint()
+		}
+
 		return nil
 
-	//case *msg.Rendezvous:
 	default:
 		L(e).Debug("ignoring direct session message",
 			"ap", ap,
-			"session", clear.Session,
+			"session", clearMsg.Session,
 			"msg", m.Debug())
 		return nil
 	}
 }
 
-func (e *Established) OnRelay(relay int64, peer key.NodePublic, clear *msg2.ClearMessage) PeerState {
-	if s := cascadeRelay(e, relay, peer, clear); s != nil {
+func (e *Established) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
+	if s := cascadeRelay(e, relay, peer, clearMsg); s != nil {
 		return s
 	}
 
-	LogRelayMessage(e, relay, peer, clear)
+	LogRelayMessage(e, relay, peer, clearMsg)
 
-	switch m := clear.Message.(type) {
-	case *msg2.Ping:
-		e.replyWithPongRelay(relay, peer, clear.Session, m)
+	switch m := clearMsg.Message.(type) {
+	case *msgsess.Ping:
+		e.replyWithPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
 
-	case *msg2.Pong:
-		e.ackPongRelay(relay, peer, clear.Session, m)
+	case *msgsess.Pong:
+		e.ackPongRelay(relay, peer, clearMsg.Session, m)
 		return nil
 
-	//case *msg.Rendezvous:
 	// TODO maybe re-establishment logic?
+	// case *msg.Rendezvous:
 	default:
 		L(e).Debug("ignoring relay session message",
 			"relay", relay,
 			"peer", peer,
-			"session", clear.Session,
+			"session", clearMsg.Session,
 			"msg", m.Debug())
 		return nil
 	}
+}
+
+func (e *Established) GetEndpoint() netip.AddrPort {
+	return e.currentOutEndpoint
 }
 
 // canTrustEndpoint returns true if the endpoint that has been given corresponds to the peer.
@@ -182,4 +206,34 @@ func (e *Established) canTrustEndpoint(ap netip.AddrPort) bool {
 	}
 
 	return false
+}
+
+func (e *Established) checkChangedPreferredEndpoint() {
+	bap, err := e.tracker.BestAddrPort()
+	if err != nil {
+		// this should not happen, at this point we have at least one happy pair
+		panic(err)
+	}
+
+	if bap != e.currentOutEndpoint {
+		L(e).Log(context.Background(), types.LevelTrace, "switching bestaddrport", "bap", bap.String(), "current", e.currentOutEndpoint.String())
+		// not the best one, switch
+		e.switchToEndpoint(bap)
+	}
+}
+
+func (e *Established) switchToEndpoint(ep netip.AddrPort) {
+	previous := e.currentOutEndpoint
+
+	e.currentOutEndpoint = ep
+
+	e.tm.OutConnUseAddrPort(e.peer, ep)
+	e.tm.DManSetAKA(e.peer, ep)
+
+	L(e).Info(
+		"SWITCHED direct peer connection to better endpoint",
+		"peer", e.peer.Debug(),
+		"from", previous.String(),
+		"to", ep.String(),
+	)
 }

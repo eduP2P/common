@@ -2,16 +2,18 @@ package toversok
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net/netip"
+	"sync"
+
 	"github.com/edup2p/common/toversok/actors"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/ifaces"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
 	"github.com/edup2p/common/types/relay"
-	"log/slog"
-	"net/netip"
-	"sync"
 )
 
 // Session represents one single session; a session key is generated here, and used inside a Stage
@@ -21,12 +23,11 @@ type Session struct {
 
 	wg WireGuardController
 	fw FirewallController
+	cs ifaces.ControlSession
 
 	quarantineMu     sync.Mutex
 	quarantinedPeers map[key.NodePublic]bool
 	peerAddrs        map[key.NodePublic][]netip.Addr
-
-	//control ifaces.ControlSession
 
 	stage ifaces.Stage
 
@@ -43,8 +44,7 @@ func SetupSession(
 	logon types.LogonCallback,
 ) (*Session, error) {
 	ctx, ccc := context.WithCancelCause(engineCtx)
-
-	sCtx := context.WithValue(ctx, "ccc", ccc)
+	sCtx := context.WithValue(ctx, types.CCC, ccc)
 
 	sess := &Session{
 		ctx:              sCtx,
@@ -57,13 +57,14 @@ func SetupSession(
 		stage: nil,
 	}
 
-	cc, err := co.CreateClient(sess.ctx, getNodePriv, sess.getPriv, logon)
+	var err error
+	sess.cs, err = co.CreateClient(sess.ctx, getNodePriv, sess.getPriv, logon)
 	if err != nil {
 		sess.ccc(err)
 		return nil, fmt.Errorf("could not create control client: %w", err)
 	}
 
-	if sess.wg, err = wg.Controller(*getNodePriv(), cc.IPv4(), cc.IPv6()); err != nil {
+	if sess.wg, err = wg.Controller(*getNodePriv(), sess.cs.IPv4(), sess.cs.IPv6()); err != nil {
 		err = fmt.Errorf("could not init wireguard: %w", err)
 		sess.ccc(err)
 		return nil, err
@@ -75,9 +76,24 @@ func SetupSession(
 		return nil, err
 	}
 
-	sess.stage = actors.MakeStage(sess.ctx, getNodePriv, sess.getPriv, getExtSock, sess.wg.ConnFor, cc)
+	sess.stage = actors.MakeStage(
+		sess.ctx,
+		getNodePriv,
+		sess.getPriv,
+		getExtSock,
+		sess.wg.ConnFor,
+		sess.cs,
+		nil,
+		sess.wg.GetInterface(),
+	)
 
-	cc.InstallCallbacks(sess)
+	sess.cs.InstallCallbacks(sess)
+	context.AfterFunc(sess.cs.Context(), func() {
+		sess.ccc(errors.New("resumable control session exited"))
+	})
+	context.AfterFunc(sess.stage.Context(), func() {
+		sess.ccc(errors.New("stage exited"))
+	})
 
 	return sess, nil
 }
@@ -134,7 +150,7 @@ func (s *Session) triggerQuarantineUpdate() {
 
 // CONTROL CALLBACKS
 
-func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4 netip.Addr, ip6 netip.Addr, prop msgcontrol.Properties) error {
+func (s *Session) AddPeer(peer key.NodePublic, homeRelay int64, endpoints []netip.AddrPort, session key.SessionPublic, ip4, ip6 netip.Addr, prop msgcontrol.Properties) error {
 	s.registerPeerAddrs(peer, ip4, ip6)
 
 	if prop.Quarantine {

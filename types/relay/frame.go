@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bufio"
+
 	"github.com/edup2p/common/types"
 )
 

@@ -1,13 +1,15 @@
 package toversok
 
+import "time"
+
 // Observer functions as a state observer for the Engine, effectively allowing calling clients to peek into the engine state in an abstracted way.
 type Observer interface {
 	RegisterStateChangeListener(func(state EngineState))
 
 	CurrentState() EngineState
 
-	GetNeedsLoginState() (url string, err error)
-	GetEstablishedState() // TODO
+	GetNeedsLoginState() (url string, deviceKeyCh chan<- string, err error)
+	GetEstablishedState() (expiry time.Time, err error) // TODO add ipv4,ipv6?
 }
 
 type EngineState byte

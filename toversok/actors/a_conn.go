@@ -3,12 +3,15 @@ package actors
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"net"
+	"net/netip"
+	"runtime/debug"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgactor"
-	"net"
-	"net/netip"
-	"time"
 )
 
 type OutConn struct {
@@ -37,10 +40,10 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 
 	common := MakeCommon(s.Ctx, OutConnInboxChanBuffer)
 
-	return &OutConn{
+	return assureClose(&OutConn{
 		ActorCommon: common,
 
-		sock: MakeSockRecv(udp, common.ctx),
+		sock: MakeSockRecv(common.ctx, udp),
 		s:    s,
 
 		peer:     peer,
@@ -49,32 +52,31 @@ func MakeOutConn(udp types.UDPConn, peer key.NodePublic, homeRelay int64, s *Sta
 
 		activityTimer: t,
 		isActive:      false,
-	}
+	})
 }
 
 func (oc *OutConn) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(oc).Error("panicked", "panic", v)
-			oc.Cancel()
-			bail(oc.ctx, v)
-		}
-	}()
-
 	if !oc.running.CheckOrMark() {
 		L(oc).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer oc.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(oc).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(oc.ctx, v)
+		}
+	}()
 
 	go oc.sock.Run()
 
 	for {
 		select {
 		case <-oc.ctx.Done():
-			oc.Close()
 			return
 		case <-oc.sock.ctx.Done():
-			oc.Cancel()
+			return
 		case <-oc.activityTimer.C:
 			oc.UnBump()
 		case msg := <-oc.inbox:
@@ -96,8 +98,7 @@ func (oc *OutConn) Run() {
 				// sock closed, the peer is dead
 				// TODO:
 				//   trigger some kind of healing logic elsewhere?
-				oc.Cancel()
-				continue
+				return
 			}
 
 			if oc.useRelay {
@@ -199,7 +200,7 @@ func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 	t := time.NewTimer(60 * time.Second)
 	t.Stop()
 
-	return &InConn{
+	return assureClose(&InConn{
 		ActorCommon: MakeCommon(s.Ctx, -1),
 
 		s: s,
@@ -211,28 +212,26 @@ func MakeInConn(udp types.UDPConn, peer key.NodePublic, s *Stage) *InConn {
 
 		pktCh: make(chan []byte, InConnFrameChanBuffer),
 		peer:  peer,
-	}
+	})
 }
 
 func (ic *InConn) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(ic).Error("panicked", "panic", v)
-			ic.Cancel()
-			ic.Close()
-			bail(ic.ctx, v)
-		}
-	}()
-
 	if !ic.running.CheckOrMark() {
 		L(ic).Warn("tried to run agent, while already running")
 		return
 	}
 
+	defer ic.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(ic).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(ic.ctx, v)
+		}
+	}()
+
 	for {
 		select {
 		case <-ic.ctx.Done():
-			ic.Close()
 			return
 		case <-ic.activityTimer.C:
 			ic.UnBump()
@@ -240,7 +239,6 @@ func (ic *InConn) Run() {
 			n, err := ic.udp.Write(frame)
 			if err != nil {
 				if errors.Is(err, net.ErrClosed) {
-					ic.Cancel()
 					return
 				}
 				// TODO failsafe logic
@@ -262,6 +260,9 @@ func (ic *InConn) Close() {
 	ic.s.TMan.Inbox() <- &msgactor.TManConnGoodBye{
 		Peer: ic.peer,
 		IsIn: false,
+	}
+	if err := ic.udp.Close(); err != nil {
+		slog.Error("failed to close inconn udp", "peer", ic.peer, "err", err)
 	}
 }
 

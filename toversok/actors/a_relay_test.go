@@ -3,6 +3,7 @@ package actors
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/edup2p/common/types/ifaces"
@@ -19,9 +20,10 @@ func TestRelayManager(t *testing.T) {
 		frameCh: make(chan ifaces.RelayedPeerFrame, RelayRouterFrameChLen),
 	}
 
-	var relayID int64 = 0
+	const RelayID int64 = 0
+
 	homeRelay := &RestartableRelayConn{
-		config:   relay.Information{ID: relayID},
+		config:   relay.Information{ID: RelayID},
 		bufferCh: make(chan relay.SendPacket),
 	}
 
@@ -32,7 +34,7 @@ func TestRelayManager(t *testing.T) {
 
 	// Make and run RelayManager
 	rm := s.makeRM()
-	rm.relays[relayID] = homeRelay
+	rm.relays[RelayID] = homeRelay
 	go rm.Run()
 
 	// Message that should be sent to the relay
@@ -89,7 +91,7 @@ func TestRelayRouter(t *testing.T) {
 	go rr.Run()
 
 	// Message that should be sent to SessionManager
-	sessionPkt := append(msgsess.MagicBytes, zeroBytes(56)...)
+	sessionPkt := slices.Concat(msgsess.MagicBytes, zeroBytes(56))
 
 	frameSession := ifaces.RelayedPeerFrame{
 		SrcRelay: 0,
@@ -104,13 +106,13 @@ func TestRelayRouter(t *testing.T) {
 	// For each peer: register peer in RelayRouter and Stage, and then send a message to their inConn
 	for i, b := range []byte{1, 2} {
 		ic := ics[i]
-		key := ic.peer
+		peer := ic.peer
 
-		s.inConn[key] = ic
+		s.inConn[peer] = ic
 
 		frame := ifaces.RelayedPeerFrame{
 			SrcRelay: 0,
-			SrcPeer:  key,
+			SrcPeer:  peer,
 			Pkt:      []byte{b},
 		}
 

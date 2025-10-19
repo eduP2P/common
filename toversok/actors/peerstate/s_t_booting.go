@@ -1,15 +1,18 @@
-package peer_state
+package peerstate
 
 import (
+	"net/netip"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgsess"
-	"net/netip"
-	"time"
 )
 
 type Booting struct {
 	*StateCommon
+
+	tracker *PingTracker
 
 	ap netip.AddrPort
 }
@@ -26,6 +29,7 @@ func (b *Booting) OnTick() PeerState {
 
 	return LogTransition(b, &Established{
 		StateCommon:        b.StateCommon,
+		tracker:            b.tracker,
 		lastPingRecv:       time.Now(),
 		lastPongRecv:       time.Now(),
 		nextPingDeadline:   time.Now(),
@@ -35,12 +39,12 @@ func (b *Booting) OnTick() PeerState {
 	})
 }
 
-func (b *Booting) OnDirect(ap netip.AddrPort, clear *msgsess.ClearMessage) PeerState {
+func (b *Booting) OnDirect(ap netip.AddrPort, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeDirect(b, ap, clear)
+	return cascadeDirect(b, ap, clearMsg)
 }
 
-func (b *Booting) OnRelay(relay int64, peer key.NodePublic, clear *msgsess.ClearMessage) PeerState {
+func (b *Booting) OnRelay(relay int64, peer key.NodePublic, clearMsg *msgsess.ClearMessage) PeerState {
 	// OnTick will transition into the next state regardless, so just pass it along
-	return cascadeRelay(b, relay, peer, clear)
+	return cascadeRelay(b, relay, peer, clearMsg)
 }

@@ -1,7 +1,16 @@
-package ext_wg
+package extwg
 
 import (
+	"errors"
 	"fmt"
+	"log"
+	"log/slog"
+	"net"
+	"net/netip"
+	"runtime"
+	"strings"
+	"sync"
+
 	"github.com/edup2p/common/toversok"
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/key"
@@ -9,12 +18,6 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
-	"log/slog"
-	"net"
-	"net/netip"
-	"runtime"
-	"strings"
-	"sync"
 )
 
 // A wireguard configurator by the help of wgtools shell commands.
@@ -53,8 +56,12 @@ func NewWGCtrl(client *wgctrl.Client, device string) *WGCtrl {
 }
 
 func (w *WGCtrl) Reset() error {
+	var errs []error
+
 	for _, m := range w.localMapping {
-		m.conn.Close()
+		if err := m.conn.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	maps.Clear(w.localMapping)
@@ -66,7 +73,11 @@ func (w *WGCtrl) Reset() error {
 		ReplacePeers: true,
 		Peers:        []wgtypes.PeerConfig{},
 	}); err != nil {
-		return fmt.Errorf("error resetting wg device: %w", err)
+		errs = append(errs, fmt.Errorf("error resetting wg device: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors while wg device: %w", errors.Join(errs...))
 	}
 
 	return nil
@@ -130,7 +141,6 @@ func (w *WGCtrl) Controller(privateKey key.NodePrivate, addr4, addr6 netip.Prefi
 
 	var device *wgtypes.Device
 	device, err = w.client.Device(w.name)
-
 	if err != nil {
 		return nil, err
 	}
@@ -217,6 +227,15 @@ func (w *WGCtrl) GetStats(publicKey key.NodePublic) (*toversok.WGStats, error) {
 	}, nil
 }
 
+func (w *WGCtrl) GetInterface() *net.Interface {
+	i, err := net.InterfaceByName(w.name)
+	if err != nil {
+		log.Println("cannot find interface ", w.name, ":", err)
+		return nil
+	}
+	return i
+}
+
 func (w *WGCtrl) ensureLocalConn(peer key.NodePublic) *mapping {
 	m, ok := w.localMapping[peer]
 
@@ -246,7 +265,6 @@ func (w *WGCtrl) rebindMapping(m *mapping) error {
 
 func (w *WGCtrl) bindLocal() *mapping {
 	conn, err := w.getWGConn(nil)
-
 	if err != nil {
 		panic(fmt.Sprintf("error when first binding to wgport: %s", err))
 	}
@@ -255,7 +273,7 @@ func (w *WGCtrl) bindLocal() *mapping {
 }
 
 func (w *WGCtrl) getWGConn(fromPort *uint16) (*net.UDPConn, error) {
-	var laddr *net.UDPAddr = nil
+	var laddr *net.UDPAddr
 
 	if fromPort != nil {
 		laddr = net.UDPAddrFromAddrPort(

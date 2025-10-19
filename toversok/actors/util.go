@@ -3,12 +3,14 @@ package actors
 import (
 	"context"
 	"fmt"
-	"github.com/edup2p/common/types/ifaces"
-	"github.com/edup2p/common/types/msgactor"
 	"log/slog"
 	"net/netip"
 	"sort"
 	"sync/atomic"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/ifaces"
+	"github.com/edup2p/common/types/msgactor"
 )
 
 // RunCheck ensures that only one instance of the actor is running at all times.
@@ -37,14 +39,16 @@ func L(a ifaces.Actor) *slog.Logger {
 }
 
 func bail(c context.Context, v any) {
-	maybeCcc := c.Value("ccc")
+	maybeCcc := c.Value(types.CCC)
 	if maybeCcc == nil {
+		// We add the CCC early in the engine's lifecycle, so this shouldn't happen.
 		panic(fmt.Errorf("could not bail, cannot find ccc: %s", v))
 	}
 
 	probablyCcc, ok := maybeCcc.(context.CancelCauseFunc)
 
 	if !ok {
+		// Ditto, if we add it, we make sure its added correctly
 		panic(fmt.Errorf("could not bail, ccc is not CancelCauseFunc: %s", v))
 	}
 
@@ -55,4 +59,10 @@ func sortEndpointSlice(endpoints []netip.AddrPort) {
 	sort.SliceStable(endpoints, func(i, j int) bool {
 		return endpoints[i].Addr().Less(endpoints[j].Addr()) && endpoints[i].Port() < endpoints[j].Port()
 	})
+}
+
+func assureClose[T ifaces.Actor](a T) T {
+	context.AfterFunc(a.Ctx(), a.Close)
+
+	return a
 }

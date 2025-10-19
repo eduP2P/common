@@ -4,10 +4,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/edup2p/common/types"
 	"go4.org/mem"
 	"golang.org/x/crypto/curve25519"
-	"strings"
 )
 
 type NodePrivate struct {

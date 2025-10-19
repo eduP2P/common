@@ -2,7 +2,13 @@ package actors
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"runtime"
+	"runtime/debug"
+	"time"
+
 	"github.com/edup2p/common/types"
 	"github.com/edup2p/common/types/dial"
 	"github.com/edup2p/common/types/ifaces"
@@ -10,10 +16,6 @@ import (
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
 	"github.com/edup2p/common/types/relay"
-	"github.com/edup2p/common/types/relay/relayhttp"
-	"log/slog"
-	"runtime"
-	"time"
 )
 
 // RestartableRelayConn is a Relay connection that will automatically reconnect,
@@ -25,7 +27,7 @@ type RestartableRelayConn struct {
 
 	config relay.Information
 
-	client *relay.Client
+	client relay.Client
 
 	stay bool
 
@@ -52,6 +54,8 @@ func (c *RestartableRelayConn) Poke() {
 }
 
 func (c *RestartableRelayConn) Run() {
+	defer c.Cancel()
+
 	for {
 		if c.shouldIdle() {
 			select {
@@ -86,11 +90,8 @@ func (c *RestartableRelayConn) Run() {
 		c.connected = false
 
 		// Possibly the client exited because the relayConn is being closed, check for that first
-		select {
-		case <-c.ctx.Done():
+		if c.ctx.Err() != nil {
 			return
-		default:
-			// fallthrough
 		}
 		if err != nil {
 			c.L().Warn("relay client exited", "error", err)
@@ -119,7 +120,7 @@ func (c *RestartableRelayConn) establish() (success bool) {
 	}
 
 	var err error
-	c.client, err = relayhttp.Dial(c.ctx, dial.Opts{
+	c.client, err = c.man.s.dialRelayFunc(c.ctx, dial.Opts{
 		Domain:       c.config.Domain,
 		Addrs:        types.SliceOrNil(c.config.IPs),
 		Port:         port,
@@ -137,8 +138,7 @@ func (c *RestartableRelayConn) establish() (success bool) {
 		return false
 	}
 
-	go c.client.RunSend()
-	go c.client.RunReceive()
+	go c.client.Run()
 
 	c.L().Debug("established")
 
@@ -161,7 +161,7 @@ func (c *RestartableRelayConn) loop() error {
 
 		case <-checker.C:
 			if c.shouldIdle() {
-				c.client.Close()
+				c.client.Cancel(errors.New("should idle"))
 				return nil
 			}
 
@@ -186,7 +186,7 @@ func (c *RestartableRelayConn) loop() error {
 }
 
 func (c *RestartableRelayConn) Close() {
-	c.ctxCan()
+	// TODO nothing much to close?
 }
 
 // Queue queues the pkt for dst in a non-blocking fashion
@@ -212,7 +212,7 @@ func (c *RestartableRelayConn) Update(info relay.Information) {
 
 	// Close the client to trigger a reconnect
 	if c.client != nil {
-		c.client.Close()
+		c.client.Cancel(errors.New("relay client exited"))
 	}
 }
 
@@ -268,7 +268,7 @@ type RelayManager struct {
 const HomeRelayChangeInterval = time.Minute * 5
 
 func (s *Stage) makeRM() *RelayManager {
-	return &RelayManager{
+	return assureClose(&RelayManager{
 		ActorCommon: MakeCommon(s.Ctx, RelayManInboxChLen),
 		s:           s,
 		homeRelay:   0,
@@ -276,29 +276,28 @@ func (s *Stage) makeRM() *RelayManager {
 		relays:  make(map[int64]RelayConnActor),
 		inCh:    make(chan ifaces.RelayedPeerFrame, RelayManFrameChLen),
 		writeCh: make(chan relayWriteRequest, RelayManWriteChLen),
-	}
+	})
 }
 
 func (rm *RelayManager) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(rm).Error("panicked", "panic", v)
-			rm.Cancel()
-			bail(rm.ctx, v)
-		}
-	}()
-
 	if !rm.running.CheckOrMark() {
 		L(rm).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer rm.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(rm).Error("panicked", "panic", v, "stack", string(debug.Stack()))
+			bail(rm.ctx, v)
+		}
+	}()
 
 	runtime.LockOSThread()
 
 	for {
 		select {
 		case <-rm.ctx.Done():
-			rm.Close()
 			return
 		case m := <-rm.inbox:
 			switch m := m.(type) {
@@ -364,16 +363,15 @@ func (rm *RelayManager) Run() {
 			rm.s.RRouter.Push(frame)
 		}
 	}
-
 }
 
 func (rm *RelayManager) Close() {
-	rm.ctxCan()
+	// TODO nothing much to close?
 }
 
 func (rm *RelayManager) selectRelay(latencies map[int64]time.Duration) int64 {
-	var srid int64 = 0
-	var slat = 60 * time.Second
+	var srid int64
+	slat := 60 * time.Second
 
 	L(rm).Debug("selectRelay: starting latency check")
 
@@ -403,9 +401,10 @@ func (rm *RelayManager) getConn(id int64) RelayConnActor {
 func (rm *RelayManager) update(info relay.Information) {
 	if r, ok := rm.relays[info.ID]; ok {
 		r.Update(info)
+		return
 	}
 
-	r := &RestartableRelayConn{
+	r := assureClose(&RestartableRelayConn{
 		ActorCommon: MakeCommon(rm.ctx, -1),
 		man:         rm,
 		config:      info,
@@ -413,7 +412,7 @@ func (rm *RelayManager) update(info relay.Information) {
 		stay:     info.ID == rm.homeRelay,
 		bufferCh: make(chan relay.SendPacket, RelayConnSendBufferSize),
 		pokeCh:   make(chan interface{}, 1),
-	}
+	})
 
 	go r.Run()
 
@@ -442,11 +441,11 @@ type RelayRouter struct {
 }
 
 func (s *Stage) makeRR() *RelayRouter {
-	return &RelayRouter{
+	return assureClose(&RelayRouter{
 		ActorCommon: MakeCommon(s.Ctx, -1),
 		s:           s,
 		frameCh:     make(chan ifaces.RelayedPeerFrame, RelayRouterFrameChLen),
-	}
+	})
 }
 
 func (rr *RelayRouter) Push(frame ifaces.RelayedPeerFrame) {
@@ -456,25 +455,24 @@ func (rr *RelayRouter) Push(frame ifaces.RelayedPeerFrame) {
 }
 
 func (rr *RelayRouter) Run() {
-	defer func() {
-		if v := recover(); v != nil {
-			L(rr).Warn("panicked", "error", v)
-			rr.Cancel()
-			bail(rr.ctx, v)
-		}
-	}()
-
 	if !rr.running.CheckOrMark() {
 		L(rr).Warn("tried to run agent, while already running")
 		return
 	}
+
+	defer rr.Cancel()
+	defer func() {
+		if v := recover(); v != nil {
+			L(rr).Warn("panicked", "error", v, "stack", string(debug.Stack()))
+			bail(rr.ctx, v)
+		}
+	}()
 
 	runtime.LockOSThread()
 
 	for {
 		select {
 		case <-rr.ctx.Done():
-			rr.Close()
 			return
 		case frame := <-rr.frameCh:
 			if msgsess.LooksLikeSessionWireMessage(frame.Pkt) {
@@ -490,7 +488,11 @@ func (rr *RelayRouter) Run() {
 			in := rr.s.InConnFor(frame.SrcPeer)
 
 			if in == nil {
-				// todo log? metric?
+				L(rr).Debug(
+					"received incoming relay frame from peer that we don't know about (yet)",
+					"from-peer", frame.SrcPeer.Debug(),
+					"from-relay", frame.SrcRelay,
+				)
 				continue
 			}
 

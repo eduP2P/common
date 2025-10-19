@@ -1,9 +1,11 @@
 package ifaces
 
 import (
+	"context"
+	"net/netip"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/stage"
-	"net/netip"
 )
 
 // Stage documents/iterates the functions a Stage should expose
@@ -18,4 +20,6 @@ type Stage interface {
 
 	GetPeerInfo(peer key.NodePublic) *stage.PeerInfo
 	GetEndpoints() []netip.AddrPort
+
+	Context() context.Context
 }

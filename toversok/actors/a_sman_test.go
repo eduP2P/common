@@ -6,25 +6,28 @@ import (
 
 	"github.com/edup2p/common/types/msgactor"
 	"github.com/edup2p/common/types/msgsess"
-	msg2 "github.com/edup2p/common/types/msgsess"
 	"github.com/stretchr/testify/assert"
 )
 
 // Mock Session Message used in this test
 type MockSessionMessage struct {
-	marshalSessionMessage func() []byte
-	debug                 func() string
+	marshal func() []byte
+	debug   func() string
 }
 
-func (m *MockSessionMessage) MarshalSessionMessage() []byte {
-	return m.marshalSessionMessage()
+func (m *MockSessionMessage) Marshal() []byte {
+	return m.marshal()
 }
 
 func (m *MockSessionMessage) Debug() string {
 	return m.debug()
 }
 
-func assertEncryptedPacket(t *testing.T, pkt []byte, sm *SessionManager, expectedDecryption *msg2.ClearMessage, failMsg string) {
+func (m *MockSessionMessage) Parse([]byte) error {
+	panic("implement me")
+}
+
+func assertEncryptedPacket(t *testing.T, pkt []byte, sm *SessionManager, expectedDecryption *msgsess.ClearMessage, failMsg string) {
 	// We cannot predict the encryption with a random nonce, so we unpack the packet in receivedReq to test if it is correct
 	unpacked, ok := sm.Unpack(pkt)
 	assert.Nil(t, ok, "Decryption of packet in received directWriteRequest failed")
@@ -53,21 +56,21 @@ func TestSessionManager(t *testing.T) {
 	// Create a test ping message
 	txID := [12]byte{42}
 	pingBytes := append(txID[:], dummyKey[:]...)
-	clearBytes := append([]byte{1, 0}, pingBytes[:]...) // 1 is version nr, 0 is Ping message
+	clearBytes := append([]byte{1, 0}, pingBytes...) // 1 is version nr, 0 is Ping message
 
 	pingMsg := &msgsess.Ping{
 		TxID:    txID,
 		NodeKey: dummyKey,
 	}
 
-	clearMsg := &msg2.ClearMessage{
+	clearMsg := &msgsess.ClearMessage{
 		Session: testPub,
 		Message: pingMsg,
 	}
 
 	// Pack the test ping message
 	mockSessionMsg := &MockSessionMessage{
-		marshalSessionMessage: func() []byte {
+		marshal: func() []byte {
 			return clearBytes
 		},
 	}
@@ -93,7 +96,7 @@ func TestSessionManager(t *testing.T) {
 
 	assert.Equal(t, expectedFromRelay, receivedFromRelay, "TrafficManager did not receive expected message when sending frame from an address-port pair to SessionManager")
 
-	//Test Handle on frame from addrport
+	// Test Handle on frame from addrport
 	frameFromAddrPort := &msgactor.SManSessionFrameFromAddrPort{
 		AddrPort:       dummyAddrPort,
 		FrameWithMagic: packedBytes,

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 usage_str="""
-Usage: ${0} [OPTIONAL ARGUMENTS] <NAMESPACE PEER 1> <NAMESPACE PEER 2> <VIRTUAL IP PEER 1> <PERFORMANCE TEST VARIABLE> <PERFORMANCE TEST VALUES> <PERFORMANCE TEST DURATION> <LOG DIRECTORY>
+Usage: ${0} [OPTIONAL ARGUMENTS] <NAMESPACE PEER 1> <NAMESPACE PEER 2> <VIRTUAL IP PEER 1> <PERFORMANCE TEST VARIABLE> <PERFORMANCE TEST VALUES> <PERFORMANCE TEST DURATION> <PERFORMANCE TEST REPETITIONS> <LOG DIRECTORY>
 
 [OPTIONAL ARGUMENTS]:
-    -b
-        With this flag, eduP2P's performance is compared to the performance of a direct connection, and a connection using only WireGuard
+    -b <direct|wireguard|both>
+        With this flag, eduP2P's performance is compared to the performance of a direct connection and/or a connection using only WireGuard
         This flag should only be used when both peers reside in the 'public' network
 
 Executes performance tests between the peers using iperf3, where peer 1 acts as the server and peer 2 as the client
@@ -24,10 +24,24 @@ This script must be executed with root permissions
 . ./util.sh
 
 # Validate optional arguments
-while getopts ":bh" opt; do
+while getopts ":b:h" opt; do
     case $opt in
         b)
-            baseline=true
+            baseline=$OPTARG
+            validate_str $baseline "^direct|wireguard|both$"
+
+            case $baseline in
+                "direct")
+                    baseline_direct=true
+                    ;;
+                "wireguard")
+                    baseline_wireguard=true
+                    ;;
+                "both")
+                    baseline_direct=true
+                    baseline_wireguard=true
+                    ;;
+            esac
             ;;
         h) 
             echo "$usage_str"
@@ -43,7 +57,7 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
-if [[ $# -ne 7 ]]; then
+if [[ $# -ne 8 ]]; then
     exit_with_error "expected 7 positional parameters, but received $#"
 fi
 
@@ -53,13 +67,14 @@ peer1_ip=$3
 performance_test_var=$4
 performance_test_values=$5
 performance_test_duration=$6
-log_dir=$7
+performance_test_reps=$7
+log_dir=$8
 
 function clean_exit() {
     exit_code=$1
 
     # Delete baseline WireGuard interfaces and private keys, and kill keep-alive process
-    if [[ $baseline == true ]]; then
+    if [[ $baseline_wireguard == true ]]; then
         for ns in $peer1 $peer2; do
             sudo ip netns exec $ns ip link del wg_$ns
             rm private_$ns
@@ -68,8 +83,8 @@ function clean_exit() {
         kill $keep_alive_pid
     fi
 
-    # Undo the restrictive permissions which iperf3 sets on test_dir
-    chmod --recursive 777 $test_dir
+    # Undo the restrictive permissions which iperf3 sets on subdirectories of log_dir
+    chmod --recursive 777 $log_dir
 
     exit $exit_code
 }
@@ -171,8 +186,49 @@ function performance_test() {
     wait $server_pid
 
     # Measure delay and store it in the iperf3 log file
-    delay=$(measure_delay $server_ip)
-    store_delay $delay $log_path
+    if [[ $performance_test_var != "bitrate" ]]; then
+        delay=$(measure_delay $server_ip)
+        store_delay $delay $log_path
+    fi
+}
+
+# Function to do performance tests for all performance test values
+function performance_tests() {
+    performance_test_value_array=$1
+    performance_test_dir=$2
+    performance_test_rep=$3
+
+    # String describing the current repetition, empty if only one repetition is performed
+    if [[ $performance_test_reps -gt 1 ]]; then
+        rep_description="Repetition $performance_test_rep/$performance_test_reps: " 
+    fi
+
+    # Variables to display a progress bar
+    n_values=${#performance_test_value_array[@]}
+    progress=0
+
+    # Iterate over performance test values
+    for performance_test_val in ${performance_test_value_array[@]}; do
+        bar=$(progress_bar $progress $n_values)
+        echo -ne "\033[2K\t$rep_description$bar Performance testing with $performance_test_var = $performance_test_val\r" # \033[2K = Ctrl+K, clears rest of line from cursor; \r returns to beginning of line
+
+        # Run performance test for eduP2P
+        performance_test $performance_test_val $performance_test_dir "eduP2P" $peer1_ip
+
+        # If -b is set, the performance test is repeated over a direct/WireGuard connection instead of over the eduP2P connection
+        if [[ $baseline_direct == true ]]; then
+            performance_test $performance_test_val $performance_test_dir "Direct" $peer1_pub_ip
+        fi
+
+        if [[ $baseline_wireguard == true ]]; then
+            performance_test $performance_test_val $performance_test_dir "WireGuard" 10.0.0.1
+        fi
+
+        let "progress++"
+    done
+
+    bar=$(progress_bar $n_values $n_values)
+    echo -e "\t$rep_description$bar Performance testing with $performance_test_var finished"
 }
 
 # Set up WireGuard connection between the peers (for performance test baseline)
@@ -207,19 +263,8 @@ function wg_setup() {
     ip netns exec $peer2 wg set wg_$peer2 peer $pub1 allowed-ips 10.0.0.1/32 endpoint 192.168.1.254:$port1
 }
 
-# Directory to store performance test results
-performance_test_dir=$log_dir/performance_tests_$performance_test_var
-
-# Replace commas by spaces to convert string to array
-performance_test_values=$(echo $performance_test_values | tr ',' ' ') 
-performance_test_values=($performance_test_values)
-
-# Variables to display a progress bar
-n_values=${#performance_test_values[@]}
-progress=0
-
 # For the baseline comparison, we need the peers' public IPs, which are also needed to setup a WireGuard connection between them
-if [[ $baseline == true ]]; then
+if [[ $baseline_direct == true || $baseline_wireguard == true ]]; then
     peer1_pub_ip=$(ip netns exec $peer1 ip address | grep -Eo "inet 192.168.[0-9.]+" | cut -d ' ' -f2)
     peer2_pub_ip=$(ip netns exec $peer2 ip address | grep -Eo "inet 192.168.[0-9.]+" | cut -d ' ' -f2)
 
@@ -234,24 +279,16 @@ if [[ $baseline == true ]]; then
     keep_alive_pid=$!
 fi
 
-# Iterate over performance test values
-for performance_test_val in ${performance_test_values[@]}; do
-    bar=$(progress_bar $progress $n_values)
-    echo -ne "\033[2K\t$bar Performance testing with $performance_test_var = $performance_test_val\r" # \033[2K = Ctrl+K, clears rest of line from cursor; \r returns to beginning of line
+# Replace commas by spaces to convert string to array
+performance_test_value_array=$(echo $performance_test_values | tr ',' ' ')
+performance_test_value_array=($performance_test_value_array)
 
-    # Run performance test for eduP2P
-    performance_test $performance_test_val $performance_test_dir "eduP2P" $peer1_ip
+for ((i=1;i<=$performance_test_reps;i++)); do
+    # Directory to store performance test results for this repetition
+    performance_test_dir=$log_dir/performance_tests_$performance_test_var/repetition$i
 
-    # If -b is set, the performance test is repeated over a direct/WireGuard connection instead of over the eduP2P connection
-    if [[ $baseline == true ]]; then
-        performance_test $performance_test_val $performance_test_dir "Direct" $peer1_pub_ip
-        performance_test $performance_test_val $performance_test_dir "WireGuard" 10.0.0.1
-    fi
-
-    let "progress++"
+    performance_tests $performance_test_value_array $performance_test_dir $i
 done
 
-bar=$(progress_bar $n_values $n_values)
-echo -e "\t$bar Performance testing with $performance_test_var finished"
 clean_exit 0
 

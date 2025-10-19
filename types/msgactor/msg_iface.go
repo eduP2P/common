@@ -10,6 +10,7 @@ func (o *TManConnActivity) amsg()             {}
 func (o *TManConnGoodBye) amsg()              {}
 func (o *TManSessionMessageFromRelay) amsg()  {}
 func (o *TManSessionMessageFromDirect) amsg() {}
+func (o *TManSpreadMDNSPacket) amsg()         {}
 
 func (o *SManSessionFrameFromRelay) amsg()      {}
 func (o *SManSessionFrameFromAddrPort) amsg()   {}
@@ -18,6 +19,8 @@ func (o *SManSendSessionMessageToRelay) amsg()  {}
 func (o *OutConnUse) amsg()                     {}
 
 func (o *RManRelayLatencyResults) amsg() {}
+
+func (o *MManReceivedPacket) amsg() {}
 
 func (o *DManSetMTU) amsg()              {}
 func (o *DRouterPeerClearKnownAs) amsg() {}

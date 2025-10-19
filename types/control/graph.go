@@ -2,9 +2,10 @@ package control
 
 import (
 	"errors"
+	"sync"
+
 	"github.com/edup2p/common/types/key"
 	"github.com/edup2p/common/types/msgcontrol"
-	"sync"
 )
 
 type EdgeGraph struct {
@@ -133,23 +134,23 @@ func (g *EdgeGraph) GetEdges(node ClientID) map[ClientID]VisibilityPair {
 	return targetMap
 }
 
-func (g *EdgeGraph) GetEdge(from, to ClientID) *VisibilityPair {
+func (g *EdgeGraph) GetEdge(from, to ClientID) (retPair *VisibilityPair) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
 	targetMap := g.graph[from]
 
 	if targetMap == nil {
-		return nil
+		return
 	}
 
 	pair := targetMap[to]
 
 	if pair != nil {
-		pair = &(*pair)
+		*retPair = *pair
 	}
 
-	return pair
+	return
 }
 
 type VisibilityPair struct {

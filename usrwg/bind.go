@@ -1,21 +1,28 @@
 package usrwg
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"github.com/edup2p/common/types/key"
-	"golang.org/x/exp/maps"
-	"golang.zx2c4.com/wireguard/conn"
+	"log/slog"
+	"net"
 	"reflect"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/edup2p/common/types"
+	"github.com/edup2p/common/types/key"
+	"golang.org/x/exp/maps"
+	"golang.zx2c4.com/wireguard/conn"
 )
 
 type ToverSokBind struct {
 	connMu     sync.RWMutex
 	conns      map[key.NodePublic]*ChannelConn
 	connChange chan bool
+
+	permClosed bool
 
 	endpointMu sync.RWMutex
 	endpoints  map[key.NodePublic]*endpoint
@@ -44,18 +51,36 @@ func (b *ToverSokBind) Close() error {
 
 	maps.Clear(b.endpoints)
 
+	var errs []error
+
 	for _, cc := range b.conns {
-		// TODO log error
-		cc.Close()
+		if err := cc.Close(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	maps.Clear(b.conns)
 
+	if len(errs) > 0 {
+		return fmt.Errorf("errors when closing connections: %w", errors.Join(errs...))
+	}
+
+	b.notifyConnChange()
+
 	return nil
+}
+
+func (b *ToverSokBind) Cancel() error {
+	b.permClosed = true
+	return b.Close()
 }
 
 // ReadFromConns implements conn.ReceiveFunc
 func (b *ToverSokBind) ReadFromConns(packets [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
+	if b.isPermanentlyClosed() {
+		return 0, net.ErrClosed
+	}
+
 	// We get a keys slice that could potentially get immediately outdated,
 	// but we use it to fill buffers from existing conns first.
 	b.connMu.RLock()
@@ -94,14 +119,8 @@ fill:
 		sizes[i] = len(p)
 		copy(packets[i], p)
 
-		n += 1
+		n++
 	}
-
-	//defer func() {
-	//	for i := 0; i < n; i++ {
-	//		slog.Debug("received packet", "hex", hex.EncodeToString(packets[i][:sizes[i]]))
-	//	}
-	//}()
 
 	if n != 0 {
 		// Buffer filled, return early
@@ -131,6 +150,10 @@ fill:
 	return
 }
 
+func (b *ToverSokBind) isPermanentlyClosed() bool {
+	return b.permClosed
+}
+
 func (b *ToverSokBind) waitForValueFromConns() ([]byte, *endpoint) {
 	caseMap := b.buildConnsSelectCaseMap()
 	connChangeCase := b.createConnChangeSelectCase()
@@ -144,9 +167,18 @@ func (b *ToverSokBind) waitForValueFromConns() ([]byte, *endpoint) {
 
 	cases = append(cases, connChangeCase)
 
-	choice, recv, _ := reflect.Select(cases)
+	choice, recv, recvOk := reflect.Select(cases)
 
-	//slog.Debug("waitForValueFromConns reflect.Select", "choice", choice, "len", len(cases), "recv", recv, "recvOk", recvOk, "cases", cases)
+	slog.Log(
+		context.Background(),
+		types.LevelTrace,
+		"waitForValueFromConns reflect.Select",
+		"choice", choice,
+		"len", len(cases),
+		"recv", recv,
+		"recvOk", recvOk,
+		"cases", cases,
+	)
 
 	// choice == last index
 	if choice == len(cases)-1 {
@@ -158,7 +190,7 @@ func (b *ToverSokBind) waitForValueFromConns() ([]byte, *endpoint) {
 }
 
 func (b *ToverSokBind) buildConnsSelectCaseMap() map[key.NodePublic]reflect.SelectCase {
-	var cases = make(map[key.NodePublic]reflect.SelectCase)
+	cases := make(map[key.NodePublic]reflect.SelectCase)
 
 	b.connMu.RLock()
 	defer b.connMu.RUnlock()
@@ -188,7 +220,7 @@ func (b *ToverSokBind) createConnChangeSelectCase() reflect.SelectCase {
 
 // SetMark is used by wireguard-go to avoid routing loops.
 // TODO: double-check
-func (b *ToverSokBind) SetMark(mark uint32) error {
+func (b *ToverSokBind) SetMark(uint32) error {
 	return nil
 }
 
@@ -214,7 +246,6 @@ func (b *ToverSokBind) Send(bufs [][]byte, ep conn.Endpoint) error {
 
 func (b *ToverSokBind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	np, err := key.UnmarshalPublic(s)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal nodepublic: %w", err)
 	}
@@ -266,8 +297,9 @@ func (b *ToverSokBind) CloseConn(peer key.NodePublic) {
 
 	cc, ok := b.conns[peer]
 	if ok {
-		// TODO log error
-		cc.Close()
+		if err := cc.Close(); err != nil {
+			slog.Error("failed to close channel", "peer", peer, "err", err)
+		}
 	}
 
 	delete(b.conns, peer)
