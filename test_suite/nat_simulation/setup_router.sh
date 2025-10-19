@@ -5,17 +5,20 @@ priv_name=$2
 public_name=$3
 priv_subnet=$4
 priv_ip=$5
-pub_ip=$6
-switch_ip=$7
-router_index=$8
+pub_subnet_prefix=$6
+n_ips=$7
+switch_ip=$8
+router_index=$9
 
-if [[ $# -ne 8 ]]; then
+if [[ $# -ne 9 ]]; then
     echo """
-Usage: ${0} <ROUTER NAME> <PRIVATE NETWORK NAME> <PUBLIC NETWORK NAME> <PRIVATE SUBNET> <ROUTER PRIVATE IP> <ROUTER PUBLIC IP> <SWITCH IP> <ROUTER INDEX>
+Usage: ${0} <ROUTER NAME> <PRIVATE NETWORK NAME> <PUBLIC NETWORK NAME> <PRIVATE SUBNET> <ROUTER PRIVATE IP> <ROUTER PUBLIC IP> <NUMBER OF IPS> <SWITCH IP> <ROUTER INDEX>
 
 This script must be run with root permissions"""
     exit 1
 fi
+
+pub_subnet="$pub_subnet_prefix.0/24"
 
 # Create veth pair to place the router's private interface in the private and router namespaces
 router_priv="${router_name}_priv"
@@ -33,12 +36,17 @@ if [[ $router_index -eq 0 ]]; then
     # Create veth pair to place the router's public interface in the public and router namespaces
     router_pub="${router_name}_pub"
     ip link add $router_pub type veth peer $router_name netns public
-    ip addr add "${pub_ip}/24" dev $router_pub
+
+    for host in $(seq $((254 - $n_ips + 1)) 254); do
+        ip="$pub_subnet_prefix.$host/24"
+        ip addr add $ip dev $router_pub
+    done
+
     ip link set $router_pub up
     ip netns exec public ip link set $router_name up
 
     # Create route to first router in the public network
-    ip netns exec $public_name ip route add $pub_ip dev $router_name
+    ip netns exec $public_name ip route add $pub_subnet dev $router_name
 else
     # Veth pair already created by first router
     router_pub=$public_name

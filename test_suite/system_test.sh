@@ -4,7 +4,7 @@
 SYSTEM_TEST_TIMEOUT=60
 
 usage_str="""
-Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> <NAT CONFIGURATION> [WIREGUARD INTERFACE 1]/[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
+Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> <NAT CONFIGURATION> [WIREGUARD INTERFACE 1]/[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <AMOUNT OF IPS> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
 The -2 option can be used to perform a test where both peers are behind two NATs instead of one.
 
@@ -48,6 +48,8 @@ Examples of valid NAT configurations:
     '0-1/' for peer 2 in public network
     '0-1/1-2' for both peers in private networks
     '0-0:1-2/2-1:1-0' for both peers in private networks behind two NATs
+
+<AMOUNT OF IPS> specifies the number of IP addresses assigned to each NAT; setting this argument >1 allows NAT IP pooling to be simulated
 
 If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard
 
@@ -112,8 +114,8 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
-if [[ $# -ne 12 ]]; then
-    exit_with_error "expected 12 positional parameters, but received $#"
+if [[ $# -ne 13 ]]; then
+    exit_with_error "expected 13 positional parameters, but received $#"
 fi
 
 test_target=$1
@@ -124,10 +126,11 @@ test_idx=$5
 control_pub_key=$6
 control_ip=$7
 control_port=$8
-adm_ips=$9
-log_lvl=${10}
-log_dir=${11}
-repo_dir=${12}
+n_pooling_ips=$9
+adm_ips=${10}
+log_lvl=${11}
+log_dir=${12}
+repo_dir=${13}
 
 # Validate namespace configuration string
 peer_ns_regex="([^:/]+)" # One or more occurence of every character except ':' and '/' (these are used to separate the namespaces)
@@ -303,13 +306,13 @@ for ((i=0; i<$n_private; i++)); do
     priv_prefix="10.0.$((i+1)).0/24"
 
     if [[ -z $double_nat ]]; then
-        router_pub_ip="192.168.$((i+1)).254"
+        router_pub_prefix="192.168.$((i+1))"
         router_ns=${router_ns_list[$i]}
         router_pub="${router_ns}_pub"
         router_priv="${router_ns}_priv"
 
-        sudo ip netns exec $router_ns ./setup_nat_mapping.sh $router_pub $priv_prefix ${nat_map[$i]} "${adm_ips}"
-        sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh $router_pub $router_priv $router_pub_ip $priv_prefix ${nat_filter[$i]} 2>&1 | \
+        sudo ip netns exec $router_ns ./setup_nat_mapping.sh $router_pub $router_pub_prefix $priv_prefix ${nat_map[$i]} $n_pooling_ips "${adm_ips}"
+        sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh $router_pub $router_priv $priv_prefix ${nat_filter[$i]} 2>&1 | \
         tee ${log_dir}/$router_ns.txt > /dev/null & # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
     else
         # With both peers in private networks, the router order is different between the peers
@@ -321,22 +324,22 @@ for ((i=0; i<$n_private; i++)); do
             idx2=$((2*i))
         fi
 
-        router1_pub_ip="192.168.$((i+1)).254"
+        router1_pub_prefix="192.168.$((i+1))"
         router1_ns=${router_ns_list[$idx1]}
         router1_pub="${router1_ns}_pub"
         router1_priv="${router1_ns}_priv"
         double_prefix="172.16.$((i+1)).0/24"
 
-        sudo ip netns exec $router1_ns ./setup_nat_mapping.sh $router1_pub $double_prefix ${nat_map[$idx1]} "${adm_ips}"
-        sudo ip netns exec $router1_ns ./setup_nat_filtering_hairpinning.sh $router1_pub $router1_priv $router1_pub_ip $double_prefix ${nat_filter[$idx1]} 2>&1 | tee ${log_dir}/$router1_ns.txt > /dev/null &
+        sudo ip netns exec $router1_ns ./setup_nat_mapping.sh $router1_pub $router1_pub_prefix $double_prefix ${nat_map[$idx1]} $n_pooling_ips "${adm_ips}"
+        sudo ip netns exec $router1_ns ./setup_nat_filtering_hairpinning.sh $router1_pub $router1_priv $double_prefix ${nat_filter[$idx1]} 2>&1 | tee ${log_dir}/$router1_ns.txt > /dev/null &
         
-        router2_pub_ip="172.16.$((i+1)).254" 
+        router2_pub_prefix="172.16.$((i+1))"
         router2_ns=${router_ns_list[$idx2]}
         router2_pub="${router1_ns}"
         router2_priv="${router2_ns}_priv"
 
-        sudo ip netns exec $router2_ns ./setup_nat_mapping.sh $router2_pub $priv_prefix ${nat_map[$idx2]} "${adm_ips}"
-        sudo ip netns exec $router2_ns ./setup_nat_filtering_hairpinning.sh $router2_pub $router2_priv $router2_pub_ip $priv_prefix ${nat_filter[$idx2]} 2>&1 | tee ${log_dir}/$router2_ns.txt > /dev/null &
+        sudo ip netns exec $router2_ns ./setup_nat_mapping.sh $router2_pub $router2_pub_prefix $priv_prefix ${nat_map[$idx2]} 1 "${adm_ips}"
+        sudo ip netns exec $router2_ns ./setup_nat_filtering_hairpinning.sh $router2_pub $router2_priv $priv_prefix ${nat_filter[$idx2]} 2>&1 | tee ${log_dir}/$router2_ns.txt > /dev/null &
     fi
 done
 
@@ -378,7 +381,7 @@ else
 fi
 
 # Output test result 
-if [[ $test_target != $test_result ]]; then
+if [[ ! ( $test_result =~ $test_target ) ]]; then
     echo -e "${RED}$test_result${NC}"
     clean_exit 1
 fi
