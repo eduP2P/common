@@ -4,7 +4,7 @@
 SYSTEM_TEST_TIMEOUT=60
 
 usage_str="""
-Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
+Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CONFIGURATION 1]:[NAT CONFIGURATION 2] [WIREGUARD INTERFACE 1]:[WIREGUARD INTERFACE 2] <TEST INDEX> <CONTROL SERVER PUBLIC KEY> <CONTROL SERVER IP> <CONTROL SERVER PORT> <AMOUNT OF IPS> <IP ADDRESS LIST> <LOG LEVEL> <LOG DIRECTORY> <REPOSITORY DIRECTORY>
 
 <TEST TARGET> is the expected result of the system test: 
     1. TS_PASS_DIRECT: the peers have established a direct connection
@@ -32,6 +32,8 @@ Usage: ${0} [OPTIONAL ARGUMENTS] <TEST TARGET> <NAMESPACE CONFIGURATION> [NAT CO
         1 - Address-Dependent
         2 - Address and Port-Dependent
 Examples of valid NAT configurations: 0-1:1-2 (both peers in private networks), 0-1: (peer 2 in public network), : (both peers in public network)
+
+<AMOUNT OF IPS> specifies the number of IP addresses assigned to each NAT; setting this argument >1 allows NAT IP pooling to be simulated
 
 If [WIREGUARD INTERFACE 1] or [WIREGUARD INTERFACE 2] is not provided, the corresponding peer will use userspace WireGuard
 
@@ -95,8 +97,8 @@ done
 shift $((OPTIND-1))
 
 # Make sure all required arguments have been passed
-if [[ $# -ne 12 ]]; then
-    exit_with_error "expected 12 positional parameters, but received $#"
+if [[ $# -ne 13 ]]; then
+    exit_with_error "expected 13 positional parameters, but received $#"
 fi
 
 test_target=$1
@@ -107,10 +109,11 @@ test_idx=$5
 control_pub_key=$6
 control_ip=$7
 control_port=$8
-adm_ips=$9
-log_lvl=${10}
-log_dir=${11}
-repo_dir=${12}
+n_pooling_ips=$9
+adm_ips=${10}
+log_lvl=${11}
+log_dir=${12}
+repo_dir=${13}
 
 # Validate namespace configuration string
 ns_regex="([^-:]+)" # One or more occurence of every character except '-' and ':' (these are used to separate the namespaces)
@@ -255,12 +258,12 @@ for ((i=0; i<${#router_ns_list[@]}; i++)); do
     router_ns=${router_ns_list[$i]}
     router_pub="${router_ns}_pub"
     router_priv="${router_ns}_priv"
-    router_pub_ip="192.168.$((i+1)).254"
-    priv_prefix="10.0.$((i+1)).0/24"
+    router_pub_prefix="192.168.$((i+1))"
+    priv_subnet="10.0.$((i+1)).0/24"
 
-    sudo ip netns exec $router_ns ./setup_nat_mapping.sh $router_pub $priv_prefix ${nat_map[$i]} "${adm_ips}"
+    sudo ip netns exec $router_ns ./setup_nat_mapping.sh $router_pub $router_pub_prefix $priv_subnet ${nat_map[$i]} $n_pooling_ips "${adm_ips[@]}"
 
-    sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh $router_pub $router_priv $router_pub_ip $priv_prefix ${nat_filter[$i]} 2>&1 | \
+    sudo ip netns exec $router_ns ./setup_nat_filtering_hairpinning.sh $router_pub $router_priv $priv_subnet ${nat_filter[$i]} 2>&1 | \
     tee ${log_dir}/$router_ns.txt > /dev/null & # Combination of tee and redirect to /dev/null is necessary to avoid weird behaviour caused by redirecting a script run with sudo
 done
 
@@ -302,7 +305,7 @@ else
 fi
 
 # Output test result 
-if [[ $test_target != $test_result ]]; then
+if [[ ! ( $test_result =~ $test_target ) ]]; then
     echo -e "${RED}$test_result${NC}"
     clean_exit 1
 fi

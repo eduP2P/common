@@ -28,6 +28,8 @@ The following options can be used to configure additional parameters during the 
     -L <log directory>
         Specifies the alphanumeric name of the directory inside system_test_logs/ where the test logs will be stored
         If this argument is not provided, the directory name is the current timestamp
+    -n <number of IPs between 1 and 9>
+        Specifies the number of IP addresses assigned to each NAT. Passing a number >1 allows NAT IP pooling to be simulated during the system tests
     -t <number of threads between 2 and 8>
         Run the system tests in parallel with the specified number of threads. 
         It is not recommended to combine this flag with -p, as multithreading will likely degrade the performance and the graphs will not be created automatically
@@ -37,11 +39,12 @@ The following options can be used to configure additional parameters during the 
 # Use functions and constants from util.sh
 . ./util.sh
 
-# Default log level
+# Default parameter values
 log_lvl="debug"
+n_pooling_ips=3
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:L:t:bph" opt; do
+while getopts ":c:d:ef:l:L:n:t:bph" opt; do
     case $opt in
         c)  
             connectivity=true
@@ -97,6 +100,13 @@ while getopts ":c:d:ef:l:L:t:bph" opt; do
         b)
             build=true
             ;;
+        n)
+            n_pooling_ips=$OPTARG
+
+            # Make sure n_pooling_ips is an integer between 1 and 9
+            n_pooling_ips_regex="^[1-9]$"
+            validate_str $n_pooling_ips $n_pooling_ips_regex
+            ;;
         p)
             performance=true
             ;;
@@ -145,7 +155,7 @@ function build_go() {
 
 function setup_networks() {
     cd nat_simulation/
-    adm_ips=$(sudo ./setup_networks.sh) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
+    adm_ips=$(sudo ./setup_networks.sh $n_pooling_ips) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
 }
 
 function extract_server_pub_key() {
@@ -325,7 +335,7 @@ function run_system_test() {
         let "n_tests++"
 
         # Run in background and wait for test to finish to allow for interrupting from the terminal
-        ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port "$adm_ips" $log_lvl $log_dir $repo_dir &
+        ./system_test.sh $@ $n_tests $control_pub_key $control_ip $control_port $n_pooling_ips "$adm_ips" $log_lvl $log_dir $repo_dir &
         test_pid=$!
         wait $test_pid
 
@@ -352,9 +362,16 @@ function connectivity_test_logic() {
         # After sending one ping, the subsequent incoming pings from the peer's STUN endpoint will be accepted, regardless of the filtering behaviour
         test_target="TS_PASS_DIRECT"
     elif [[ $nat1_mapping -eq 0 && $nat1_filter -eq 1 || $nat2_mapping -eq 0 && $nat2_filter -eq 1 ]]; then
-        # An EIF-ADF NAT will always let the peer's pings through after sending its first ping
-        # This is not a general property of EIM-ADF NATs, but holds in this test suite because each NAT only has one IP address
-        test_target="TS_PASS_DIRECT"
+        # If NAT IP pooling is disabled, the endpoints used by the peers to communicate with each other have the same IP as their STUN endpoints
+        # Therefore, ADF NATs behave the same as EIF NATs in this case
+        if [[ $n_pooling_ips -eq 1 ]]; then
+            test_target="TS_PASS_DIRECT"
+        # If NAT IP pooling is enabled, the endpoints may have different IPs from the STUN endpoints
+        # If this is the case for both peers, the ADF NATs will not let the pings through
+        # The result TS_PASS indicates that it is not certain whether a direct connection can be established, and the test will succeed for both TS_PASS_DIRECT and TS_PASS_RELAY
+        else
+            test_target="TS_PASS"
+        fi
     else
         test_target="TS_PASS_RELAY"
     fi
@@ -500,7 +517,7 @@ if [[ -n $n_threads ]]; then
 
     # Containers are only used one time, now that they have finished running they can be removed
     docker rm ${container_ids[@]} > /dev/null
-else
+elif [[ -n $performance ]]; then
     # Create graphs for performance tests, if any were included
     python3 visualize_performance_tests.py $log_dir
 fi
