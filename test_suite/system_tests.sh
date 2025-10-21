@@ -429,22 +429,34 @@ function connectivity_test_logic_double_nat() {
     nat3=$nat3_mapping-$nat3_filter
     nat4=$nat4_mapping-$nat4_filter
 
-    # TS_PASS only if one peer is behind at least one Restricted Cone NAT, and the other peer is behind at least one Symmetric NAT
-    # Since we skip symmetrical cases (see below), we can assume the Symmetric NAT is on peer 2's side
-    if [[ -n $nat4 && ( $nat1_filter -eq 1 || $nat2_filter -eq 1 ) && "$nat3 $nat4" =~ 2-2 ]]; then
-        test_target="TS_PASS"
-    # TS_PASS_RELAY only if peer 1 is behind at least one Port Restricted Cone/Symmetric NAT, and peer 2 is behind at least one Symmetric NAT
-    elif [[ -n $nat4 && ( $nat1_filter -eq 2 || $nat2_filter -eq 2 ) && "$nat3 $nat4" =~ 2-2 ]]; then
+    # TS_PASS_RELAY if peer 1 is behind at least one Port Restricted Cone/Symmetric NAT, and peer 2 is behind at least one Symmetric NAT
+    if [[ -n $nat4 && \
+          ( ( $nat1_filter -eq 2 || $nat2_filter -eq 2 ) && "$nat3 $nat4" =~ 2-2 || \
+            ( $nat3_filter -eq 2 || $nat4_filter -eq 2 ) && "$nat1 $nat2" =~ 2-2 )]]; then
         test_target="TS_PASS_RELAY"
+    # TS_PASS only if one peer is behind at least one Restricted Cone NAT, and the other peer is behind at least one Symmetric NAT
+    elif [[ -n $nat4 && \
+          ( ( $nat1_filter -eq 1 || $nat2_filter -eq 1 ) && "$nat3 $nat4" =~ 2-2 || \
+            ( $nat3_filter -eq 1 || $nat4_filter -eq 1 ) && "$nat1 $nat2" =~ 2-2 )]]; then
+        test_target="TS_PASS"
     else
         test_target="TS_PASS_DIRECT"
     fi
 
-    # Skip symmetrical cases
-    if [[ $nat3_mapping -gt $nat1_mapping || $nat3_mapping -eq $nat1_mapping && $nat3_filter -ge $nat1_filter ]]; then 
-        if [[ $nat4_mapping -gt $nat2_mapping || $nat4_mapping -eq $nat2_mapping && $nat4_filter -ge $nat2_filter ]]; then 
-            filter_nat_combinations $test_target $ns_config $nat1:$nat2/$nat3:$nat4 $wg_config $nat1 $nat2 $nat3 $nat4
-        fi
+    # Assign a score to each NAT, such that the RFC 3489 NAT types ordered by score are as follows:
+    ## 1. Full Cone = 0 + 0 = 0
+    ## 2. Restricted Cone = 0 + 1 = 1
+    ## 3. Port Restricted Cone = 0 + 2 = 2
+    ## 4. Symmetric = 2 + 2 = 4
+    nat1_score=$(echo "$nat1_mapping+$nat1_filter" | bc)
+    nat2_score=$(echo "$nat2_mapping+$nat2_filter" | bc)
+    nat3_score=$(echo "$nat3_mapping+$nat3_filter" | bc)
+    nat4_score=$(echo "$nat4_mapping+$nat4_filter" | bc)
+
+
+    # Use score to skip symmetrical cases
+    if [[ $nat3_score -gt $nat1_score || $nat3_score -eq $nat1_score && $nat4_score -ge $nat2_score ]]; then
+        filter_nat_combinations $test_target $ns_config $nat1:$nat2/$nat3:$nat4 $wg_config $nat1 $nat2 $nat3 $nat4
     fi
 }
 
