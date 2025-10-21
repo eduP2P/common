@@ -66,7 +66,11 @@ sudo and xargs packages):
 
 Optionally, the system tests can be run in parallel. In this mode the
 system tests are distributed over Docker containers, so it requires
-installing [Docker Engine](https://docs.docker.com/engine/install/).
+installing [Docker Engine](https://docs.docker.com/engine/install/). To
+build the Docker image the containers are based on, run the following
+command in the `test_suite` directory:
+
+    docker build -t system_tests .
 
 ### Performance test-specific requirements
 
