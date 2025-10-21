@@ -22,7 +22,7 @@ fi
 # Configure NAT filtering type with nftables 
 nft add table inet filter
 nft add chain inet filter input { type filter hook input priority 0\; policy drop\; }
-nft add rule inet filter input ct state related,established counter accept # This rule is sufficient to simulate ADPF
+nft add rule inet filter input ct state related,established counter accept # This rule is sufficient to simulate APDF
 
 # This pattern captures the following info from a conntrack event:
 #   1) the source IP
@@ -36,7 +36,7 @@ pattern=".*src=(\S+).*sport=(\S+).*src=(\S+).*dst=(\S+).*dport=(\S+).*$"
 hairpin_rule1="nat prerouting iif $priv_nat_iface ip saddr $priv_subnet ip daddr \4 meta l4proto {tcp, udp} th dport \5 counter dnat to \1:\2" # All traffic from the private network destined to \4:\5 should be hairpinned pack to \1:\2
 hairpin_rule2="nat postrouting iif $priv_nat_iface ip saddr \1 ip daddr $priv_subnet meta l4proto {tcp, udp} th sport \2 counter snat to \4:\5" # For all hairpinned packets from \1:\2, the source becomes \4:\5
 
-# Filtering (not necessary for ADPF because of filter rule above)
+# Filtering (not necessary for APDF because of filter rule above)
 case $nat_filter in
     0)
         # If a mapping is created with source IP \1, source port \2 and translated source port \5, all traffic destined to \5 should be DNATed to \1:\2
@@ -48,7 +48,7 @@ esac
 
 # Only monitor new source NAT connections that are created by the nftables NAT mapping rules
 if [[ $nat_filter -eq 2 ]]; then
-    conntrack -En -s $priv_subnet -e NEW | sed -rn -e "s#$pattern#nft add rule $hairpin_rule1; nft add rule $hairpin_rule2#e" # No filter rule for ADPF NAT
+    conntrack -En -s $priv_subnet -e NEW | sed -rn -e "s#$pattern#nft add rule $hairpin_rule1; nft add rule $hairpin_rule2#e" # No filter rule for APDF NAT
 else
     conntrack -En -s $priv_subnet -e NEW | sed -rn -e "s#$pattern#nft add rule $hairpin_rule1; nft add rule $hairpin_rule2; nft add rule $filter_rule#e"
 fi
