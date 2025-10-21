@@ -245,8 +245,26 @@ conditions:
   public “peers” to be simulated by making a router act as a peer, since
   the routers have a public IP address.
 
-The next section explains the types of NAT in this network setup, and
-describes how they are implemented.
+### Double NAT
+
+Until now, we have assumed there is a single NAT between the peers and
+the public network. However, in the real world there may be multiple.
+For example, Double NAT describes a scenario where a host is separated
+from the public network by two NATs. To use Double NAT in the test
+suite, the `-2` flag must be added when calling the
+[system_tests.sh](system_tests.sh) script.
+
+Double NAT is implemented by adding the network namespaces `double1` and
+`double2`, respectively between `private1`/`router1` and
+`private2`/`router2`. The existing veth pair containing the `router1`
+device is used to connect the `double1` and `router1` namespaces, while
+a new veth pair containing a device called `double1` is used to connect
+the `private1` and `router1` namespaces. This new device has IP address
+`172.16.1.254`. The setup for the second private network is similar.
+
+Each simulated NAT device in the test suite can be configured
+separately. The next section describes the types of NAT supported in the
+test suite, and how they are implemented.
 
 ### Applying NAT
 
@@ -462,9 +480,12 @@ RFC 4787 specifies two types of IP address pooling behaviours:
     sessions belonging to the same internal IP.
 
 We implement the second behaviour in the test suite, as it has more
-potential to cause issues for P2P protocols. The implementation relies
-on two nftables features: packet marking and maps, which act like
-dictionaries.
+potential to cause issues for P2P protocols. However, when Double NAT is
+enabled, IP address pooling is only supported for the NAT facing the
+public network.
+
+The implementation relies on two nftables features: packet marking and
+maps, which act like dictionaries.
 
 Each packet that flows through the `nat` table is marked in the
 `prerouting` chain. The range of possible mark values is equal to the
@@ -566,7 +587,7 @@ The following command runs tests from a file named
 
 Suppose `performance_test.txt` contains the following line:
 
-    run_system_test -k bitrate -v 100,200 -d 5 -b wireguard -r 3 TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 100,200 -d 5 -b wireguard -r 3 TS_PASS_DIRECT router1/router2 / /
 
 Then, running the system tests with the `-f performance_test.txt` option
 will execute a performance test with the following parameters:
@@ -632,6 +653,9 @@ disables IP address pooling.
 
 The old results are followed by a section in which the differences
 resulting from the addition of IP address pooling are described.
+
+Finally, the system tests results section is concluded by analysing how
+Double NAT affects the results.
 
 ## System Test Results Without IP Address Pooling
 
@@ -1285,6 +1309,63 @@ process described for the RFC 3489 Restricted Cone and Symmetric NAT
 combination. This is because the Restricted Cone NAT corresponds to an
 EIM-ADF NAT.
 
+## Effect of Double NAT on System Test Results
+
+With Double NAT, we do not discuss the RFC 4787 NATs, as the amount of
+possible combination would be too high. Even for the RFC 3489 NATs,
+there are quite a lot of possible combinations. Therefore, we split this
+section in two parts:
+
+1.  We first discuss the Double NAT combinations where the two NATs
+    separating a host from the public network are of the *same* type.
+2.  Then, we discuss the combinations where the NATs are of a
+    *different* type.
+
+### Same-type Double NAT
+
+| Double NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
+|----|:---|:---|:---|:---|
+| **Full Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :question: |
+| **Port Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **Symmetric** | :white_check_mark: | :question: | :x: | :x: |
+
+The results in this table are equal to those of the [previous
+table](#effect-of-ip-address-pooling-on-system-test-results). Therefore,
+if both NATs have the same type, Double NAT does not affect the peers’
+ability to establish a direct connection.
+
+### Different-type Double NAT
+
+| Double NAT Type | FC/RC | FC/PRC | FC/Sym | RC/FC | RC/PRC | RC/Sym | PRC/FC | PRC/RC | PRC/Sym | Sym/FC | Sym/RC | Sym/PRC |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| **FC/RC** | :white_check_mark: | :white_check_mark: | :question: | :white_check_mark: | :white_check_mark: | :question: | :white_check_mark: | :white_check_mark: | :question: | :question: | :question: | :question: |
+| **FC/PRC** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
+| **FC/Sym** | :question: | :x: | :x: | :question: | :x: | :x: | :x: | :x: | :x: | :x: | :x: | :x: |
+| **RC/FC** | :white_check_mark: | :white_check_mark: | :question: | :white_check_mark: | :white_check_mark: | :question: | :white_check_mark: | :white_check_mark: | :question: | :question: | :question: | :question: |
+| **RC/PRC** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
+| **RC/Sym** | :question: | :x: | :x: | :question: | :x: | :x: | :x: | :x: | :x: | :x: | :x: | :x: |
+| **PRC/FC** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
+| **PRC/RC** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :white_check_mark: | :x: | :x: | :x: | :x: |
+| **PRC/Sym** | :question: | :x: | :x: | :question: | :x: | :x: | :x: | :x: | :x: | :x: | :x: | :x: |
+| **Sym/FC** | :question: | :x: | :x: | :question: | :x: | :x: | :x: | :x: | :x: | :x: | :x: | :x: |
+| **Sym/RC** | :question: | :x: | :x: | :question: | :x: | :x: | :x: | :x: | :x: | :x: | :x: | :x: |
+| **Sym/PRC** | :question: | :x: | :x: | :question: | :x: | :x: | :x: | :x: | :x: | :x: | :x: | :x: |
+
+In this table, we see that the row for Double NAT X/Y contains the same
+results as the row for Double NAT Y/X. For example, the row for FC/RC is
+equal to the row for RC/FC. We can make the same observation about the
+columns in the table. This shows that the order of the NAT types in
+Double NAT does not affect the peers’ ability to establish a direct
+connection
+
+We also observe that all rows and columns where one of the two NATs is a
+Symmetric NAT contain the same results. The reason for this is that the
+Symmetric NAT is the most restrictive of the RFC 3489 NATs, so the other
+NAT’s behaviour does not impact the test outcome. In general, it holds
+that the ability to establish a direct connection is determined by the
+combination of each peer’s most restrictive NAT.
+
 ## Performance Test Results
 
 The results in this section were measured on my own laptop with the
@@ -1304,7 +1385,7 @@ reproducibility.
 
 Command used:
 
-    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1-router2 : wg0:wg0
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1/router2 / wg0/wg0
 
 With this command, we compare the performance of eduP2P, WireGuard and a
 direct connection between two peers in the test suite’s network setup.
@@ -1357,7 +1438,7 @@ differ on other machines.
 
 Command used:
 
-    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k bitrate -v 800,1600,2400,3200,4000 -d 3 -b both -r 5 TS_PASS_DIRECT router1/router2 / /
 
 This command repeats the performance test of the previous section, with
 the only difference being that now both peers use userspace WireGuard
@@ -1378,7 +1459,7 @@ further, however:
 
 Command used:
 
-    run_system_test -k delay -v 0,1,2,3 -d 3 -b both -r 3 TS_PASS_DIRECT router1-router2 : :
+    run_system_test -k delay -v 0,1,2,3 -d 3 -b both -r 3 TS_PASS_DIRECT router1/router2 / /
 
 ![](./images/performance_tests/x_ow_delay_y_http_latency.png)
 
