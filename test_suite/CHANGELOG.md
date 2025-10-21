@@ -2,6 +2,23 @@
 
 In this file, the test suite features that have been made possible thanks to [funding from NLnet](./README.md#funding) are documented. 
 
+## Double NAT(Oct 21, 2025)
+### Added
+- Explanation of Double NAT and how it is implemented in the test suite in the [system test documentation](./README.md#double-nat).
+- The `-2` flag to [`system_tests.sh`](system_tests.sh) and [`nat_simulation/setup_networks.sh`](nat_simulation/setup_networks.sh), which enables Double NAT.
+- New logic in [`system_tests.sh`](system_tests.sh) which decides the expected test result if the peers are behind Double NAT. This logic assumes the NAT behaviour is limited to the 4 NATs described in RFC 3489
+- Functionality in [`nat_simulation/setup_router.sh`](nat_simulation/setup_router.sh) to perform different actions depending on which of the two NATs is being set up.
+- Report on the system tests results with Double NAT for each combination of two RFC 3489 NATs in the [system test results](./README.md#effect-of-double-nat-on-system-test-results).
+
+### Changed
+- The syntax of the NAT and network namespace configurations which are passed as parameters to [`system_test.sh`](system_test.sh), such that a second NAT layer can be specified.
+
+### Fixed
+- Small miscellaneous improvements, such as:
+  - Less duplicated code for regex validation by placing regular expressions which are used multiple times in [util.sh](util.sh).
+  - Fix incorrect abbreviation ADPF -> APDF across documentation and code comments.
+  - Add missing command necessary before running parallel system tests in the [system test requirements](./README.md#system-test-specific-requirements).
+
 ## NAT IP pooling (June 20, 2025)
 ### Added
 - Explanation of NAT IP pooling and how it is implemented in the test suite in the [system test documentation](./README.md#ip-address-pooling).
