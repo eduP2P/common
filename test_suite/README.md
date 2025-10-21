@@ -369,7 +369,7 @@ three different types of behaviour with the same naming convention:
     or port.
 2.  **Address-Dependent Filtering (ADF):** packets destined to `X':x1'`
     are filtered only if their source IP address does not equal `Y`
-3.  **Address and Port-Dependent Filtering (ADPF):** packets destined to
+3.  **Address and Port-Dependent Filtering (APDF):** packets destined to
     `X':x1'` are filtered only if their source endpoint does not equal
     `Y:y1`.
 
@@ -383,7 +383,7 @@ these packets may be filtered, which is indicated by a dashed arrow:
     destined to a port on the NAT for which a mapping exists.
 2.  **ADF:** The packet from `Z:z` is filtered, because incoming packets
     to `X':x1'` are only accepted if they have source IP address `Y`.
-3.  **ADPF:** The packets from `Y:y2` and `Z:z` are filtered, because
+3.  **APDF:** The packets from `Y:y2` and `Z:z` are filtered, because
     incoming packets to `X':x1'` are only accepted if they have source
     IP address `Y` and source port `y1`.
 
@@ -398,7 +398,7 @@ do not belong to an existing session are filtered.
 
 Each time an internal endpoint establishes a connection to a new
 external endpoint, a new session is also created. Therefore, the above
-nftables rule is sufficient to simulate ADPF, since only the original
+nftables rule is sufficient to simulate APDF, since only the original
 session’s endpoint can send packets to the corresponding mapped IP
 address.
 
@@ -682,9 +682,9 @@ to:
   Mapping (EIM) and Address-Dependent Filtering (ADF).
 - **Port Restricted Cone NAT:** equivalent to a NAT with
   Endpoint-Independent Mapping (EIM) and Address and Port-Dependent
-  Filtering (ADPF).
+  Filtering (APDF).
 - **Symmetric NAT:** equivalent to a NAT with Address and Port-Dependent
-  Mapping (ADPM) and Address and Port-Dependent Filtering (ADPF).
+  Mapping (ADPM) and Address and Port-Dependent Filtering (APDF).
 
 The expected results are shown in the table below. A cell is marked with
 an ‘X’ if UDP hole punching is successful in the scenario where one peer
@@ -1101,19 +1101,19 @@ conditions with packet loss.
 
 The results of extending the UDP hole punching experiment to all
 combinations of RFC 4787 mapping (EIM, ADM, ADPM) and filtering (EIF,
-ADF, ADPF) behaviours are shown in the table below:
+ADF, APDF) behaviours are shown in the table below:
 
-| NAT Type | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
+| NAT Type | EIM-EIF | EIM-ADF | EIM-APDF | ADM-EIF | ADM-ADF | ADM-APDF | ADPM-EIF | ADPM-ADF | ADPM-APDF |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 | **EIM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **EIM-ADF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| **EIM-ADPF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **EIM-APDF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 | **ADM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **ADM-ADF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
-| **ADM-ADPF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADM-APDF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 | **ADPM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **ADPM-ADF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
-| **ADPM-ADPF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADPM-APDF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 
 Based on these results, we can conclude that there are three
 (overlapping) types of NAT scenarios where the UDP hole punching process
@@ -1160,7 +1160,7 @@ To substantiate this claim, we examine the general UDP hole punching
 process for the two least restrictive NAT combinations in the above
 table where a direct connection could not be established:
 
-1.  **One peer behind an EIM-ADPF NAT, and the other behind an ADM-ADF
+1.  **One peer behind an EIM-APDF NAT, and the other behind an ADM-ADF
     NAT.**
 
     The UDP hole punching between the peers in this NAT scenario is
@@ -1171,7 +1171,7 @@ table where a direct connection could not be established:
        autonumber
 
        actor p1 as Peer 1 (X:x)
-       participant nat1 as EIM-ADPF NAT
+       participant nat1 as EIM-APDF NAT
        participant nat2 as ADM-ADF NAT
        actor p2 as Peer 2 (Y:y)
 
@@ -1199,7 +1199,7 @@ table where a direct connection could not be established:
 
     The problem in this scenario is that Peer 1 is sending pings to
     `Y':y1'`, while Peer 2 is sending them from `Y':y2'`. Peer 1’s NAT
-    will always drop the packets from Peer 2 because it has ADPF
+    will always drop the packets from Peer 2 because it has APDF
     behaviour and `y1'` is not equal to `y2'`. Peer 2’s NAT will accept
     packets from source IP `X'` destined to `Y':y2'` after sending its
     first ping from `Y':y2'` to `X':x1'`, but Peer 1 is sending packets
@@ -1288,17 +1288,17 @@ destination IP of an existing session.
 
 ### Experiment with RFC 4787 NAT mapping & filtering behaviours
 
-| NAT Type | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
+| NAT Type | EIM-EIF | EIM-ADF | EIM-APDF | ADM-EIF | ADM-ADF | ADM-APDF | ADPM-EIF | ADPM-ADF | ADPM-APDF |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
 | **EIM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **EIM-ADF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :question: | :question: | :white_check_mark: | :question: | :question: |
-| **EIM-ADPF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **EIM-APDF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 | **ADM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **ADM-ADF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
-| **ADM-ADPF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADM-APDF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 | **ADPM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | **ADPM-ADF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
-| **ADPM-ADPF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADPM-APDF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 
 Just like with the RFC 3489 experiment, the change in results caused by
 NAT IP address pooling is fairly limited. The outcome of UDP hole

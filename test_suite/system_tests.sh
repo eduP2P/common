@@ -475,7 +475,7 @@ else
 Starting connectivity tests between two peers (possibly) behind NATs with various combinations of mapping and filtering behaviour:
     - Endpoint-Independent Mapping/Filtering (EIM/EIF)
     - Address-Dependent Mapping/Filtering (ADM/ADF)
-    - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
+    - Address and Port-Dependent Mapping/Filtering (ADPM/APDF)"""
 
     log_sequential "\nTests with one peer behind a NAT"
     for nat1_mapping in {0..2}; do
@@ -533,7 +533,7 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
 
                         if [[ $nat1_mapping -ge 1 && $nat1_filter -eq 2 ]]; then
                             # Hairpinning is  done by nat2, so its mapping/filtering behaviour is irrelevant
-                            # However, if nat1 is A(P)DM-ADPF, UDP hole punching will fail because both peers are behind a too restrictive NAT
+                            # However, if nat1 is A(P)DM-APDF, UDP hole punching will fail because both peers are behind a too restrictive NAT
                             test_target=TS_PASS_RELAY
                         else
                             test_target=TS_PASS_DIRECT
