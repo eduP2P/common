@@ -10,7 +10,8 @@ A CI test suite for the eduP2P prototype.
     3.  [Performance Tests](#performance-tests)
     4.  [Integration Tests](#integration-tests)
 2.  [Results](#results)
-    1.  [System Test Results](#system-test-results)
+    1.  [System Test
+        Results](#system-test-results-without-ip-address-pooling)
     2.  [Performance Test Results](#performance-test-results)
     3.  [Integration Test Results](#integration-test-results)
 3.  [Bibliography](#bibliography)
@@ -115,12 +116,16 @@ requirements](#system-test-specific-requirements), the tests may be run
 in parallel using Docker. The user can specify the amount of “threads”
 with the `-t` flag, which determines over how many Docker containers the
 tests will be distributed. The reason for using Docker is that it allows
-the concurrent tests to be executed in isolated networks. Naturally,
-running the tests in parallel allows the tests to run much faster. One
-disadvantage of the parallel tests is that a Docker image must be built
-before running the tests. This takes quite a while the first time the
-image is built, but by making use of Docker’s caching, building the
-image again after revisions to the code is significantly faster.
+the concurrent tests to be executed in isolated networks, which improves
+the clarity of the logs and avoid any interference that could be caused
+by multiple tests running simultaneously in the same network.
+
+Naturally, running the tests in parallel allows the tests to run much
+faster. One disadvantage of the parallel tests is that a Docker image
+must be built before running the tests. This takes quite a while the
+first time the image is built, but by making use of Docker’s caching,
+building the image again after revisions to the code is significantly
+faster.
 
 The parallel system tests are also being used in the CI GitHub workflow
 when new code is pushed to a branch. For pull requests, the sequential
@@ -248,7 +253,8 @@ describes how they are implemented.
 To categorize different types of NAT, this test suite follows the
 terminology of RFC 4787 [\[4\]](#ref-rfc4787). This RFC outlines various
 NAT behaviours, of which the following are implemented in the test
-suite: mapping behaviours, filtering behaviours and hairpinning.
+suite: mapping behaviours, filtering behaviours, hairpinning and IP
+address pooling.
 
 #### Mapping behaviours
 
@@ -298,11 +304,6 @@ of behaviours:
 
 ![](./images/system_tests/nat_mapping.png)
 
-Note that in this test suite, the NAT’s IP pooling behaviour is not
-considered, as the routers in the simulated network setup only have one
-IP address. Therefore, the only difference between mappings is their
-ports.
-
 The test suite implements the above three behaviours by using the
 nftables framework [\[3\]](#ref-man_nft) in the routers’ namespaces. For
 each of the three mapping behaviours, separate rules have to be applied
@@ -310,12 +311,10 @@ in the `nat` table’s `postrouting` chain:
 
 1.  **EIM:** A rule is applied to all packets going to the public
     network with a source address from the private network. The target
-    of this rule is `masquerade`, with the `persistent` option.
-    `masquerade` is a form of Source NAT where the source IP is
-    automatically translated to the IP of the outgoing network
-    interface, which in this case is the router’s public IP address.
-    With the `persistent` option, the same mapping is reused for each
-    different endpoint.
+    of this rule is `snat`, with the `persistent` option. The `snat`
+    target causes the source address of the packets to be translated,
+    and the `persistent` option makes sure the same mapping is reused
+    for each different endpoint.
 
     The mappings created with this rule are also automatically used to
     translate the destination IP of packets going to the private
@@ -332,8 +331,8 @@ in the `nat` table’s `postrouting` chain:
 
 3.  **ADPM:** For this mapping behaviour, only one rule has to be
     applied again. The rule is identical to that for EIM, except that
-    the `random` option is used with the `masquerade` target instead of
-    the `persistent` option. With the `random` option, a random port is
+    the `random` option is used with the `snat` target instead of the
+    `persistent` option. With the `random` option, a random port is
     selected for each different endpoint.
 
 The exact syntax of the rules can be found in [the script applying the
@@ -447,6 +446,57 @@ The exact syntax of the rules can be found in [the script applying the
 NAT hairpinning
 rules](nat_simulation/setup_nat_filtering_hairpinning.sh), which is the
 same script that was used for applying filtering.
+
+#### IP Address Pooling
+
+Until now, we have assumed that the routers applying NAT only have one
+public IP address. However, it is also possible for a NAT to have
+multiple, allowing it to choose from a pool of IP addresses when
+translating the address of a host behind the NAT.
+
+RFC 4787 specifies two types of IP address pooling behaviours:
+
+1.  **Paired**: the NAT maps all sessions with the same internal IP
+    address to the same public IP.
+2.  **Arbitrary**: the NAT may assign different public IP addresses to
+    sessions belonging to the same internal IP.
+
+We implement the second behaviour in the test suite, as it has more
+potential to cause issues for P2P protocols. The implementation relies
+on two nftables features: packet marking and maps, which act like
+dictionaries.
+
+Each packet that flows through the `nat` table is marked in the
+`prerouting` chain. The range of possible mark values is equal to the
+size of the NAT’s IP pool, which can be specified via the `-n` flag of
+[system_tests.sh](system_tests.sh). The mark values form the keys of the
+nftables map, while the NAT’s public IP’s form the values. Therefore,
+the packet mark decides how the packet’s source IP address is
+translated.
+
+The packet mark is calculated by passing some of the packet’s
+information to a hash function. A hash function always gives the same
+output when given identical input, but almost never gives the same
+output for different inputs. We can use these two properties to simulate
+IP address pooling in the test suite. The type of packet information
+given to the hash function depends on the NAT’s mapping behaviour:
+
+1.  **EIM:** By passing only the source IP address and port of the
+    packet to the hash function, we ensure that the same internal
+    endpoint is always assigned the same public IP address.
+2.  **ADM:** By additionally adding the destination IP address to the
+    hash function’s inputs, we allow two packets from the same internal
+    endpoint to be assigned different public IPs, unless they have the
+    same destination IP.
+3.  **APDM:** By also including the destination port, two packets from
+    the same internal endpoint are only assigned the same public IP
+    address if their external endpoints are also identical.
+
+Although the source IP address is a part of the hash function input in
+all three cases, there is always at least one other element present.
+Therefore, it is possible that the NAT assigns different public IP
+addresses to sessions belonging to the same source IP, which means the
+pooling behaviour is Arbitrary.
 
 ## Performance Tests
 
@@ -571,10 +621,19 @@ commands in the repository’s root directory:
 
 # Results
 
-The results are split in a separate section for the system tests,
+The results are split into separate sections for the system tests,
 performance tests, and integration tests.
 
-## System Test Results
+The system tests results are from an older version of the test suite
+that did not yet implement NAT IP address pooling. In the current
+version of the test suite, these results can still be reproduced by
+setting the size of the NATs’ IP address pool to 1, which effectively
+disables IP address pooling.
+
+The old results are followed by a section in which the differences
+resulting from the addition of IP address pooling are described.
+
+## System Test Results Without IP Address Pooling
 
 Using the test suite’s system tests, we can get an overview of whether
 two eduP2P peers are able to establish a direct connection using UDP
@@ -610,10 +669,10 @@ is behind the NAT indicated by the cell’s column header.
 
 | NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
 |:---|:---|:---|:---|:---|
-| **Full Cone** | X | X | X | X |
-| **Restricted Cone** | X | X | X | X |
-| **Port Restricted Cone** | X | X | X |  |
-| **Symmetric** | X | X |  |  |
+| **Full Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Port Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **Symmetric** | :white_check_mark: | :white_check_mark: | :x: | :x: |
 
 As seen in the table, UDP hole punching succeeds unless one peer is
 behind a Port Restricted Cone NAT or Symmetric NAT, and the other peer
@@ -724,10 +783,10 @@ are shown in the table below:
 
 | NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
 |:---|:---|:---|:---|:---|
-| **Full Cone** | X | X | X | X |
-| **Restricted Cone** | X | X | X |  |
-| **Port Restricted Cone** | X | X | X |  |
-| **Symmetric** | X |  |  |  |
+| **Full Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **Port Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **Symmetric** | :white_check_mark: | :x: | :x: | :x: |
 
 Comparing this table with the one in the previous section, we see that
 eduP2P is not able to establish a direct connection when one peer is
@@ -1022,15 +1081,15 @@ ADF, ADPF) behaviours are shown in the table below:
 
 | NAT Type | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
 |:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
-| **EIM-EIF** | X | X | X | X | X | X | X | X | X |
-| **EIM-ADF** | X | X | X | X | X | X | X | X | X |
-| **EIM-ADPF** | X | X | X | X |  |  | X |  |  |
-| **ADM-EIF** | X | X | X | X | X | X | X | X | X |
-| **ADM-ADF** | X | X |  | X |  |  | X |  |  |
-| **ADM-ADPF** | X | X |  | X |  |  | X |  |  |
-| **ADPM-EIF** | X | X | X | X | X | X | X | X | X |
-| **ADPM-ADF** | X | X |  | X |  |  | X |  |  |
-| **ADPM-ADPF** | X | X |  | X |  |  | X |  |  |
+| **EIM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **EIM-ADF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **EIM-ADPF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **ADM-ADF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADM-ADPF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADPM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **ADPM-ADF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADPM-ADPF** | :white_check_mark: | :white_check_mark: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
 
 Based on these results, we can conclude that there are three
 (overlapping) types of NAT scenarios where the UDP hole punching process
@@ -1166,6 +1225,65 @@ table where a direct connection could not be established:
     dropped by the receiving NAT, and also do not cause the transmitting
     NAT to let through later pings sent to the STUN endpoint of the peer
     behind this NAT.
+
+## Effect of IP Address Pooling on System Test Results
+
+We repeat both the experiment with the RFC 3489 NATs and RFC 4787 NAT
+mapping & filtering behaviours.
+
+### Experiment with RFC 3489 NAT types
+
+| NAT Type | Full Cone | Restricted Cone | Port Restricted Cone | Symmetric |
+|:---|:---|:---|:---|:---|
+| **Full Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :question: |
+| **Port Restricted Cone** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: |
+| **Symmetric** | :white_check_mark: | :question: | :x: | :x: |
+
+As seen in the table above, the only NAT combination for which the
+result has changed is the Restricted Cone paired with the Symmetric NAT.
+Without IP address pooling, UDP hole punching succeeded for this
+combination. However, the outcome of hole punching is uncertain when
+these NATs support IP pooling, as indicated by the question mark.
+
+Let Peer 1 be the eduP2P client behind the Restricted Cone NAT, and Peer
+2 the client behind the Symmetric NAT. The outcome of the hole punching
+process depends on whether the pings from Peer 1 to Peer 2 have their
+source IP translated to Peer 1’s STUN IP, and vice versa. If this is the
+case for both peers, the pings from Peer 1 to Peer 2 cause a session to
+be created on the Restricted Cone NAT, where the destination IP is Peer
+2’s STUN IP and Peer 1’s IP is translated to its own STUN IP. Then, the
+pings from Peer 2 to Peer 1 will be let through by the Restricted Cone
+NAT, as their source IP matches this existing session’s destination IP.
+Therefore, UDP hole punching would succeed.
+
+However, if either of the peers have their source IP translated to an
+address different from the STUN IP, the Restricted Cone NAT would filter
+the pings from Peer 2 to Peer 1, because they do not originate from the
+destination IP of an existing session.
+
+### Experiment with RFC 4787 NAT mapping & filtering behaviours
+
+| NAT Type | EIM-EIF | EIM-ADF | EIM-ADPF | ADM-EIF | ADM-ADF | ADM-ADPF | ADPM-EIF | ADPM-ADF | ADPM-ADPF |
+|:---|:---|:---|:---|:---|:---|:---|:---|:---|:---|
+| **EIM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **EIM-ADF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :question: | :question: | :white_check_mark: | :question: | :question: |
+| **EIM-ADPF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **ADM-ADF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADM-ADPF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADPM-EIF** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **ADPM-ADF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+| **ADPM-ADPF** | :white_check_mark: | :question: | :x: | :white_check_mark: | :x: | :x: | :white_check_mark: | :x: | :x: |
+
+Just like with the RFC 3489 experiment, the change in results caused by
+NAT IP address pooling is fairly limited. The outcome of UDP hole
+punching is only uncertain for NAT combinations where one has
+Endpoint-Independent Mapping and Address-Dependent Filtering behaviour.
+The UDP hole punching process for these combinations is the same as the
+process described for the RFC 3489 Restricted Cone and Symmetric NAT
+combination. This is because the Restricted Cone NAT corresponds to an
+EIM-ADF NAT.
 
 ## Performance Test Results
 
@@ -1453,4 +1571,4 @@ Conservancy](https://commonsconservancy.org/).
 [<img src="https://nlnet.nl/image/partners/commonsconservancy.svg" alt="The Commons Conservancy Logo" width="20%" />](https://commonsconservancy.org/)
 
 The test suite features that have been made possible thanks to this
-funding are described below.
+funding are described in the [test suite’s changelog](CHANGELOG.md).

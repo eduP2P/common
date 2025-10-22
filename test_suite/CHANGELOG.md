@@ -2,6 +2,18 @@
 
 In this file, the test suite features that have been made possible thanks to [funding from NLnet](./README.md#funding) are documented. 
 
+## NAT IP pooling (June 20, 2025)
+### Added
+- Explanation of NAT IP pooling and how it is implemented in the test suite in the [system test documentation](./README.md#ip-address-pooling).
+- The `-n` flag to [`system_tests.sh`](system_tests.sh) and a positional parameter to [`system_test.sh`](system_test.sh),[`nat_simulation/setup_networks.sh`](nat_simulation/setup_networks.sh) and [`nat_simulation/setup_router.sh`](nat_simulation/setup_router.sh), which specify the amount of IP addresses available to the routers for NAT IP pooling.
+- New expected test result `TS_PASS`, which accepts both a direct and relayed connection between the peers. This new result is necessary because for some NAT combinations with IP pooling, it is uncertain whether a direct connection can be established.
+- Report on which system tests are affected by IP pooling in the [system test results](./README.md#effect-of-ip-address-pooling-on-system-test-results).
+
+### Changed
+- The logic in [`system_tests.sh`](system_tests.sh) which decides the expected test result based on the specified NAT combination of the peers. This logic now uses the new `TS_PASS` result for certain combinations if NAT IP pooling is enabled.
+- Branches on the (expected) test result in [`system_test.sh`](system_test.sh) and [`test_client/setup_client.sh`](test_client/setup_client.sh), such that they also take the new `TS_PASS` result into account.
+- Older results of the system tests without NAT IP pooling. They now contain a reference to the new results, and their visualization has been changed to align with the new results. 
+- The implementation of the NAT mapping & filtering behaviour, respectively found in [`nat_simulation/setup_networks.sh`](nat_simulation/setup_networks.sh) and [`nat_simulation/setup_router.sh`](nat_simulation/setup_router.sh). The implementation of the mapping behaviour now also does NAT IP pooling, and the filtering behaviour had to be adjusted to take the multiple IP addresses into account.
 
 ## Parallel system tests (April 11, 2025)
 
