@@ -28,7 +28,7 @@ while getopts ":b:h" opt; do
     case $opt in
         b)
             baseline=$OPTARG
-            validate_str "$baseline" "^direct$|^wireguard$|^both$"
+            validate_str "$baseline" "^(direct|wireguard|both)$"
 
             case $baseline in
                 "direct")

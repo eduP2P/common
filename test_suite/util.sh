@@ -9,7 +9,7 @@ NC="\033[0m" # No color
 
 # Frequently used regular expressions
 int_regex="^[0-9]+$"
-real_regex="[0-9]+[.]?([0-9]+)?" # Allows for counting the amount of digits after the decimal point
+real_regex="[0-9]+([.][0-9]+)?" # Allows for counting the amount of digits after the decimal point
 
 function exit_with_error() {
     err_reason=$1
