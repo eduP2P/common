@@ -6,6 +6,8 @@ Usage: ${0} [OPTIONAL ARGUMENTS]
 This script runs system tests between two eduP2P peers sequentially
 
 The following options determine the type of tests run:
+    -2
+        Run connectivity tests with Double NAT: both peers are separated from the public network with two NATs, instead of the default single NAT
     -e
         Run extended connectivity tests (all combinations of RFC 4787 NAT mapping and filtering behaviour)
     -f <file>
@@ -44,15 +46,14 @@ log_lvl="debug"
 n_pooling_ips=3
 
 # Validate optional arguments
-while getopts ":c:d:ef:l:L:n:t:bph" opt; do
+while getopts ":c:d:ef:l:L:n:t:2bph" opt; do
     case $opt in
         c)  
             connectivity=true
             packet_loss=$OPTARG
 
             # Make sure packet_loss is a real number
-            real_regex="^[0-9]+[.]?([0-9]+)?$"
-            validate_str $packet_loss $real_regex
+            validate_str "$packet_loss" ^$real_regex$
 
             # Make sure packet loss is in the interval [0, 100)
             in_interval=$(echo "$packet_loss >= 0 && $packet_loss < 100" | bc) # 1=true, 0=false
@@ -65,8 +66,7 @@ while getopts ":c:d:ef:l:L:n:t:bph" opt; do
             delay=$OPTARG
 
             # Make sure delay is an integer
-            int_regex="^[0-9]+$"
-            validate_str $delay $int_regex
+            validate_str "$delay" $int_regex
             ;;
         e)
             extended=true
@@ -82,12 +82,12 @@ while getopts ":c:d:ef:l:L:n:t:bph" opt; do
         l)  
             log_lvl=$OPTARG
 
-            log_lvl_regex="^trace|debug|info|warn|error?$"
-            validate_str $log_lvl $log_lvl_regex
+            log_lvl_regex="^trace$|^debug$|^info$|^warn$|^error$"
+            validate_str "$log_lvl" $log_lvl_regex
             ;;
         L)
             alphanum_regex="^[a-zA-Z0-9]+$"
-            validate_str $OPTARG $alphanum_regex
+            validate_str "$OPTARG" $alphanum_regex
             log_dir_rel=system_test_logs/$OPTARG
             ;;
         t)
@@ -95,7 +95,10 @@ while getopts ":c:d:ef:l:L:n:t:bph" opt; do
 
             # Make sure n_threads is an integer between 2 and 8
             threads_regex="^[2-8]$"
-            validate_str $n_threads $int_regex
+            validate_str "$n_threads" $int_regex
+            ;;
+        2)
+            double_nat="-2"
             ;;
         b)
             build=true
@@ -119,6 +122,8 @@ while getopts ":c:d:ef:l:L:n:t:bph" opt; do
             ;;
     esac
 done
+
+system_test_opts=$@
 
 # Store repository's root directory for later use
 repo_dir=$(cd ..; pwd)
@@ -155,7 +160,7 @@ function build_go() {
 
 function setup_networks() {
     cd nat_simulation/
-    adm_ips=$(sudo ./setup_networks.sh $n_pooling_ips) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
+    adm_ips=$(sudo ./setup_networks.sh $double_nat -n $n_pooling_ips) # setup_networks.sh returns an array of IPs used by hosts in the network simulation setup, this list is needed to simulate a NAT device with an Address-Dependent Mapping
 }
 
 function extract_server_pub_key() {
@@ -265,7 +270,7 @@ function parallel_setup() {
 Dividing the system tests among $n_threads threads. The output of each thread can be found in the logs."""
 
     # The current system tests command will be run in parallel docker containers with a few modifications:
-    system_test_opts=$(echo $@ | sed -r -e "s/-f \S+//"   `# Potential -f flag is removed, as each docker container will be assigned a file containing a subset of the current system tests` \
+    system_test_opts=$(echo $system_test_opts | sed -r -e "s/-f \S+//"   `# Potential -f flag is removed, as each docker container will be assigned a file containing a subset of the current system tests` \
                                         -e "s/-t [2-8]//") # -t flag is removed, since each docker container will run the tests in parallel`
 
     # Tests will be assigned to the containers in a round-robin manner, so we keep track of the current thread 
@@ -345,6 +350,27 @@ function run_system_test() {
     fi
 }
 
+function filter_nat_combinations {
+    test_target=$1
+    ns_config=$2
+    nat_config=$3
+    wg_config=$4
+    nat1=$5 # Optional
+    nat2=$6 # Optional
+    nat3=$7 # Optional
+    nat4=$8 # Optional
+
+    rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
+
+    # Only test RFC 3489 NATs unless the extended flag was set
+    if [[ ( ${rfc_3489_nats[*]} =~ $nat1 && ${rfc_3489_nats[*]} =~ $nat2 && ${rfc_3489_nats[*]} =~ $nat3 && ${rfc_3489_nats[*]} =~ $nat4 ) || $extended == true ]]; then
+        # Only test Double NAT configurations where the two NATs are different
+        if [[ -z $double_nat || $nat1 != $nat2 && (-z $nat3 || $nat3 != $nat4 ) ]]; then
+            run_system_test $double_nat $test_target $ns_config $nat_config $wg_config
+        fi
+    fi
+}
+
 function connectivity_test_logic() {
     ns_config=$1
     wg_config=$2
@@ -381,17 +407,62 @@ function connectivity_test_logic() {
         nat1=$nat1_mapping-$nat1_filter
         nat2=$nat2_mapping-$nat2_filter
 
-        # Only test RFC 3489 NATs unless the extended flag was set
-        if [[ ( ${rfc_3489_nats[*]} =~ $nat1 && ${rfc_3489_nats[*]} =~ $nat2 ) || $extended == true ]]; then
-            nat_config=$nat1:$nat2
-            run_system_test $test_target $ns_config $nat_config $wg_config
-        fi
+        filter_nat_combinations $test_target $ns_config $nat1/$nat2 $wg_config $nat1 $nat2
+    fi
+}
+
+# This function currently takes only RFC 3489 NATs into account
+function connectivity_test_logic_double_nat() {
+    ns_config=$1
+    wg_config=$2
+    nat1_mapping=$3
+    nat1_filter=$4
+    nat2_mapping=$5
+    nat2_filter=$6
+    nat3_mapping=$7
+    nat3_filter=$8
+    nat4_mapping=$9
+    nat4_filter=${10}
+
+    nat1=$nat1_mapping-$nat1_filter
+    nat2=$nat2_mapping-$nat2_filter
+    nat3=$nat3_mapping-$nat3_filter
+    nat4=$nat4_mapping-$nat4_filter
+
+    # TS_PASS_RELAY if peer 1 is behind at least one Port Restricted Cone/Symmetric NAT, and peer 2 is behind at least one Symmetric NAT
+    if [[ -n $nat4 && \
+          ( ( $nat1_filter -eq 2 || $nat2_filter -eq 2 ) && "$nat3 $nat4" =~ 2-2 || \
+            ( $nat3_filter -eq 2 || $nat4_filter -eq 2 ) && "$nat1 $nat2" =~ 2-2 )]]; then
+        test_target="TS_PASS_RELAY"
+    # TS_PASS only if one peer is behind at least one Restricted Cone NAT, and the other peer is behind at least one Symmetric NAT
+    elif [[ -n $nat4 && \
+          ( ( $nat1_filter -eq 1 || $nat2_filter -eq 1 ) && "$nat3 $nat4" =~ 2-2 || \
+            ( $nat3_filter -eq 1 || $nat4_filter -eq 1 ) && "$nat1 $nat2" =~ 2-2 )]]; then
+        test_target="TS_PASS"
+    else
+        test_target="TS_PASS_DIRECT"
+    fi
+
+    # Assign a score to each NAT, such that the RFC 3489 NAT types ordered by score are as follows:
+    ## 1. Full Cone = 0 + 0 = 0
+    ## 2. Restricted Cone = 0 + 1 = 1
+    ## 3. Port Restricted Cone = 0 + 2 = 2
+    ## 4. Symmetric = 2 + 2 = 4
+    nat1_score=$(echo "$nat1_mapping+$nat1_filter" | bc)
+    nat2_score=$(echo "$nat2_mapping+$nat2_filter" | bc)
+    nat3_score=$(echo "$nat3_mapping+$nat3_filter" | bc)
+    nat4_score=$(echo "$nat4_mapping+$nat4_filter" | bc)
+
+
+    # Use score to skip symmetrical cases
+    if [[ $nat3_score -gt $nat1_score || $nat3_score -eq $nat1_score && $nat4_score -ge $nat2_score ]]; then
+        filter_nat_combinations $test_target $ns_config $nat1:$nat2/$nat3:$nat4 $wg_config $nat1 $nat2 $nat3 $nat4
     fi
 }
 
 if [[ $performance == true ]]; then
     log_sequential "\nPerformance tests (without NAT)"
-    run_system_test -k bitrate -v 100,200,300,400,500 -d 3 -b both TS_PASS_DIRECT router1-router2 : wg0:wg0
+    run_system_test $double_nat -k bitrate -v 100,200,300,400,500 -d 3 -b both TS_PASS_DIRECT router1/router2 / wg0/wg0
 elif [[ -n $file ]]; then
     echo -e "\nTests from file: $file"
     
@@ -400,22 +471,27 @@ elif [[ -n $file ]]; then
         eval $test_cmd
     done < $file
 else
-    rfc_3489_nats=("0-0" "0-1" "0-2" "2-2")
-
     log_sequential """
 Starting connectivity tests between two peers (possibly) behind NATs with various combinations of mapping and filtering behaviour:
     - Endpoint-Independent Mapping/Filtering (EIM/EIF)
     - Address-Dependent Mapping/Filtering (ADM/ADF)
-    - Address and Port-Dependent Mapping/Filtering (ADPM/ADPF)"""
+    - Address and Port-Dependent Mapping/Filtering (ADPM/APDF)"""
 
     log_sequential "\nTests with one peer behind a NAT"
-    for nat_mapping in {0..2}; do
-        for nat_filter in {0..2}; do
-            nat=$nat_mapping-$nat_filter
+    for nat1_mapping in {0..2}; do
+        for nat1_filter in {0..2}; do
+            nat1=$nat1_mapping-$nat1_filter
 
-            # Only test RFC 3489 NATs unless the extended flag was set
-            if [[ ${rfc_3489_nats[*]} =~ $nat || $extended == true ]]; then
-                run_system_test TS_PASS_DIRECT private1_peer1-router1:router2 $nat: wg0:
+            if [[ -z $double_nat ]]; then
+                filter_nat_combinations TS_PASS_DIRECT private1_peer1:router1/router2 $nat1/ wg0/ $nat1
+            else
+                for nat2_mapping in {0..2}; do
+                    for nat2_filter in {0..2}; do
+                        nat2=$nat2_mapping-$nat2_filter
+
+                        filter_nat_combinations TS_PASS_DIRECT private1_peer1:double1:router1/router2 $nat1:$nat2/ wg0/ $nat1 $nat2
+                    done
+                done
             fi
         done
     done
@@ -425,20 +501,47 @@ Starting connectivity tests between two peers (possibly) behind NATs with variou
         for nat1_filter in {0..2}; do
             for nat2_mapping in {0..2}; do
                 for nat2_filter in {0..2}; do
-                    connectivity_test_logic private1_peer1-router1:router2-private2_peer1 wg0: $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter
+                    if [[ -z $double_nat ]]; then
+                        connectivity_test_logic private1_peer1:router1/router2:private2_peer1 wg0/ $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter
+                    else
+                        for nat3_mapping in {0..2}; do
+                            for nat3_filter in {0..2}; do
+                                for nat4_mapping in {0..2}; do
+                                    for nat4_filter in {0..2}; do 
+                                        connectivity_test_logic_double_nat private1_peer1:double1:router1/router2:double2:private2_peer1 wg0/ $nat1_mapping $nat1_filter $nat2_mapping $nat2_filter $nat3_mapping $nat3_filter $nat4_mapping $nat4_filter
+                                    done
+                                done
+                            done
+                        done
+                    fi
                 done
             done
         done
     done
 
     log_sequential "\nTest hairpinning"
-    for nat_mapping in {0..2}; do
-        for nat_filter in {0..2}; do
-            nat=$nat_mapping-$nat_filter
+    for nat1_mapping in {0..2}; do
+        for nat1_filter in {0..2}; do
+            nat1=$nat1_mapping-$nat1_filter
 
-            # Only test RFC 3489 NATs unless the extended flag was set
-            if [[ ${rfc_3489_nats[*]} =~ $nat || $extended == true ]]; then
-                run_system_test TS_PASS_DIRECT private1_peer1-router1-private1_peer2 $nat: wg0:
+            if [[ -z $double_nat ]]; then
+                filter_nat_combinations TS_PASS_DIRECT private1_peer1:router1:private1_peer2 $nat1 wg0/ $nat1
+            else
+                for nat2_mapping in {0..2}; do
+                    for nat2_filter in {0..2}; do
+                        nat2=$nat2_mapping-$nat2_filter
+
+                        if [[ $nat1_mapping -ge 1 && $nat1_filter -eq 2 ]]; then
+                            # Hairpinning is  done by nat2, so its mapping/filtering behaviour is irrelevant
+                            # However, if nat1 is A(P)DM-APDF, UDP hole punching will fail because both peers are behind a too restrictive NAT
+                            test_target=TS_PASS_RELAY
+                        else
+                            test_target=TS_PASS_DIRECT
+                        fi
+
+                        filter_nat_combinations $test_target private1_peer1:double1:router1:private1_peer2 $nat1:$nat2 wg0/ $nat1 $nat2
+                    done
+                done
             fi
         done
     done

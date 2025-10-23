@@ -7,9 +7,9 @@ Usage: ${0} <DELAY>
 
 delay=$1
 
-# Make sure delay is an integer
-int_regex="^[0-9]+$"
+. ./util.sh
 
+# Make sure delay is an integer
 if [[ $# -ne 1 || ! ( $delay =~ $int_regex) ]]; then
     echo $usage_str
     exit 1
