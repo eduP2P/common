@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"syscall"
 
@@ -27,6 +28,26 @@ func NewUsrWGHost() *UserSpaceWireGuardHost {
 
 type UserSpaceWireGuardHost struct {
 	running *UserSpaceWireGuardController
+	tunFile *os.File
+	tunFD   uintptr
+}
+
+func (u *UserSpaceWireGuardHost) SetTUNFile(f *os.File) {
+	u.tunFile = f
+	if f == nil {
+		u.tunFD = 0
+	} else {
+		u.tunFD = f.Fd()
+	}
+}
+
+func (u *UserSpaceWireGuardHost) SetTUNFD(fd uintptr) {
+	// TODO: this has the side-effect on linux to use the "unmonitored" creation step,
+	//  instead of a monitored creation step, needs to be made explicit
+	u.tunFD = fd
+	if u.tunFile != nil {
+		u.tunFD = 0
+	}
 }
 
 func (u *UserSpaceWireGuardHost) Reset() error {
@@ -47,9 +68,7 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 		}
 	}
 
-	// TODO set this to 1392 per https://docs.eduvpn.org/server/v3/wireguard.html
-	//  and make adjustable by environment variable
-	tunDev, err := createTUN(1280)
+	tunDev, err := u.createTUN()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
 	}
@@ -109,6 +128,21 @@ func (u *UserSpaceWireGuardHost) Controller(privateKey key.NodePrivate, addr4, a
 	u.running = usrwgc
 
 	return usrwgc, nil
+}
+
+// TODO set this to 1392 per https://docs.eduvpn.org/server/v3/wireguard.html
+//  and make adjustable by environment variable
+
+const tunMtu = 1280
+
+func (u *UserSpaceWireGuardHost) createTUN() (tun.Device, error) {
+	if u.tunFile != nil {
+		return createTUNFromFile(u.tunFile, tunMtu)
+	} else if u.tunFD != 0 {
+		return createTUNFromFD(u.tunFD, tunMtu)
+	}
+
+	return createTUN(tunMtu)
 }
 
 type UserSpaceWireGuardController struct {
