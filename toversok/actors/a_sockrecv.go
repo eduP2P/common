@@ -1,13 +1,13 @@
 package actors
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
 	"net"
 	"net/netip"
 	"runtime/debug"
-	"slices"
 	"time"
 
 	"github.com/edup2p/common/types"
@@ -52,7 +52,9 @@ func (r *SockRecv) Run() {
 		}
 	}()
 
-	buf := make([]byte, 1<<16)
+	const MaxBuf = 1 << 16
+
+	var buf = [MaxBuf]byte{0}
 
 	for {
 		if r.ctx.Err() != nil {
@@ -65,7 +67,7 @@ func (r *SockRecv) Run() {
 			return
 		}
 
-		n, ap, err := r.Conn.ReadFromUDPAddrPort(buf)
+		n, ap, err := r.Conn.ReadFromUDPAddrPort(buf[:])
 
 		ts := time.Now()
 
@@ -92,7 +94,7 @@ func (r *SockRecv) Run() {
 			continue
 		}
 
-		pkt := slices.Clone(buf[:n])
+		pkt := bytes.Clone(buf[:n])
 
 		if r.ctx.Err() != nil {
 			return

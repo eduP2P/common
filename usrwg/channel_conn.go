@@ -43,15 +43,19 @@ func (cc *ChannelConn) SetReadDeadline(t time.Time) error {
 func (cc *ChannelConn) ReadFromUDPAddrPort(b []byte) (n int, addr netip.AddrPort, err error) {
 	var val []byte
 
-	if cc.currentReadDeadline == (time.Time{}) {
-		// Block until value received.
-		val = <-cc.incoming
-	} else {
-		// Block until value or timeout.
-		select {
-		case val = <-cc.incoming:
-		case <-time.After(time.Until(cc.currentReadDeadline)):
-			return 0, netip.AddrPort{}, context.DeadlineExceeded
+	select {
+	case val = <-cc.incoming:
+	default:
+		if cc.currentReadDeadline == (time.Time{}) {
+			// Block until value received.
+			val = <-cc.incoming
+		} else {
+			// Block until value or timeout.
+			select {
+			case val = <-cc.incoming:
+			case <-time.After(time.Until(cc.currentReadDeadline)):
+				return 0, netip.AddrPort{}, context.DeadlineExceeded
+			}
 		}
 	}
 
@@ -110,8 +114,13 @@ func (cc *ChannelConn) putIn(pkt []byte, d time.Duration) (ok bool) {
 	select {
 	case cc.incoming <- pkt:
 		ok = true
-	case <-time.After(d):
-		ok = false
+	default:
+		select {
+		case cc.incoming <- pkt:
+			ok = true
+		case <-time.After(d):
+			ok = false
+		}
 	}
 
 	return

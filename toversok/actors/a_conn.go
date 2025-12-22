@@ -275,13 +275,15 @@ func (ic *InConn) Ctx() context.Context {
 // This prevents routers from blocking when the conn is shutting down,
 // or if its blocked otherwise.
 func (ic *InConn) ForwardPacket(pkt []byte) {
-	select {
-	case ic.pktCh <- pkt:
-	default:
-		// TODO maybe convert dropping to timeout?
-		//  making lots of timers would be costly though
-		// TODO log? metric?
-	}
+	//select {
+	//case ic.pktCh <- pkt:
+	//default:
+	//	// TODO maybe convert dropping to timeout?
+	//	//  making lots of timers would be costly though
+	//	// TODO log? metric?
+	//}
+
+	ic.pktCh <- pkt
 }
 
 // Bump the activity timer.
